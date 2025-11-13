@@ -73,6 +73,8 @@ class DualWebViewGroup @JvmOverloads constructor(
     var lastCursorX = 0f
     var lastCursorY = 0f
 
+    private var anchoredGestureActive = false
+
     val leftToggleBar: View
     private var isHorizontalScroll = false
 
@@ -1458,50 +1460,93 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle)?.invalidate()
     }
 
+    private fun computeAnchoredKeyboardCoordinates(): Pair<Float, Float>? {
+        val keyboard = keyboardContainer
+        if (keyboard.width == 0 || keyboard.height == 0) {
+            Log.d("TouchDebug", "computeAnchoredKeyboardCoordinates: keyboard not laid out")
+            return null
+        }
+
+        val uiLocation = IntArray(2)
+        leftEyeUIContainer.getLocationOnScreen(uiLocation)
+
+        val rotationRad = Math.toRadians(leftEyeUIContainer.rotation.toDouble())
+        val cos = Math.cos(rotationRad).toFloat()
+        val sin = Math.sin(rotationRad).toFloat()
+
+        val translatedX = lastCursorX - uiLocation[0]
+        val translatedY = lastCursorY - uiLocation[1]
+
+        val adjustedX = translatedX * cos + translatedY * sin
+        val adjustedY = -translatedX * sin + translatedY * cos
+
+        val keyboardLocation = IntArray(2)
+        keyboard.getLocationOnScreen(keyboardLocation)
+
+        val localOriginX = keyboardLocation[0] - uiLocation[0]
+        val localOriginY = keyboardLocation[1] - uiLocation[1]
+
+        val localX = adjustedX - localOriginX
+        val localY = adjustedY - localOriginY
+
+        Log.d(
+            "TouchDebug",
+            "Anchored cursor mapped to keyboard local=($localX, $localY) size=(${keyboard.width}, ${keyboard.height})"
+        )
+
+        return Pair(localX, localY)
+    }
+
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
         Log.d("GestureDebug", "DualWebViewGroup onInterceptTouchEvent: ${ev.action}")
 
         if (keyboardContainer.visibility == View.VISIBLE && isAnchored) {
-            // Only handle ACTION_UP for keyboard taps in anchored mode
-            if (ev.action == MotionEvent.ACTION_UP) {
-                // Get the cursor position and transform it
-                val UILocation = IntArray(2)
-                leftEyeUIContainer.getLocationOnScreen(UILocation)
+            val localCoords = computeAnchoredKeyboardCoordinates()
+            if (localCoords != null) {
+                val (localX, localY) = localCoords
+                val withinBounds =
+                    localX >= 0 && localX <= keyboardContainer.width &&
+                        localY >= 0 && localY <= keyboardContainer.height
 
-                val rotationRad = Math.toRadians(leftEyeUIContainer.rotation.toDouble())
-                val cos = Math.cos(rotationRad).toFloat()
-                val sin = Math.sin(rotationRad).toFloat()
-
-                val cursorX = lastCursorX
-                val cursorY = lastCursorY
-
-                val translatedX = cursorX - UILocation[0]
-                val translatedY = cursorY - UILocation[1]
-
-                val adjustedX = translatedX * cos + translatedY * sin
-                val adjustedY = -translatedX * sin + translatedY * cos
-
-                // Get keyboard position
-                val keyboardLocation = IntArray(2)
-                keyboardContainer.getLocationOnScreen(keyboardLocation)
-
-                // Calculate position relative to keyboard
-                val localX = adjustedX - (keyboardLocation[0] - UILocation[0])
-                val localY = adjustedY - (keyboardLocation[1] - UILocation[1])
-
-                // Check if tap is within keyboard bounds
-                if (localX >= 0 && localX <= keyboardContainer.width &&
-                    localY >= 0 && localY <= keyboardContainer.height) {
-
-                    Log.d("TouchDebug", "Keyboard tap at local position: ($localX, $localY)")
-
-                    // Find and click the key at this position
-                    customKeyboard?.handleAnchoredTap(localX, localY)
-                    return true  // Only intercept if we're actually in the keyboard
+                when (ev.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        anchoredGestureActive = withinBounds
+                        if (anchoredGestureActive) {
+                            Log.d(
+                                "TouchDebug",
+                                "Intercepting anchored ACTION_DOWN at ($localX, $localY)"
+                            )
+                            return true
+                        }
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        if (anchoredGestureActive) {
+                            return true
+                        } else if (withinBounds) {
+                            anchoredGestureActive = true
+                            return true
+                        }
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        if (anchoredGestureActive || withinBounds) {
+                            Log.d(
+                                "TouchDebug",
+                                "Intercepting anchored ACTION_UP at ($localX, $localY)"
+                            )
+                            return true
+                        }
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        if (anchoredGestureActive) {
+                            anchoredGestureActive = false
+                            return true
+                        }
+                    }
                 }
-                // If not in keyboard bounds, don't intercept - let it pass through normally
-                return false
+            } else if (ev.action == MotionEvent.ACTION_CANCEL) {
+                anchoredGestureActive = false
             }
+
             return false
         }
 
@@ -1579,6 +1624,54 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val kbVisible = (keyboardContainer.visibility == View.VISIBLE)
+
+        if (kbVisible && isAnchored) {
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    if (anchoredGestureActive) {
+                        return true
+                    }
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (anchoredGestureActive) {
+                        return true
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    val wasTracking = anchoredGestureActive
+                    val localCoords = computeAnchoredKeyboardCoordinates()
+                    val withinBounds = localCoords?.let { (localX, localY) ->
+                        localX >= 0 && localX <= keyboardContainer.width &&
+                            localY >= 0 && localY <= keyboardContainer.height
+                    } ?: false
+
+                    anchoredGestureActive = false
+
+                    if (wasTracking || withinBounds) {
+                        if (withinBounds) {
+                            val (localX, localY) = localCoords!!
+                            Log.d(
+                                "TouchDebug",
+                                "Dispatching anchored tap to keyboard at ($localX, $localY)"
+                            )
+                            customKeyboard?.handleAnchoredTap(localX, localY)
+                        } else {
+                            Log.d(
+                                "TouchDebug",
+                                "Anchored tap ended outside keyboard bounds"
+                            )
+                        }
+                        return true
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    if (anchoredGestureActive) {
+                        anchoredGestureActive = false
+                        return true
+                    }
+                }
+            }
+        }
 
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
