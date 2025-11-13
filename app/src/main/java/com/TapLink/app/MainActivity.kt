@@ -3670,6 +3670,14 @@ class MainActivity : AppCompatActivity(),
     }
 
 
+    /**
+     * Toggles the cursor visibility.
+     *
+     * The optional [forceHide] and [forceShow] parameters make sure that callers can explicitly
+     * request a desired state instead of relying on the current value. All state changes happen
+     * within a synchronized block to avoid race conditions when rapid tap gestures or delayed
+     * callbacks attempt to toggle the cursor simultaneously.
+     */
     private fun toggleCursorVisibility(forceHide: Boolean = false, forceShow: Boolean = false) {
         Log.d("DoubleTapDebug", """
             Toggle Cursor Visibility:
@@ -3680,89 +3688,66 @@ class MainActivity : AppCompatActivity(),
             cursorJustAppeared: $cursorJustAppeared
             isToggling: $isToggling
         """.trimIndent())
+
         synchronized(cursorToggleLock) {
-        // Prevent concurrent toggles
-        if (isToggling) return
-        isToggling = true
+            if (isToggling) return
+            isToggling = true
 
-
-        try {
-        val previouslyVisible = isCursorVisible
-        isCursorVisible = when {
-//            forceHide -> false
-//            forceShow -> true
-            else -> !isCursorVisible
-        }
-
-        // FIRST handle scroll mode and UI state
-        // When cursor becomes visible, ALWAYS show menus
-        // When cursor becomes invisible, ALWAYS hide menus
-        dualWebViewGroup.setScrollMode(!isCursorVisible)
-
-        if (isCursorVisible) {
-
-            resetRingReference()  // Reset reference when cursor becomes visible
-            if (previouslyVisible) {
-                // Cursor was already visible, keep its current position
-                lastCursorX = lastKnownCursorX
-                lastCursorY = lastKnownCursorY
-                isToggling = false  // Reset isToggling here
-            } else {
-                if(!isAnchored) {
-                    // Cursor is appearing
-                    lastCursorX = lastKnownCursorX
-                    lastCursorY = lastKnownCursorY
+            try {
+                val previouslyVisible = isCursorVisible
+                val targetVisibility = when {
+                    forceHide -> false
+                    forceShow -> true
+                    else -> !previouslyVisible
                 }
-                else {
-                    lastCursorX = 320f
-                    lastCursorY = 240f
+
+                if (targetVisibility == previouslyVisible) {
+                    return
                 }
-                cursorJustAppeared = true
 
-                // Block interactions briefly
-                isSimulatingTouchEvent = true
+                isCursorVisible = targetVisibility
 
-                // Reset flags after a delay
-                Handler(Looper.getMainLooper()).postDelayed({
-                    cursorJustAppeared = false
-                    isSimulatingTouchEvent = false
-                    isToggling = false
-                }, 300)
+                // Synchronise scroll mode with the cursor visibility state.
+                dualWebViewGroup.setScrollMode(!isCursorVisible)
+
+                if (isCursorVisible) {
+                    resetRingReference()
+
+                    if (!isAnchored) {
+                        lastCursorX = lastKnownCursorX
+                        lastCursorY = lastKnownCursorY
+                    } else {
+                        lastCursorX = 320f
+                        lastCursorY = 240f
+                    }
+
+                    cursorJustAppeared = true
+                    // Block interactions briefly to prevent stale taps from firing as the cursor reappears.
+                    isSimulatingTouchEvent = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        cursorJustAppeared = false
+                        isSimulatingTouchEvent = false
+                    }, 300)
+
+                    resetScrollModeTimer()
+                } else {
+                    lastKnownCursorX = lastCursorX
+                    lastKnownCursorY = lastCursorY
+
+                    val webViewLocation = IntArray(2)
+                    webView.getLocationOnScreen(webViewLocation)
+                    lastKnownWebViewX = lastCursorX - webViewLocation[0]
+                    lastKnownWebViewY = lastCursorY - webViewLocation[1]
+
+                    webView.evaluateJavascript("window.toggleTouchEvents(false);", null)
+                    scrollModeHandler.removeCallbacks(scrollModeRunnable)
+                }
+
+                refreshCursor()
+            } finally {
+                isToggling = false
             }
-
-            resetScrollModeTimer()
-        } else {
-            // Hide cursor
-            lastKnownCursorX = lastCursorX
-            lastKnownCursorY = lastCursorY
-            // Store the coordinates relative to the WebView
-            val webViewLocation = IntArray(2)
-            webView.getLocationOnScreen(webViewLocation)
-            lastKnownWebViewX = lastCursorX - webViewLocation[0]
-            lastKnownWebViewY = lastCursorY - webViewLocation[1]
-
-            webView.evaluateJavascript("window.toggleTouchEvents(false);", null)
-            isToggling = false
-            scrollModeHandler.removeCallbacks(scrollModeRunnable)
         }
-        } finally {
-            isToggling = false
-        }
-
-        // Update cursor position
-        refreshCursor()
-
-        // Log state changes
-//        Log.d("TouchDebug", """
-//    Cursor State Updated:
-//    Now Visible: $isCursorVisible
-//    Position: ($lastCursorX, $lastCursorY)
-//    isSimulating: $isSimulatingTouchEvent
-//    cursorJustAppeared: $cursorJustAppeared
-//    isToggling: $isToggling
-//""".trimIndent())
-        isToggling = false
-            }
     }
 
 
