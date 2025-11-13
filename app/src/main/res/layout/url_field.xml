@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<EditText
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/urlEditText"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:background="#202020"
+    android:textColor="#FFFFFF"
+    android:textSize="16sp"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:singleLine="true"
+    android:inputType="textUri"
+    android:imeOptions="actionGo"
+    android:hint="Enter URL"
+    android:textColorHint="#808080"/>

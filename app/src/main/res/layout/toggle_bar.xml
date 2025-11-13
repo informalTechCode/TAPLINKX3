@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="48dp"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#202020"
+    android:paddingTop="0dp"
+    android:paddingBottom="8dp"
+    android:clipChildren="true"
+    android:clipToPadding="true">
+
+    <ImageButton
+        android:id="@+id/btnScrollToggle"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/nav_button_background"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:clickable="true"
+        android:focusable="true"
+        android:clipToPadding="true"/>
+
+    <ImageButton
+        android:id="@+id/btnModeToggle"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/nav_button_background"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:clickable="true"
+        android:focusable="true"
+        android:clipToPadding="true"/>
+
+    <ImageButton
+        android:id="@+id/btnYouTube"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/nav_button_background"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:clickable="true"
+        android:focusable="true"
+        android:clipToPadding="true"/>
+
+    <ImageButton
+        android:id="@+id/btnBookmarks"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/nav_button_background"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:clickable="true"
+        android:focusable="true"
+        android:clipToPadding="true"/>
+
+    <ImageButton
+        android:id="@+id/btnZoomOut"
+        android:layout_width="24dp"
+        android:layout_height="48dp"
+        android:background="@drawable/nav_button_background"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:clickable="true"
+        android:focusable="true"
+        android:clipToPadding="true"/>
+
+    <ImageButton
+        android:id="@+id/btnZoomIn"
+        android:layout_width="24dp"
+        android:layout_height="48dp"
+        android:background="@drawable/nav_button_background"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:clickable="true"
+        android:focusable="true"
+        android:clipToPadding="true"/>
+
+    <!-- Scroll Arrows -->
+    <ImageButton
+        android:id="@+id/btnScrollUp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/nav_button_background"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_arrow_up"
+        android:clickable="true"
+        android:focusable="true"
+        android:clipToPadding="true"/>
+
+    <ImageButton
+        android:id="@+id/btnScrollLeft"
+        android:layout_width="24dp"
+        android:layout_height="48dp"
+        android:background="@drawable/nav_button_background"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_arrow_left"
+        android:clickable="true"
+        android:focusable="true"
+        android:clipToPadding="true"/>
+
+    <ImageButton
+        android:id="@+id/btnScrollRight"
+        android:layout_width="24dp"
+        android:layout_height="48dp"
+        android:background="@drawable/nav_button_background"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_arrow_right"
+        android:clickable="true"
+        android:focusable="true"
+        android:clipToPadding="true"/>
+
+    <ImageButton
+        android:id="@+id/btnScrollDown"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/nav_button_background"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_arrow_down"
+        android:clickable="true"
+        android:focusable="true"
+        android:clipToPadding="true"/>
+
+    <ImageButton
+        android:id="@+id/btnMask"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/nav_button_background"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:clickable="true"
+        android:focusable="true"
+        android:clipToPadding="true"/>
+
+    <ImageButton
+        android:id="@+id/btnAnchor"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/nav_button_background"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:clickable="true"
+        android:focusable="true"
+        android:clipToPadding="true"/>
+
+</LinearLayout>

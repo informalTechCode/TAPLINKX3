@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:orientation="horizontal"
+    android:background="#000000"
+    android:gravity="center_vertical"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp">
+
+    <ImageButton
+        android:id="@+id/btnBack"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_arrow_back"
+        android:background="@drawable/nav_button_background"
+        android:contentDescription="Go back"
+        android:padding="12dp"
+        android:scaleType="fitCenter"/>
+
+    <Space
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"/>
+
+    <ImageButton
+        android:id="@+id/btnHome"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_home"
+        android:background="@drawable/nav_button_background"
+        android:contentDescription="Go home"
+        android:padding="12dp"
+        android:scaleType="fitCenter"/>
+
+    <Space
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"/>
+
+    <ImageButton
+        android:id="@+id/btnRingSwitch"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_ring_enabled"
+        android:background="@drawable/nav_button_background"
+        android:contentDescription="Toggle ring control"
+        android:padding="12dp"
+        android:scaleType="fitCenter"/>
+
+    <Space
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"/>
+
+    <ImageButton
+        android:id="@+id/btnLink"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_link"
+        android:background="@drawable/nav_button_background"
+        android:contentDescription="Enter URL"
+        android:padding="12dp"
+        android:scaleType="fitCenter"/>
+
+    <Space
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"/>
+
+    <ImageButton
+        android:id="@+id/btnSettings"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_settings"
+        android:background="@drawable/nav_button_background"
+        android:contentDescription="Settings"
+        android:padding="12dp"
+        android:scaleType="fitCenter"/>
+
+    <Space
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"/>
+
+    <ImageButton
+        android:id="@+id/btnRefresh"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_refresh"
+        android:background="@drawable/nav_button_background"
+        android:contentDescription="Refresh page"
+        android:padding="12dp"
+        android:scaleType="fitCenter"/>
+
+    <Space
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"/>
+
+    <ImageButton
+        android:id="@+id/btnQuit"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_close"
+        android:background="@drawable/nav_button_background"
+        android:contentDescription="Quit app"
+        android:padding="12dp"
+        android:scaleType="fitCenter"/>
+</LinearLayout>
