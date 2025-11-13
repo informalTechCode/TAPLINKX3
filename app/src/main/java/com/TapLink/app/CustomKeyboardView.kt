@@ -249,17 +249,27 @@ class CustomKeyboardView @JvmOverloads constructor(
 
 
     private fun handleButtonClick(button: Button) {
-        Log.d("KeyboardDebug", "Processing click for button: ${button.text}")
+        val buttonId = button.id
+        val buttonLabel = button.text.toString()
 
-        // Visual feedback
-        button.setBackgroundColor(Color.GRAY)
+        Log.d("KeyboardDebug", "Processing click for button: $buttonLabel")
+
+        if (button.isAttachedToWindow) {
+            // Provide immediate visual feedback when the view hierarchy is still intact
+            button.setBackgroundColor(Color.GRAY)
+        }
 
         postDelayed({
-            // Reset the button background BEFORE triggering action
-            button.setBackgroundColor(Color.DKGRAY)
-            button.setTextColor(Color.WHITE)
+            if (button.isAttachedToWindow) {
+                // Only touch the view's drawable state if it's still attached. When the
+                // keyboard hides (as it does after pressing enter in anchored mode) the
+                // buttons are detached, and attempting to manipulate their background
+                // triggers a crash.
+                button.setBackgroundColor(Color.DKGRAY)
+                button.setTextColor(Color.WHITE)
+            }
 
-            when (button.id) {
+            when (buttonId) {
                 R.id.btn_caps -> {
                     Log.d("KeyboardDebug", "Handling caps button")
                     toggleCase()
@@ -296,8 +306,8 @@ class CustomKeyboardView @JvmOverloads constructor(
                 R.id.button_middle_dynamic,
                 R.id.button_right_dynamic -> handleDynamicButtonClick(button.id)
                 else -> {
-                    Log.d("KeyboardDebug", "Handling character key: ${button.text}")
-                    listener?.onKeyPressed(button.text.toString())
+                    Log.d("KeyboardDebug", "Handling character key: $buttonLabel")
+                    listener?.onKeyPressed(buttonLabel)
                 }
             }
 
