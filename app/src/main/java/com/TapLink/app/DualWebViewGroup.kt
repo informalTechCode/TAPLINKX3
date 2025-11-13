@@ -139,6 +139,17 @@ class DualWebViewGroup @JvmOverloads constructor(
         var isHovered: Boolean = false
     )
 
+    private fun ImageButton.configureToggleButton(iconRes: Int) {
+        visibility = View.VISIBLE
+        setImageResource(iconRes)
+        setBackgroundResource(R.drawable.nav_button_background)
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        setPadding(8, 8, 8, 8)
+        alpha = 1.0f
+        elevation = 2f
+        stateListAnimator = null
+    }
+
     private fun clearNavigationButtonStates() {
         navButtons.values.forEach { navButton ->
             navButton.isHovered = false
@@ -428,38 +439,15 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Set up the toggle buttons with explicit configurations
         val leftScrollToggleButton = leftToggleBar.findViewById<ImageButton>(R.id.btnScrollToggle).apply {
-            visibility = View.VISIBLE
-            setImageResource(R.drawable.ic_scroll_vertical)
-            setBackgroundResource(R.drawable.nav_button_background)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(8, 8, 8, 8)
-            alpha = 1.0f
-            elevation = 2f
-            stateListAnimator = null
+            configureToggleButton(R.drawable.ic_scroll_vertical)
         }
 
         val leftModeToggleButton = leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle).apply {
-            visibility = View.VISIBLE
-            setImageResource(R.drawable.ic_mode_mobile)
-            setBackgroundResource(R.drawable.nav_button_background)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(8, 8, 8, 8)
-            alpha = 1.0f
-            elevation = 2f
-            elevation = 2f
-            stateListAnimator = null
+            configureToggleButton(R.drawable.ic_mode_mobile)
         }
 
-
         val leftYouTubeButton = leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube).apply {
-            visibility = View.VISIBLE
-            setImageResource(R.drawable.ic_youtube)
-            setBackgroundResource(R.drawable.nav_button_background)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(8, 8, 8, 8)
-            alpha = 1.0f
-            elevation = 2f
-            stateListAnimator = null
+            configureToggleButton(R.drawable.ic_youtube)
         }
 
 
