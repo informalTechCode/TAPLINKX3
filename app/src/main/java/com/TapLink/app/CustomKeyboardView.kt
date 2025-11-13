@@ -853,6 +853,12 @@ class CustomKeyboardView @JvmOverloads constructor(
             return null
         }
 
+        val rootLocation = IntArray(2)
+        getLocationOnScreen(rootLocation)
+
+        val targetX = rootLocation[0].toFloat() + x
+        val targetY = rootLocation[1].toFloat() + y
+
         for (i in 0 until keyboard.childCount) {
             val row = keyboard.getChildAt(i) as? LinearLayout
             if (row == null) {
@@ -860,43 +866,36 @@ class CustomKeyboardView @JvmOverloads constructor(
                 continue
             }
 
-            // Get row's position relative to keyboard
-            val rowTop = row.top.toFloat()
-            val rowBottom = row.bottom.toFloat()
-
-            Log.d("KeyboardDebug", "Checking row $i: top=$rowTop, bottom=$rowBottom")
-
-            // Check if Y is within this row first
-            if (y < rowTop || y >= rowBottom) {
-                continue
-            }
-
-            // Y is in this row, now check X for buttons
             for (j in 0 until row.childCount) {
-                val button = row.getChildAt(j) as? Button
-                if (button == null || button.visibility != View.VISIBLE) continue
+                val button = row.getChildAt(j) as? Button ?: continue
+                if (button.visibility != View.VISIBLE) continue
 
-                // Get button position relative to keyboard (not row)
-                val buttonLeft = button.left.toFloat()
-                val buttonRight = button.right.toFloat()
-                val buttonTop = rowTop
-                val buttonBottom = rowBottom
+                val buttonLocation = IntArray(2)
+                button.getLocationOnScreen(buttonLocation)
 
-                Log.d("KeyboardDebug", """
-                Checking button: ${button.text}
-                Button bounds: ($buttonLeft, $buttonTop) to ($buttonRight, $buttonBottom)
-                Test point: ($x, $y)
-            """.trimIndent())
+                val left = buttonLocation[0].toFloat()
+                val top = buttonLocation[1].toFloat()
+                val right = left + button.width.toFloat()
+                val bottom = top + button.height.toFloat()
 
-                if (x >= buttonLeft && x <= buttonRight &&
-                    y >= buttonTop && y <= buttonBottom) {
+                Log.d(
+                    "KeyboardDebug",
+                    """
+                    Checking button: ${button.text}
+                    Button bounds: ($left, $top) to ($right, $bottom)
+                    Test point: ($targetX, $targetY)
+                """.trimIndent()
+                )
+
+                if (targetX >= left && targetX <= right &&
+                    targetY >= top && targetY <= bottom) {
                     Log.d("KeyboardDebug", "Found matching button: ${button.text}")
                     return button
                 }
             }
         }
 
-        Log.d("KeyboardDebug", "No button found at ($x, $y)")
+        Log.d("KeyboardDebug", "No button found at ($targetX, $targetY)")
         return null
     }
 
