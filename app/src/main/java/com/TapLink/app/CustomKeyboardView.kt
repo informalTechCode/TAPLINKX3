@@ -304,7 +304,7 @@ class CustomKeyboardView @JvmOverloads constructor(
                 }
                 R.id.button_left_dynamic,
                 R.id.button_middle_dynamic,
-                R.id.button_right_dynamic -> handleDynamicButtonClick(buttonId)
+                R.id.button_right_dynamic -> handleDynamicButtonClick(button.id)
                 else -> {
                     Log.d("KeyboardDebug", "Handling character key: $buttonLabel")
                     listener?.onKeyPressed(buttonLabel)
