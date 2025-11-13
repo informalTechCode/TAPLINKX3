@@ -118,6 +118,22 @@ class MainActivity : AppCompatActivity(),
     private lateinit var gestureDetector: GestureDetector
     private var isSimulatingTouchEvent = false
     private var isCursorVisible = true
+
+    private fun refreshCursor() {
+        dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, isCursorVisible)
+    }
+
+    private fun refreshCursor(visible: Boolean) {
+        isCursorVisible = visible
+        refreshCursor()
+    }
+
+    private fun centerCursor(visible: Boolean = isCursorVisible) {
+        lastCursorX = 320f
+        lastCursorY = 240f
+        isCursorVisible = visible
+        refreshCursor()
+    }
     private var isToggling = false
     private var lastCursorX = 320f
     private var lastCursorY = 240f
@@ -421,9 +437,7 @@ class MainActivity : AppCompatActivity(),
             listener = object : TripleClickMenu.TripleClickMenuListener {
                 override fun onAnchorTogglePressed() {
                     toggleAnchor()
-                    lastCursorX = 320f
-                    lastCursorY = 240f
-                    dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, isCursorVisible)
+                    centerCursor()
                     tripleClickMenu.updateAnchorButtonState(!isAnchored)
                 }
                 override fun onQuitPressed() {
@@ -560,7 +574,7 @@ class MainActivity : AppCompatActivity(),
                     webView.getLocationOnScreen(loc)
                     lastKnownWebViewX = lastCursorX - loc[0]
                     lastKnownWebViewY = lastCursorY - loc[1]
-                    dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, true)
+                    refreshCursor(true)
                     Log.d("GestureInput", "Trapped!")
                     return true
                 }
@@ -611,7 +625,7 @@ class MainActivity : AppCompatActivity(),
                             lastCursorY = preMaskCursorY
                             cursorLeftView.visibility = View.VISIBLE
                             cursorRightView.visibility = View.VISIBLE
-                            dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, true)
+                            refreshCursor(true)
                         }
                         dualWebViewGroup.unmaskScreen()
                         return true
@@ -957,7 +971,7 @@ class MainActivity : AppCompatActivity(),
                         if (lastCursorY < 0) lastCursorY += 480
 
                         // Update cursor position
-                        dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, isCursorVisible)
+                        refreshCursor()
 
                         // Apply decay
                         currentVelocityX *= movementDecay
@@ -1190,13 +1204,10 @@ class MainActivity : AppCompatActivity(),
 
         // After initializing webView and dualWebViewGroup but before loadInitialPage()
         // Set initial cursor position
-        lastCursorX = 320f
-        lastCursorY = 240f
-
         // Make cursor visible
         cursorLeftView.visibility = View.VISIBLE
         cursorRightView.visibility = View.VISIBLE
-        dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, true)
+        centerCursor(true)
 
         resetScrollModeTimer()
         Log.d("ScrollModeDebug", "Initial scroll mode timer started")
@@ -1311,7 +1322,7 @@ class MainActivity : AppCompatActivity(),
         isCursorVisible = false
         cursorLeftView.visibility = View.GONE
         cursorRightView.visibility = View.GONE
-        dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, false)
+        refreshCursor(false)
 
         // Mask the screen
         dualWebViewGroup.maskScreen()
@@ -3560,9 +3571,7 @@ class MainActivity : AppCompatActivity(),
     """.trimIndent())
         if (isAnchored) {
             // Move cursor to center of left screen
-            lastCursorX = 320f
-            lastCursorY = 240f
-            dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, isCursorVisible)
+            centerCursor()
 
             // Initialize sensor handling
             sensorEventListener = createSensorEventListener()
@@ -3576,7 +3585,7 @@ class MainActivity : AppCompatActivity(),
             sensorManager.unregisterListener(sensorEventListener)
 
             // Restore cursor position
-            dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, isCursorVisible)
+            refreshCursor()
 
             // Reset view positions
             dualWebViewGroup.stopAnchoring()
@@ -3588,7 +3597,7 @@ class MainActivity : AppCompatActivity(),
             pendingCursorUpdate = true
             uiHandler.postDelayed({
                 pendingCursorUpdate = false
-                dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, isCursorVisible)
+                refreshCursor()
             }, 8)
         }
     }
@@ -3741,7 +3750,7 @@ class MainActivity : AppCompatActivity(),
         }
 
         // Update cursor position
-        dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, isCursorVisible)
+        refreshCursor()
 
         // Log state changes
 //        Log.d("TouchDebug", """

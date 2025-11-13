@@ -55,31 +55,45 @@ class CustomKeyboardView @JvmOverloads constructor(
 
     private enum class KeyboardMode {
         LETTERS,
-        SYMBOLS
+        SYMBOLS;
+
+        fun toggle(): KeyboardMode = if (this == LETTERS) SYMBOLS else LETTERS
     }
 
+    private data class KeyboardLayout(
+        val rows: List<List<String>>,
+        val dynamicKeys: List<String>
+    )
+
+    private val keyboardLayouts = mapOf(
+        KeyboardMode.LETTERS to KeyboardLayout(
+            rows = listOf(
+                listOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"),
+                listOf("A", "S", "D", "F", "G", "H", "J", "K", "L"),
+                listOf("Z", "X", "C", "V", "B", "N", "M")
+            ),
+            dynamicKeys = listOf("@", ".", "/")
+        ),
+        KeyboardMode.SYMBOLS to KeyboardLayout(
+            rows = listOf(
+                listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
+                listOf("@", "#", "$", "_", "&", "-", "+", "(", ")"),
+                listOf("/", "*", ".", "'", ":", ";", "!", "?")
+            ),
+            dynamicKeys = listOf("\u25C0", "\u25B6", "")
+        )
+    )
+
+    private val currentLayout: KeyboardLayout
+        get() = keyboardLayouts.getValue(currentMode)
+
     private var currentMode = KeyboardMode.LETTERS
-
-    private val letterKeys = arrayOf(
-        arrayOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"),
-        arrayOf("A", "S", "D", "F", "G", "H", "J", "K", "L"),
-        arrayOf("Z", "X", "C", "V", "B", "N", "M")
-    )
-
-    private val symbolKeys = arrayOf(
-        arrayOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
-        arrayOf("@", "#", "$", "_", "&", "-", "+", "(", ")"),
-        arrayOf("/", "*", ".", "'", ":", ";", "!", "?")
-    )
 
     private var firstMove = true
 
     private var isUpperCase = true
 
     private var isSyncing: Boolean = false
-
-    private val letterDynamicKeys = arrayOf("@", ".", "/")
-    private val symbolDynamicKeys = arrayOf("\u25C0", "\u25B6", "") // Left arrow, Right arrow, Empty
 
     private var hideButton: Button? = null  // Add if not already present
 
@@ -278,23 +292,9 @@ class CustomKeyboardView @JvmOverloads constructor(
                     Log.d("KeyboardDebug", "Handling clear")
                     listener?.onClearPressed()
                 }
-                R.id.button_left_dynamic -> {
-                    when (currentMode) {
-                        KeyboardMode.LETTERS -> listener?.onKeyPressed("@")
-                        KeyboardMode.SYMBOLS -> listener?.onMoveCursorLeft()
-                    }
-                }
-                R.id.button_middle_dynamic -> {
-                    when (currentMode) {
-                        KeyboardMode.LETTERS -> listener?.onKeyPressed(".")
-                        KeyboardMode.SYMBOLS -> listener?.onMoveCursorRight()
-                    }
-                }
-                R.id.button_right_dynamic -> {
-                    if (currentMode == KeyboardMode.LETTERS) {
-                        listener?.onKeyPressed("/")
-                    }
-                }
+                R.id.button_left_dynamic,
+                R.id.button_middle_dynamic,
+                R.id.button_right_dynamic -> handleDynamicButtonClick(button.id)
                 else -> {
                     Log.d("KeyboardDebug", "Handling character key: ${button.text}")
                     listener?.onKeyPressed(button.text.toString())
@@ -309,82 +309,74 @@ class CustomKeyboardView @JvmOverloads constructor(
     }
 
     private fun toggleKeyboardMode() {
-        currentMode = if (currentMode == KeyboardMode.LETTERS) {
-            KeyboardMode.SYMBOLS
-        } else {
-            KeyboardMode.LETTERS
-        }
+        currentMode = currentMode.toggle()
         updateKeyboardKeys()
         syncWithParent()
     }
 
+    private fun handleDynamicButtonClick(buttonId: Int) {
+        when (currentMode) {
+            KeyboardMode.LETTERS -> {
+                val index = when (buttonId) {
+                    R.id.button_left_dynamic -> 0
+                    R.id.button_middle_dynamic -> 1
+                    R.id.button_right_dynamic -> 2
+                    else -> return
+                }
+                currentLayout.dynamicKeys.getOrNull(index)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { listener?.onKeyPressed(if (isUpperCase) it.uppercase() else it) }
+            }
+            KeyboardMode.SYMBOLS -> when (buttonId) {
+                R.id.button_left_dynamic -> listener?.onMoveCursorLeft()
+                R.id.button_middle_dynamic -> listener?.onMoveCursorRight()
+            }
+        }
+    }
+
     private fun updateKeyboardKeys() {
-        val keyboardLayout = getChildAt(0) as? LinearLayout
-        keyboardLayout?.let { layout ->
-            val keysArray = if (currentMode == KeyboardMode.LETTERS) letterKeys else symbolKeys
+        val keyboardLayout = getChildAt(0) as? LinearLayout ?: return
+        val layoutConfig = currentLayout
 
-            // Update main keyboard rows
-            for (i in 0..2) {
-                val row = layout.getChildAt(i) as? LinearLayout
-                row?.let { rowLayout ->
-                    val keyRow = keysArray.getOrNull(i) ?: arrayOf()
-                    var keyIndex = 0
-                    for (j in 0 until rowLayout.childCount) {
-                        val button = rowLayout.getChildAt(j) as? Button
-                        button?.let {
-                            if (it.id !in specialButtonIds) {
-                                val keyText = keyRow.getOrNull(keyIndex) ?: ""
-                                if (keyText.isNotEmpty()) {
-                                    it.text = if (currentMode == KeyboardMode.LETTERS) {
-                                        if (isUpperCase) keyText.uppercase() else keyText.lowercase()
-                                    } else {
-                                        keyText
-                                    }
-                                    it.visibility = View.VISIBLE
-                                } else {
-                                    it.visibility = View.GONE
-                                }
-                                keyIndex++
-                            }
-                            it.invalidate()
-                        }
+        keyboardLayout.children.take(layoutConfig.rows.size).forEachIndexed { rowIndex, rowView ->
+            val rowLayout = rowView as? LinearLayout ?: return@forEachIndexed
+            val keyRow = layoutConfig.rows[rowIndex]
+            var keyIndex = 0
+            rowLayout.children.forEach { child ->
+                val button = child as? Button ?: return@forEach
+                if (button.id in specialButtonIds) return@forEach
+
+                val keyText = keyRow.getOrNull(keyIndex).orEmpty()
+                keyIndex++
+
+                if (keyText.isEmpty()) {
+                    button.visibility = View.GONE
+                } else {
+                    button.text = if (currentMode == KeyboardMode.LETTERS) {
+                        if (isUpperCase) keyText.uppercase() else keyText.lowercase()
+                    } else {
+                        keyText
                     }
-                    rowLayout.invalidate()
+                    button.visibility = View.VISIBLE
                 }
             }
+        }
 
-            // Handle dynamic keys in fourth row
-            val fourthRow = layout.getChildAt(3) as? LinearLayout
-            fourthRow?.let { rowLayout ->
-                // Update dynamic buttons based on mode
-                val dynamicKeys = if (currentMode == KeyboardMode.LETTERS) letterDynamicKeys else symbolDynamicKeys
+        val dynamicRow = keyboardLayout.children.elementAtOrNull(layoutConfig.rows.size) as? LinearLayout
+        dynamicRow?.let { rowLayout ->
+            val leftDynamicButton = rowLayout.findViewById<Button>(R.id.button_left_dynamic)
+            val middleDynamicButton = rowLayout.findViewById<Button>(R.id.button_middle_dynamic)
+            val rightDynamicButton = rowLayout.findViewById<Button>(R.id.button_right_dynamic)
 
-                val leftDynamicButton = rowLayout.findViewById<Button>(R.id.button_left_dynamic)
-                val middleDynamicButton = rowLayout.findViewById<Button>(R.id.button_middle_dynamic)
-                val rightDynamicButton = rowLayout.findViewById<Button>(R.id.button_right_dynamic)
+            val dynamicKeys = layoutConfig.dynamicKeys
 
-                leftDynamicButton.apply {
-                    text = dynamicKeys[0]
-                    visibility = View.VISIBLE
-                    invalidate()
-                }
-
-                middleDynamicButton.apply {
-                    text = dynamicKeys[1]
-                    visibility = View.VISIBLE
-                    invalidate()
-                }
-
-                rightDynamicButton.apply {
-                    text = dynamicKeys[2]
-                    visibility = if (currentMode == KeyboardMode.LETTERS) View.VISIBLE else View.GONE
-                    invalidate()
-                }
-
-                rowLayout.invalidate()
-            }
-
-            layout.invalidate()
+            configureDynamicButton(leftDynamicButton, dynamicKeys.getOrNull(0))
+            configureDynamicButton(middleDynamicButton, dynamicKeys.getOrNull(1))
+            configureDynamicButton(
+                rightDynamicButton,
+                dynamicKeys.getOrNull(2),
+                isVisibleOverride = currentMode == KeyboardMode.LETTERS
+            )
         }
 
         adjustCurrentColumn()
@@ -392,6 +384,19 @@ class CustomKeyboardView @JvmOverloads constructor(
         updateCapsButtonVisibility()
         postInvalidate()
         requestLayout()
+    }
+
+    private fun configureDynamicButton(
+        button: Button?,
+        label: String?,
+        isVisibleOverride: Boolean? = null
+    ) {
+        button ?: return
+        val shouldShow = isVisibleOverride ?: !label.isNullOrBlank()
+        button.visibility = if (shouldShow) View.VISIBLE else View.GONE
+        if (shouldShow && !label.isNullOrEmpty()) {
+            button.text = label
+        }
     }
 
     private fun adjustCurrentColumn() {
