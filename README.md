@@ -2,7 +2,7 @@
 
 TapLink X3 is an Android-based browser shell designed for XR headsets that mirrors a dual-eye viewport, overlays a precision cursor, and exposes a custom radial keyboard that can be anchored to the viewport or controlled via spatial gestures. The application focuses on keeping input predictable when the user is navigating web content from a wearable controller. It was originally created by u/glxblt76. 
 
-Buy Me A Coffee: buymeacoffee.com/informaltech 
+- **Buy Me a Coffee**: https://buymeacoffee.com/informaltech
 
 ## Highlights
 
