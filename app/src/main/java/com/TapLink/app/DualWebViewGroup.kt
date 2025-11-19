@@ -87,7 +87,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var isDesktopMode = false
     private var isHoveringModeToggle = false
     private var isHoveringScrollToggle = false
-    private var isHoveringYouTubeToggle = false
+    private var isHoveringDashboardToggle = false
     private var isHoveringBookmarksMenu = false
     private val desktopUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     private val mobileUserAgent = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
@@ -448,8 +448,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             configureToggleButton(R.drawable.ic_mode_mobile)
         }
 
-        val leftYouTubeButton = leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube).apply {
-            configureToggleButton(R.drawable.ic_youtube)
+        val leftDashboardButton = leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube).apply {
+            configureToggleButton(R.drawable.ic_dashboard)
         }
 
 
@@ -1146,6 +1146,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val toggleBarWidth = 48
         val navBarHeight = 48
         val keyboardHeight = 220
+        val keyboardWidth = halfWidth - toggleBarWidth
 
         // Position the WebView differently based on scroll mode
         if (isInScrollMode) {
@@ -1201,7 +1202,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 //    """.trimIndent())
 
         val keyboardY = height - keyboardHeight
-        keyboardContainer.layout(0, keyboardY, halfWidth, height)
+        keyboardContainer.layout(toggleBarWidth, keyboardY, toggleBarWidth + keyboardWidth, height)
 
         // Hide navigation bars
         leftNavigationBar.visibility = View.GONE
@@ -1209,7 +1210,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         if (keyboardContainer.visibility == View.VISIBLE) {
             // Position keyboards at the bottom
             val keyboardY = height - keyboardHeight
-            keyboardContainer.layout(0, keyboardY, halfWidth, height)
+            keyboardContainer.layout(toggleBarWidth, keyboardY, toggleBarWidth + keyboardWidth, height)
 
             // Hide navigation bars
             leftNavigationBar.visibility = View.GONE
@@ -1260,7 +1261,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             //Log.d("EditFieldDebug", "Skipping edit field positioning - conditions not met")
 
             // Hide keyboard containers
-            keyboardContainer.layout(0, height, halfWidth, height + keyboardHeight)
+            keyboardContainer.layout(toggleBarWidth, height, toggleBarWidth + keyboardWidth, height + keyboardHeight)
 
             // Position bookmarks when keyboard is not visible
             if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
@@ -1575,6 +1576,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         val halfWidth = widthSize / 2
         val navBarHeight = 48
         val keyboardHeight = 240
+        val toggleBarWidth = 48
+        val keyboardWidth = halfWidth - toggleBarWidth
 
         val contentHeight = if (keyboardContainer.visibility == View.VISIBLE) {
             heightSize - 220  // keyboard height
@@ -1607,7 +1610,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         )
 
         keyboardContainer.measure(
-            MeasureSpec.makeMeasureSpec(halfWidth, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(keyboardWidth, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(keyboardHeight, MeasureSpec.EXACTLY)
         )
 
@@ -1805,8 +1808,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
     }
 
-    private fun loadYouTube(){
-        webView.loadUrl("https://www.youtube.com")
+    private fun loadARDashboard(){
+        webView.loadUrl("file:///android_asset/AR_Dashboard_Landscape_Sidebar.html")
     }
 
 
@@ -2066,14 +2069,14 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             // Regular toggle buttons
             val toggleButtons = mapOf(
-                (  0f                     ..  buttonHeight.toFloat()) to Pair(R.id.btnScrollToggle, "ScrollToggle"),
-                (  buttonHeight.toFloat() ..2*buttonHeight.toFloat()) to Pair(R.id.btnModeToggle  , "ModeToggle"  ),
-                (2*buttonHeight.toFloat() ..3*buttonHeight.toFloat()) to Pair(R.id.btnYouTube     , "YouTube"     ),
-                (3*buttonHeight.toFloat() ..4*buttonHeight.toFloat()) to Pair(R.id.btnBookmarks   , "Bookmarks"   ),
-                (5*buttonHeight.toFloat() ..6*buttonHeight.toFloat()) to Pair(R.id.btnScrollUp    , "ScrollUp"    ),
-                (7*buttonHeight.toFloat() ..8*buttonHeight.toFloat()) to Pair(R.id.btnScrollDown  , "ScrollDown"  ),
-                (8*buttonHeight.toFloat() ..9*buttonHeight.toFloat()) to Pair(R.id.btnMask        , "Mask"        ),
-                (9*buttonHeight.toFloat()..10*buttonHeight.toFloat()) to Pair(R.id.btnAnchor      , "Anchor"      )
+                (  0f                     ..  buttonHeight.toFloat()) to Pair(R.id.btnScrollToggle , "ScrollToggle" ),
+                (  buttonHeight.toFloat() ..2*buttonHeight.toFloat()) to Pair(R.id.btnModeToggle   , "ModeToggle"   ),
+                (2*buttonHeight.toFloat() ..3*buttonHeight.toFloat()) to Pair(R.id.btnYouTube      , "Dashboard"    ),
+                (3*buttonHeight.toFloat() ..4*buttonHeight.toFloat()) to Pair(R.id.btnBookmarks    , "Bookmarks"    ),
+                (5*buttonHeight.toFloat() ..6*buttonHeight.toFloat()) to Pair(R.id.btnScrollUp     , "ScrollUp"     ),
+                (7*buttonHeight.toFloat() ..8*buttonHeight.toFloat()) to Pair(R.id.btnScrollDown   , "ScrollDown"   ),
+                (8*buttonHeight.toFloat() ..9*buttonHeight.toFloat()) to Pair(R.id.btnMask         , "Mask"         ),
+                (9*buttonHeight.toFloat()..10*buttonHeight.toFloat()) to Pair(R.id.btnAnchor       , "Anchor"       )
             )
 
             toggleButtons.forEach { (range, buttonInfo) ->
@@ -2082,12 +2085,12 @@ class DualWebViewGroup @JvmOverloads constructor(
                     when (buttonInfo.second) {
                         "ScrollToggle" -> isHoveringScrollToggle  = true
                         "ModeToggle"   -> isHoveringModeToggle    = true
-                        "YouTube"      -> isHoveringYouTubeToggle = true
+                        "Dashboard"    -> isHoveringDashboardToggle = true
                         "Bookmarks"    -> isHoveringBookmarksMenu = true
                         "ScrollUp"     -> isHoveringScrollUp      = true
                         "ScrollDown"   -> isHoveringScrollDown    = true
                         "Mask"         -> isHoveringMaskToggle    = true
-                        "3DOF"         -> isHoveringAnchorToggle  = true
+                        "Anchor"       -> isHoveringAnchorToggle  = true
 
                     }
 
@@ -2105,7 +2108,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Clear toggle button states
         isHoveringScrollToggle  = false
         isHoveringModeToggle    = false
-        isHoveringYouTubeToggle = false
+        isHoveringDashboardToggle = false
         isHoveringBookmarksMenu = false
         isHoveringZoomIn        = false
         isHoveringZoomOut       = false
@@ -2222,7 +2225,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 }
             }
             // Special handling for left/right scroll buttons
-            if (y >= 6*buttonHeight && y < 7*buttonHeight) {  // Y-range for horizontal scroll buttons
+            if (y >= 7*buttonHeight && y < 8*buttonHeight) {  // Y-range for horizontal scroll buttons
                 if (localX < smallButtonWidth) {
                     // Left scroll button
                     leftToggleBar.findViewById<ImageButton>(R.id.btnScrollLeft)?.let { button ->
@@ -2266,10 +2269,10 @@ class DualWebViewGroup @JvmOverloads constructor(
                 },
                 2*buttonHeight.toFloat()..3*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnYouTube,
-                    "YouTube"
+                    "Dashboard"
                 ) { button ->
                     showButtonClickFeedback(button)
-                    loadYouTube()
+                    loadARDashboard()
                 },
                 3*buttonHeight.toFloat()..4*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnBookmarks,
@@ -2625,7 +2628,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Get references to all buttons
         val leftScrollToggleButton = leftToggleBar.findViewById<ImageButton>(R.id.btnScrollToggle)
         val leftModeToggleButton   = leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle)
-        val leftYouTubeButton      = leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube)
+        val leftDashboardButton    = leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube)
         val leftBookmarksButton    = leftToggleBar.findViewById<ImageButton>(R.id.btnBookmarks)
         val leftZoomInButton       = leftToggleBar.findViewById<ImageButton>(R.id.btnZoomIn)
         val leftZoomOutButton      = leftToggleBar.findViewById<ImageButton>(R.id.btnZoomOut)
@@ -2646,7 +2649,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 // Calculate Y positions based on consistent spacing (56dp per button)
         val scrollToggleY    = 0
         val modeToggleY      = buttonHeight
-        val youtubeY         = buttonHeight * 2
+        val dashboardY       = buttonHeight * 2
         val bookmarksY       = buttonHeight * 3
         val zoomButtonsY     = buttonHeight * 4
         val scrollUpY        = buttonHeight * 5
@@ -2659,7 +2662,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         listOf(
             leftScrollToggleButton to scrollToggleY,
             leftModeToggleButton to modeToggleY,
-            leftYouTubeButton to youtubeY,
+            leftDashboardButton to dashboardY,
             leftBookmarksButton to bookmarksY
         ).forEach { (button, yPosition) ->
             try {
