@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>AR Glasses Dashboard · Landscape + Sidebar</title>
+  <style>
+    :root{
+      --bg:#0b0f1a; --bg-2:#0f1629; --card:#121a2e; --accent:#69f0ae; --accent-2:#82b1ff; --text:#e6f1ff; --muted:#9db3d1;
+      --brightness:1; --scale:1; --radius:18px; --shadow:0 8px 24px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.035);
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,sans-serif;overflow:hidden;}
+    /* Portrait lock */
+    .rotate{display:none;position:fixed;inset:0;align-items:center;justify-content:center;color:#fff;background:rgba(8,12,20,.95);z-index:1000;text-align:center;padding:24px}
+    .rotate .box{border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:18px 22px;background:rgba(255,255,255,.05);box-shadow:0 10px 28px rgba(0,0,0,.45)}
+    .rotate h1{margin:0 0 8px 0;font-size:18px}
+    .rotate p{margin:0;font-size:13px;opacity:.85}
+    @media (orientation:portrait){ .hud{display:none !important;} .rotate{display:flex;} }
+    .hud{width:100vw;height:100vh;display:flex;flex-direction:column;overflow-y:auto;scroll-behavior:smooth;filter:brightness(var(--brightness));transform:scale(var(--scale));}
+    .topbar{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(255,255,255,.05);border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;backdrop-filter:blur(10px);z-index:5;}
+    .btn{border:none;background:rgba(255,255,255,.08);padding:8px 12px;border-radius:10px;color:var(--text);cursor:pointer}
+    .search{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:8px 10px;color:var(--text);outline:none;min-width:160px}
+    .content{display:grid;grid-template-columns:1fr 420px;gap:14px;padding:14px;box-sizing:border-box}
+    @media (max-width:1280px){ .content{grid-template-columns:1fr 360px} }
+    .card{background:var(--card);border:1px solid rgba(255,255,255,.08);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px}
+    .card h3{margin:0 0 10px 0;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+    /* Sections left column */
+    .section{display:flex; align-items:center; gap:10px; margin:10px 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.8px; color:var(--text);}
+    .section::after{content:""; flex:1; height:1px; background: linear-gradient(90deg, rgba(255,255,255,.25), rgba(255,255,255,.05)); border-radius:999px}
+    .section .label{filter: drop-shadow(0 0 6px var(--sec-glow, rgba(255,255,255,.25))); display:inline-flex; align-items:center; gap:6px}
+    .sec-nav{ --sec-glow:#7ecbff }
+    .sec-social{ --sec-glow:#69f0ae }
+    .sec-music{ --sec-glow:#ffea7f }
+    .sec-creative{ --sec-glow:#d0a8ff }
+    .sec-prod{ --sec-glow:#7fffd4 }
+    .sec-llm{ --sec-glow:#7ab8ff }
+    .sec-aimusic{ --sec-glow:#a9ff7a }
+    .sec-aivideo{ --sec-glow:#ff7fe8 }
+    .sec-voice{ --sec-glow:#ffb97f }
+    .sec-system{ --sec-glow:#dddddd }
+    /* Apps 2 columns inside each category */
+    .apps{display:grid;grid-template-columns:repeat(2,minmax(160px,1fr));gap:10px;margin-bottom:6px}
+    .app{border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.03);cursor:pointer;color:var(--text);transition:transform .15s ease, box-shadow .2s ease, border-color .2s ease}
+    .app:hover{transform:translateY(-1px) scale(1.03);border-color:rgba(255,255,255,.25);box-shadow:0 10px 24px rgba(0,0,0,.35),0 0 0 1px rgba(255,255,255,.06)}
+    .app:active{transform:scale(.99)}
+    .app img{width:20px;height:20px;border-radius:4px}
+    [data-theme="light"]{--bg:#f6f8fc;--bg-2:#ffffff;--card:#ffffff;--accent:#0a84ff;--accent-2:#2563eb;--text:#0b0f1a;--muted:#4a5b76}
+    .app span{color:var(--text)}
+    .btn{color:var(--text)}
+    .card, .card *{color:inherit}
+    [data-theme="dark"] .card h3{ color:#e6f1ff }
+    /* Right sidebar: tasks + notes */
+    .tasks input[type="text"]{width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:var(--text);outline:none;margin-bottom:8px}
+    .task-row{display:flex;align-items:center;gap:8px;margin:6px 0;padding:6px 8px;border:1px solid rgba(255,255,255,.08);border-radius:10px;background:rgba(255,255,255,.03)}
+    .task-row input[type="checkbox"]{transform:scale(1.2)}
+    .task-row input[type="text"]{flex:1;background:transparent;border:none;color:var(--text);outline:none}
+    .task-row button{border:none;background:rgba(255,255,255,.08);color:var(--text);border-radius:8px;padding:6px 8px;cursor:pointer}
+    .notes-area{width:100%;min-height:140px;resize:none;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:var(--text);padding:10px;border-radius:10px;box-sizing:border-box;overflow:hidden}
+    .muted{color:var(--muted);font-size:12px;opacity:.9}
+  </style>
+</head>
+<body>
+  <div class="rotate">
+    <div class="box">
+      <h1>Gira el dispositivo</h1>
+      <p>Este Dashboard está optimizado para orientación horizontal.</p>
+    </div>
+  </div>
+
+  <div class="hud">
+    <div class="topbar">
+      <strong style="color:var(--text)">AR Glasses Dashboard</strong>
+      <div style="flex:1"></div>
+      <input id="appSearch" class="search" placeholder="Filtrar apps…" />
+      <button class="btn" id="themeToggle">☀️ Light</button>
+      <button class="btn" id="fullscreenBtn">⤢ Fullscreen</button>
+    </div>
+
+    <div class="content">
+      <!-- Left: Categories (single column), each with 2-column apps -->
+      <div class="card" id="leftPane">
+        <h3>Apps</h3>
+        <div id="appContainer"></div>
+      </div>
+
+      <!-- Right: Tasks + Notes -->
+      <div class="card" id="rightPane">
+        <h3>Tareas & Notas</h3>
+        <div class="tasks">
+          <div class="muted" style="margin-bottom:6px">Checklist</div>
+          <div style="display:flex; gap:8px; margin-bottom:8px">
+            <input id="newTask" type="text" placeholder="Nueva tarea…" />
+            <button id="addTask" class="btn">Añadir</button>
+          </div>
+          <div id="taskList"></div>
+        </div>
+        <div class="muted" style="margin:12px 0 6px">Notas</div>
+        <textarea id="notes" class="notes-area" placeholder="Escribe notas aquí…"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* Theme + fullscreen */
+    const themeToggle=document.getElementById('themeToggle');
+    function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('theme',t);themeToggle.textContent=(t==='dark')?'☀️ Light':'🌙 Dark';}
+    setTheme(localStorage.getItem('theme')||'dark');
+    themeToggle.addEventListener('click',()=>{const c=document.documentElement.getAttribute('data-theme')||'dark';setTheme(c==='dark'?'light':'dark');});
+    const fs=document.getElementById('fullscreenBtn');fs.addEventListener('click',()=>{if(!document.fullscreenElement)document.body.requestFullscreen();else document.exitFullscreen();});
+
+    /* Apps list */
+    const appsList={
+      // Social & Messaging
+      whatsapp:{ name:'WhatsApp', url:'https://web.whatsapp.com' },
+      instagram:{ name:'Instagram', url:'https://www.instagram.com' },
+      telegram:{ name:'Telegram', url:'https://web.telegram.org' },
+      discord:{ name:'Discord', url:'https://discord.com/app' },
+      tiktok:{ name:'TikTok', url:'https://www.tiktok.com' },
+
+      // Media & Search
+      youtube:{ name:'YouTube', url:'https://www.youtube.com' },
+      gmaps:{ name:'Google Maps', url:'https://www.google.com/maps' },
+      minijuegos:{ name:'Minijuegos', url:'https://www.minijuegos.com' },
+
+      // Music Streaming
+      spotify:{ name:'Spotify', url:'https://open.spotify.com' },
+      applemusic:{ name:'Apple Music', url:'https://music.apple.com' },
+      tidal:{ name:'Tidal', url:'https://listen.tidal.com' },
+      deezer:{ name:'Deezer', url:'https://www.deezer.com' },
+      audiomack:{ name:'Audiomack', url:'https://audiomack.com' },
+      ytmusic:{ name:'YouTube Music', url:'https://music.youtube.com' },
+      soundcloud:{ name:'SoundCloud', url:'https://soundcloud.com' },
+
+      // Creativity / Multimedia
+      photopea:{ name:'Photopea (Foto)', url:'https://www.photopea.com' },
+      clipchamp:{ name:'Clipchamp (Video)', url:'https://clipchamp.com/en/video-editor/' },
+      bandlab:{ name:'BandLab (DAW)', url:'https://www.bandlab.com' },
+      wireframe:{ name:'Wireframe.cc', url:'https://wireframe.cc' },
+      kleki:{ name:'Kleki', url:'https://kleki.com' },
+
+      // Productivity / Docs
+      todoist:{ name:'Todoist', url:'https://www.todoist.com' },
+      stackedit:{ name:'StackEdit (Texto)', url:'https://stackedit.io/app' },
+      sejda:{ name:'Sejda PDF Editor', url:'https://www.sejda.com/pdf-editor' },
+
+      // LLMs / Chatbots
+      chatgpt:{ name:'ChatGPT', url:'https://chatgpt.com' },
+      claude:{ name:'Claude', url:'https://claude.ai' },
+      deepseek:{ name:'DeepSeek', url:'https://chat.deepseek.com' },
+      grok:{ name:'Grok', url:'https://grok.com' },
+
+      // AI Music Generation
+      suno:{ name:'Suno (AI Música)', url:'https://suno.com' },
+      udio:{ name:'Udio (AI Música)', url:'https://www.udio.com' },
+      stableaudio:{ name:'Stable Audio', url:'https://stableaudio.com' },
+
+      // AI Video Generation
+      runway:{ name:'Runway (AI Video)', url:'https://runwayml.com' },
+      pika:{ name:'Pika (AI Video)', url:'https://pika.art' },
+      luma:{ name:'Luma Dream Machine', url:'https://lumalabs.ai/dream-machine' },
+
+      // AI Voice / Cloning
+      elevenlabs:{ name:'ElevenLabs (Voz)', url:'https://elevenlabs.io' },
+      playht:{ name:'PlayHT (Voz)', url:'https://play.ht' },
+
+      // System
+      settings:{ name:'Settings', url:'' }
+    };
+
+    const appContainer=document.getElementById('appContainer');
+    const search = document.getElementById('appSearch');
+
+    const specialIcons={
+      whatsapp:'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 256 256%22 width=%2220%22 height=%2220%22><path fill=%22%2325D366%22 d=%22M128 0a128 128 0 0 0-110 190L8 248l60-9A128 128 0 1 0 128 0Z"/><path fill=%22%23fff%22 d=%22M193 178c-9 4-21 9-34 5c-30-9-77-48-91-83c-7-17 2-31 7-36c4-4 9-5 12-5l8 1c3 1 6 9 7 12s5 12 5 12s1 3 0 5c-1 3-7 7-7 9s-1 3 1 6a142 142 0 0 0 25 30c18 16 31 21 35 22s5 0 7-2s8-10 10-13s5-3 8-2l20 9c3 1 5 3 5 5s-9 13-18 19Z"/></svg>'
+    };
+
+    function createAppButton(key, meta){
+      const app=document.createElement('button');
+      app.className='app'; app.dataset.app=key; app.title=meta.name;
+      const img=document.createElement('img'); img.width=20; img.height=20; img.style.borderRadius='4px';
+      if(specialIcons[key]){ img.src=specialIcons[key]; }
+      else if(meta.url){ try{ const host=(new URL(meta.url)).hostname; img.src=`https://www.google.com/s2/favicons?domain=${host}&sz=64`; } catch(e){} }
+      const label=document.createElement('span'); label.textContent=meta.name;
+      app.append(img,label);
+      if(meta.url){
+        app.addEventListener('click',()=>{
+          const w=window.open(meta.url,'_blank','noopener');
+          if(!w||w.closed){ window.location.href=meta.url; }
+        });
+      }
+      return app;
+    }
+
+    function addSection(title, cls){
+      const s=document.createElement('div'); s.className=`section ${cls}`;
+      const span=document.createElement('span'); span.className='label'; span.textContent=title; s.append(span); appContainer.append(s);
+      const body=document.createElement('div'); body.className='apps'; appContainer.append(body);
+      return body;
+    }
+
+    const groups=[
+      { title:'🧭 Navegación / Entretenimiento', cls:'sec-nav', keys:['youtube','gmaps','minijuegos','tiktok'] },
+      { title:'💬 Social / Comunicación', cls:'sec-social', keys:['whatsapp','instagram','telegram','discord'] },
+      { title:'🎧 Música / Streaming', cls:'sec-music', keys:['spotify','applemusic','tidal','deezer','audiomack','ytmusic','soundcloud'] },
+      { title:'🎨 Creatividad / Multimedia', cls:'sec-creative', keys:['photopea','clipchamp','bandlab','wireframe','kleki'] },
+      { title:'💼 Productividad / Documentos', cls:'sec-prod', keys:['todoist','stackedit','sejda'] },
+      { title:'🧠 IA / Chatbots', cls:'sec-llm', keys:['chatgpt','claude','deepseek','grok'] },
+      { title:'🎹 IA de Música', cls:'sec-aimusic', keys:['suno','udio','stableaudio'] },
+      { title:'🎥 IA de Video', cls:'sec-aivideo', keys:['runway','pika','luma'] },
+      { title:'🗣️ IA de Voz', cls:'sec-voice', keys:['elevenlabs','playht'] },
+      { title:'⚙️ Sistema', cls:'sec-system', keys:['settings'] }
+    ];
+
+    function renderAll(){
+      appContainer.innerHTML='';
+      const q=(search?.value||'').trim().toLowerCase();
+      for(const g of groups){
+        const body = addSection(g.title, g.cls);
+        const items = g.keys.map(k=>({k, m: appsList[k]})).filter(x=>x.m);
+        const filtered = q ? items.filter(x=> x.m.name.toLowerCase().includes(q) || x.k.toLowerCase().includes(q)) : items;
+        if(filtered.length){
+          for(const it of filtered){ body.append( createAppButton(it.k, it.m) ); }
+        } else {
+          const ph=document.createElement('div'); ph.className='muted'; ph.textContent='— sin coincidencias —'; body.append(ph);
+        }
+      }
+    }
+
+    renderAll();
+    if(search){ search.addEventListener('input', renderAll); }
+
+    /* Tasks + Notes: persistent checklist and auto-growing notes */
+    const taskListEl = document.getElementById('taskList');
+    const newTaskEl = document.getElementById('newTask');
+    const addTaskBtn = document.getElementById('addTask');
+    const tasksKey = 'ar_tasks_v1';
+    let tasks = JSON.parse(localStorage.getItem(tasksKey) || '[]'); // [{id, text, done}]
+    function saveTasks(){ localStorage.setItem(tasksKey, JSON.stringify(tasks)); }
+    function taskRow(task){
+      const row = document.createElement('div'); row.className='task-row'; row.dataset.id=task.id;
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.checked=task.done;
+      const txt = document.createElement('input'); txt.type='text'; txt.value=task.text;
+      const del = document.createElement('button'); del.textContent='✕';
+      cb.addEventListener('change', ()=>{ task.done = cb.checked; saveTasks(); });
+      txt.addEventListener('input', ()=>{ task.text = txt.value; saveTasks(); autoresizeNotesBox(); });
+      del.addEventListener('click', ()=>{ tasks = tasks.filter(t=>t.id!==task.id); saveTasks(); renderTasks(); });
+      row.append(cb, txt, del);
+      return row;
+    }
+    function renderTasks(){
+      taskListEl.innerHTML='';
+      tasks.forEach(t=> taskListEl.appendChild(taskRow(t)));
+      autoresizeNotesBox();
+    }
+    function addTaskFromInput(){
+      const val = (newTaskEl.value||'').trim();
+      if(!val) return;
+      tasks.push({id:Date.now()+Math.random(), text:val, done:false});
+      newTaskEl.value='';
+      saveTasks();
+      renderTasks();
+    }
+    addTaskBtn.addEventListener('click', addTaskFromInput);
+    newTaskEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); addTaskFromInput(); }});
+    renderTasks();
+
+    const notesEl = document.getElementById('notes');
+    const notesKey = 'ar_notes_v1';
+    notesEl.value = localStorage.getItem(notesKey)||'';
+    function autosizeTextarea(el){
+      el.style.height='auto';
+      el.style.height = (el.scrollHeight)+'px';
+    }
+    function autoresizeNotesBox(){
+      autosizeTextarea(notesEl);
+    }
+    notesEl.addEventListener('input', ()=>{ localStorage.setItem(notesKey, notesEl.value); autoresizeNotesBox(); });
+    setTimeout(autoresizeNotesBox, 0);
+  </script>
+</body>
+</html>
