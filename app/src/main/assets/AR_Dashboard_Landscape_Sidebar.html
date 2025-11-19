@@ -39,7 +39,6 @@
     .sec-aimusic{ --sec-glow:#a9ff7a }
     .sec-aivideo{ --sec-glow:#ff7fe8 }
     .sec-voice{ --sec-glow:#ffb97f }
-    .sec-system{ --sec-glow:#dddddd }
     /* Apps 2 columns inside each category */
     .apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:6px}
     .app{border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.03);cursor:pointer;color:var(--text);transition:transform .15s ease, box-shadow .2s ease, border-color .2s ease}
@@ -102,6 +101,11 @@
   </div>
 
   <script>
+    /* Prevent context menu on button clicks (avoids WebView popups) */
+    document.addEventListener('contextmenu', (e)=>{
+      if(e.target.closest('button')){ e.preventDefault(); }
+    });
+
     /* Theme */
     const themeToggle=document.getElementById('themeToggle');
     function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('theme',t);themeToggle.textContent=(t==='dark')?'☀️ Light':'🌙 Dark';}
@@ -163,8 +167,6 @@
       elevenlabs:{ name:'ElevenLabs (Voice)', url:'https://elevenlabs.io' },
       playht:{ name:'PlayHT (Voice)', url:'https://play.ht' },
 
-      // System
-      settings:{ name:'Settings', url:'' }
     };
 
     const appContainer=document.getElementById('appContainer');
@@ -207,8 +209,7 @@
       { title:'🧠 AI / Chatbots', cls:'sec-llm', keys:['chatgpt','claude','deepseek','grok'] },
       { title:'🎹 AI Music', cls:'sec-aimusic', keys:['suno','udio','stableaudio'] },
       { title:'🎥 AI Video', cls:'sec-aivideo', keys:['runway','pika','luma'] },
-      { title:'🗣️ AI Voice', cls:'sec-voice', keys:['elevenlabs','playht'] },
-      { title:'⚙️ System', cls:'sec-system', keys:['settings'] }
+      { title:'🗣️ AI Voice', cls:'sec-voice', keys:['elevenlabs','playht'] }
     ];
 
     function renderAll(){
