@@ -17,12 +17,12 @@
     .rotate h1{margin:0 0 8px 0;font-size:18px}
     .rotate p{margin:0;font-size:13px;opacity:.85}
     @media (orientation:portrait){ .hud{display:none !important;} .rotate{display:flex;} }
-    .hud{width:100vw;max-width:640px;margin:0 auto;height:100vh;max-height:480px;display:flex;flex-direction:column;overflow-y:auto;scroll-behavior:smooth;filter:brightness(var(--brightness));transform:scale(var(--scale));padding:0 8px 16px;box-sizing:border-box;}
+    .hud{width:100vw;max-width:960px;margin:0 auto;height:100vh;max-height:480px;display:flex;flex-direction:column;overflow-y:auto;scroll-behavior:smooth;filter:brightness(var(--brightness));transform:scale(var(--scale));padding:0 8px 16px;box-sizing:border-box;}
     .topbar{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,.05);border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;backdrop-filter:blur(10px);z-index:5;flex-wrap:wrap;}
     .btn{border:none;background:rgba(255,255,255,.08);padding:8px 12px;border-radius:10px;color:var(--text);cursor:pointer}
     .search{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:8px 10px;color:var(--text);outline:none;min-width:140px;flex:1;}
-    .content{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:10px;box-sizing:border-box;min-height:0}
-    @media (max-width:720px){ .content{grid-template-columns:1fr} #rightPane{width:100%} }
+    .content{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(300px,1fr);gap:10px;padding:10px;box-sizing:border-box;min-height:0}
+    @media (max-width:820px){ .content{grid-template-columns:1fr} #rightPane{width:100%} }
     .card{background:var(--card);border:1px solid rgba(255,255,255,.08);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px}
     .card h3{margin:0 0 10px 0;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
     /* Sections left column */
@@ -39,8 +39,9 @@
     .sec-aivideo{ --sec-glow:#ff7fe8 }
     .sec-voice{ --sec-glow:#ffb97f }
     /* Apps 2 columns inside each category */
-    .apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:6px}
-    .app{border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.03);cursor:pointer;color:var(--text);transition:transform .15s ease, box-shadow .2s ease, border-color .2s ease}
+    .apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:6px}
+    @media (max-width:600px){ .apps{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))} }
+    .app{border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.03);cursor:pointer;color:var(--text);transition:transform .15s ease, box-shadow .2s ease, border-color .2s ease;width:100%;min-height:56px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
     .app:hover{transform:translateY(-1px) scale(1.03);border-color:rgba(255,255,255,.25);box-shadow:0 10px 24px rgba(0,0,0,.35),0 0 0 1px rgba(255,255,255,.06)}
     .app:active{transform:scale(.99)}
     .app img{width:20px;height:20px;border-radius:4px}
@@ -276,6 +277,64 @@
     }
     notesEl.addEventListener('input', ()=>{ localStorage.setItem(notesKey, notesEl.value); autoresizeNotesBox(); });
     setTimeout(autoresizeNotesBox, 0);
+
+    /* The Android scroll buttons issue scrollBy() calls, but this layout keeps the body fixed
+       and scrolls the inner .hud container instead. Bridge those calls so scroll buttons work. */
+    (function bridgeScrollByToHud(){
+      const hud = document.querySelector('.hud');
+      if(!hud){ return; }
+
+      const originalScrollBy = window.scrollBy.bind(window);
+      const originalScrollTo = window.scrollTo.bind(window);
+
+      function normalizeScrollArgs(arg0, arg1){
+        if(typeof arg0 === 'object' && arg0){
+          return {
+            left: Number(arg0.left || 0),
+            top: Number(arg0.top || 0),
+            behavior: arg0.behavior
+          };
+        }
+        return {
+          left: Number(arg0 || 0),
+          top: Number(arg1 || 0)
+        };
+      }
+
+      function scrollHudBy(left, top, behavior){
+        try {
+          if(typeof hud.scrollBy === 'function'){
+            hud.scrollBy({ left, top, behavior });
+            return;
+          }
+        } catch(e){}
+        if(typeof left === 'number'){ hud.scrollLeft += left; }
+        if(typeof top === 'number'){ hud.scrollTop += top; }
+      }
+
+      function scrollHudTo(left, top, behavior){
+        try {
+          if(typeof hud.scrollTo === 'function'){
+            hud.scrollTo({ left, top, behavior });
+            return;
+          }
+        } catch(e){}
+        if(typeof left === 'number'){ hud.scrollLeft = left; }
+        if(typeof top === 'number'){ hud.scrollTop = top; }
+      }
+
+      window.scrollBy = function(arg0, arg1){
+        const {left, top, behavior} = normalizeScrollArgs(arg0, arg1);
+        scrollHudBy(left, top, behavior);
+        return originalScrollBy(arg0, arg1);
+      };
+
+      window.scrollTo = function(arg0, arg1){
+        const {left, top, behavior} = normalizeScrollArgs(arg0, arg1);
+        scrollHudTo(left, top, behavior);
+        return originalScrollTo(arg0, arg1);
+      };
+    })();
   </script>
 </body>
 </html>

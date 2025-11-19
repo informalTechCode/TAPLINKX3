@@ -103,7 +103,8 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var isHoveringScrollLeft = false
     private var isHoveringScrollRight = false
     private var isHoveringScrollDown = false
-    private val scrollAmount = 50 // Adjust this value to control scroll speed
+    private val scrollAmount = 50 // Horizontal scroll distance for arrow buttons
+    private val verticalScrollFraction = 0.25f // Scroll vertically by 25% of the viewport per tap
 
     private var isHoveringZoomIn = false
     private var isHoveringZoomOut = false
@@ -2143,16 +2144,47 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
 
+    private fun scrollViewportByFraction(directionMultiplier: Int) {
+        val script = """
+            (function() {
+                const fallbackViewportHeight = window.innerHeight
+                    || (document.documentElement && document.documentElement.clientHeight)
+                    || (document.body && document.body.clientHeight)
+                    || 0;
+                const hud = document.querySelector('.hud');
+                const target = (hud && hud.scrollHeight > hud.clientHeight) ? hud : window;
+                const targetHeight = (target === hud && hud && hud.clientHeight) ? hud.clientHeight : fallbackViewportHeight;
+                const scrollAmount = targetHeight * $verticalScrollFraction;
+                const delta = scrollAmount * $directionMultiplier;
+
+                if (target === window) {
+                    window.scrollBy({ top: delta, behavior: 'smooth' });
+                    return delta;
+                }
+
+                const start = target.scrollTop;
+                if (typeof target.scrollBy === 'function') {
+                    target.scrollBy({ top: delta, behavior: 'smooth' });
+                } else {
+                    target.scrollTop += delta;
+                }
+                return target.scrollTop - start;
+            })();
+        """.trimIndent()
+
+        webView.evaluateJavascript(script) { result ->
+            Log.d("ScrollDebug", "Viewport scroll result: $result")
+        }
+    }
+
     private fun handleScrollButtonClick(direction: String) {
-        val script = when (direction) {
-            "up" -> "window.scrollBy({ top: -$scrollAmount, behavior: 'smooth' });"
-            "down" -> "window.scrollBy({ top: $scrollAmount, behavior: 'smooth' });"
-            "left" -> "window.scrollBy({ left: -$scrollAmount, behavior: 'smooth' });"
-            "right" -> "window.scrollBy({ left: $scrollAmount, behavior: 'smooth' });"
+        when (direction) {
+            "up" -> scrollViewportByFraction(-1)
+            "down" -> scrollViewportByFraction(1)
+            "left" -> webView.evaluateJavascript("window.scrollBy({ left: -$scrollAmount, behavior: 'smooth' });", null)
+            "right" -> webView.evaluateJavascript("window.scrollBy({ left: $scrollAmount, behavior: 'smooth' });", null)
             else -> return
         }
-
-        webView.evaluateJavascript(script, null)
     }
 
 
@@ -2225,7 +2257,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 }
             }
             // Special handling for left/right scroll buttons
-            if (y >= 7*buttonHeight && y < 8*buttonHeight) {  // Y-range for horizontal scroll buttons
+            if (y >= 6*buttonHeight && y < 7*buttonHeight) {  // Y-range for horizontal scroll buttons
                 if (localX < smallButtonWidth) {
                     // Left scroll button
                     leftToggleBar.findViewById<ImageButton>(R.id.btnScrollLeft)?.let { button ->
@@ -2286,7 +2318,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     "ScrollUp"
                 ) { button ->
                     showButtonClickFeedback(button)
-                    webView.evaluateJavascript("window.scrollBy(0, -50);", null)
+                    scrollViewportByFraction(-1)
                 },
                 7*buttonHeight.toFloat()..8*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnScrollDown,
@@ -2294,19 +2326,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 ) { button ->
                     showButtonClickFeedback(button)
                     Log.d("ScrollDebug", "Executing scroll down")
-                    webView.evaluateJavascript("""
-        (function() {
-            let scrollAmount = 50;
-            window.scrollBy({
-                top: scrollAmount,
-                behavior: 'smooth'
-            });
-            console.log('Scrolled by ' + scrollAmount);
-            return true;
-        })();
-    """) { result ->
-                        Log.d("ScrollDebug", "Scroll result: $result")
-                    }
+                    scrollViewportByFraction(1)
                 },
                 8*buttonHeight.toFloat()..9*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnMask,
