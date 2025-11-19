@@ -40,7 +40,8 @@
     .sec-voice{ --sec-glow:#ffb97f }
     /* Apps 2 columns inside each category */
     .apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:6px}
-    .app{border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.03);cursor:pointer;color:var(--text);transition:transform .15s ease, box-shadow .2s ease, border-color .2s ease}
+    @media (max-width:680px){ .apps{grid-template-columns:1fr} }
+    .app{border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.03);cursor:pointer;color:var(--text);transition:transform .15s ease, box-shadow .2s ease, border-color .2s ease;width:100%;min-height:56px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
     .app:hover{transform:translateY(-1px) scale(1.03);border-color:rgba(255,255,255,.25);box-shadow:0 10px 24px rgba(0,0,0,.35),0 0 0 1px rgba(255,255,255,.06)}
     .app:active{transform:scale(.99)}
     .app img{width:20px;height:20px;border-radius:4px}
