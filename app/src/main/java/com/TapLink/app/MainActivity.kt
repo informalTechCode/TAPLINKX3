@@ -3385,17 +3385,6 @@ class MainActivity : AppCompatActivity(),
             return
         }
 
-        val gestureDetector = GestureDetector(this, object : SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                hideFullScreenCustomView()
-                return true
-            }
-        })
-        val touchListener = View.OnTouchListener { _, motionEvent ->
-            gestureDetector.onTouchEvent(motionEvent)
-            false
-        }
-
         fullScreenCustomView = view
         customViewCallback = callback
         originalSystemUiVisibility = window.decorView.systemUiVisibility
@@ -3412,14 +3401,15 @@ class MainActivity : AppCompatActivity(),
             )
 
         dualWebViewGroup.showFullScreenOverlay(view)
-        view.setOnTouchListener(touchListener)
+        attachFullscreenDoubleTapListener(view)
+        cursorLeftView.visibility = View.GONE
+        cursorRightView.visibility = View.GONE
     }
 
     private fun hideFullScreenCustomView() {
-        if (fullScreenCustomView == null) {
-            return
-        }
-        fullScreenCustomView?.setOnTouchListener(null)
+        val customView = fullScreenCustomView ?: return
+
+        detachFullscreenDoubleTapListener(customView)
         dualWebViewGroup.hideFullScreenOverlay()
         fullScreenCustomView = null
 
@@ -3432,6 +3422,26 @@ class MainActivity : AppCompatActivity(),
 
         customViewCallback?.onCustomViewHidden()
         customViewCallback = null
+    }
+
+    private fun attachFullscreenDoubleTapListener(targetView: View) {
+        val detector = GestureDetector(this, object : SimpleOnGestureListener() {
+            override fun onDoubleTap(e: MotionEvent?): Boolean {
+                hideFullScreenCustomView()
+                return true
+            }
+        })
+
+        val touchInterceptor = View.OnTouchListener { _, event ->
+            detector.onTouchEvent(event)
+            false
+        }
+
+        targetView.setOnTouchListener(touchInterceptor)
+    }
+
+    private fun detachFullscreenDoubleTapListener(targetView: View) {
+        targetView.setOnTouchListener(null)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
