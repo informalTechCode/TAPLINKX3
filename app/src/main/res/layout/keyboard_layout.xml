@@ -177,6 +177,13 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal">
 
+        <!-- Dictation key -->
+        <Button
+            android:id="@+id/btn_dictation"
+            style="@style/KeyboardButton"
+            android:text="🎤"
+            android:layout_weight="1" />
+
         <!-- Clear key -->
         <Button
             android:id="@+id/btn_clear"

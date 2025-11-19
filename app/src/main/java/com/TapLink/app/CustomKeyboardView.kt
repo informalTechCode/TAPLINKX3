@@ -105,6 +105,7 @@ class CustomKeyboardView @JvmOverloads constructor(
         fun onClearPressed()
         fun onMoveCursorLeft()
         fun onMoveCursorRight()
+        fun onDictationRequested()
     }
 
     private var listener: OnKeyboardActionListener? = null
@@ -302,6 +303,10 @@ class CustomKeyboardView @JvmOverloads constructor(
                     Log.d("KeyboardDebug", "Handling clear")
                     listener?.onClearPressed()
                 }
+                R.id.btn_dictation -> {
+                    Log.d("KeyboardDebug", "Handling dictation")
+                    listener?.onDictationRequested()
+                }
                 R.id.button_left_dynamic,
                 R.id.button_middle_dynamic,
                 R.id.button_right_dynamic -> handleDynamicButtonClick(button.id)
@@ -490,6 +495,7 @@ class CustomKeyboardView @JvmOverloads constructor(
         R.id.btn_switch,
         //R.id.btn_caps,
         R.id.btn_clear,
+        R.id.btn_dictation,
         R.id.button_left_dynamic,
         R.id.button_middle_dynamic,
         R.id.button_right_dynamic

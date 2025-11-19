@@ -1908,16 +1908,7 @@ class MainActivity : AppCompatActivity(),
                     override fun onResults(results: Bundle?) {
                         results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.let { matches ->
                             if (matches.isNotEmpty()) {
-                                // Insert the recognized text into the search box
-                                webView.evaluateJavascript("""
-                                (function() {
-                                    var searchInput = document.querySelector('input[name="q"]');
-                                    if (searchInput) {
-                                        searchInput.value = '${matches[0]}';
-                                        searchInput.form.submit();
-                                    }
-                                })();
-                            """.trimIndent(), null)
+                                handleDictationResult(matches[0])
                             }
                         }
                     }
@@ -1934,6 +1925,62 @@ class MainActivity : AppCompatActivity(),
                     override fun onPartialResults(partialResults: Bundle?) {}
                     override fun onEvent(eventType: Int, params: Bundle?) {}
                 })
+            }
+        }
+    }
+
+    private fun startDictation() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            Log.e("SpeechRecognition", "Speech recognition not available")
+            return
+        }
+
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), PERMISSION_REQUEST_CODE)
+            return
+        }
+
+        if (speechRecognizer == null) {
+            initializeSpeechRecognition()
+        }
+
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+        }
+
+        try {
+            speechRecognizer?.startListening(intent)
+        } catch (e: Exception) {
+            Log.e("SpeechRecognition", "Failed to start dictation", e)
+        }
+    }
+
+    private fun handleDictationResult(text: String) {
+        if (text.isBlank()) return
+
+        val editFieldVisible = dualWebViewGroup.urlEditText.visibility == View.VISIBLE
+
+        when {
+            dualWebViewGroup.isBookmarksExpanded() && !editFieldVisible -> {
+                text.forEach { character ->
+                    dualWebViewGroup.getBookmarksView().handleKeyboardInput(character.toString())
+                }
+            }
+            editFieldVisible -> {
+                val currentText = dualWebViewGroup.getCurrentLinkText()
+                val cursorPosition = dualWebViewGroup.urlEditText.selectionStart
+
+                val newText = StringBuilder(currentText)
+                    .insert(cursorPosition, text)
+                    .toString()
+
+                dualWebViewGroup.setLinkText(newText, cursorPosition + text.length)
+            }
+            else -> {
+                text.forEach { character ->
+                    sendCharacterToWebView(character.toString())
+                }
             }
         }
     }
@@ -3844,6 +3891,10 @@ class MainActivity : AppCompatActivity(),
                 sendCharacterToWebView(key)
             }
         }
+    }
+
+    override fun onDictationRequested() {
+        startDictation()
     }
 
     private fun handleUserInteraction() {
