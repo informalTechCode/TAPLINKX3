@@ -3426,7 +3426,7 @@ class MainActivity : AppCompatActivity(),
 
     private fun attachFullscreenDoubleTapListener(targetView: View) {
         val detector = GestureDetector(this, object : SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent?): Boolean {
+            override fun onDoubleTap(e: MotionEvent): Boolean {
                 hideFullScreenCustomView()
                 return true
             }
