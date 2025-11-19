@@ -9,6 +9,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.drawable.GradientDrawable
+import android.view.GestureDetector
 import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
@@ -207,6 +208,20 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     private val previousFullScreenVisibility = mutableMapOf<View, Int>()
+
+    private var fullScreenTapListener: (() -> Unit)? = null
+    private val fullScreenGestureDetector by lazy {
+        GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onSingleTapConfirmed(e: MotionEvent?): Boolean {
+                fullScreenTapListener?.invoke()
+                return true
+            }
+
+            override fun onDown(e: MotionEvent?): Boolean {
+                return true
+            }
+        })
+    }
 
     val leftEyeClipParent = FrameLayout(context).apply {
         // Force it to be exactly 640px wide and match height (or some fixed height).
@@ -675,6 +690,13 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         fullScreenOverlayContainer.visibility = View.VISIBLE
         fullScreenOverlayContainer.bringToFront()
+
+        fullScreenOverlayContainer.isClickable = true
+        fullScreenOverlayContainer.isFocusable = true
+
+        fullScreenOverlayContainer.setOnTouchListener { _, event ->
+            fullScreenGestureDetector.onTouchEvent(event)
+        }
     }
 
     fun hideFullScreenOverlay() {
@@ -684,6 +706,12 @@ class DualWebViewGroup @JvmOverloads constructor(
             target.visibility = visibility
         }
         previousFullScreenVisibility.clear()
+
+        fullScreenOverlayContainer.setOnTouchListener(null)
+    }
+
+    fun setFullScreenTapListener(listener: (() -> Unit)?) {
+        fullScreenTapListener = listener
     }
 
     fun maskScreen() {

@@ -433,6 +433,9 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.listener = this
         dualWebViewGroup.navigationListener = this
         dualWebViewGroup.maskToggleListener = this
+        dualWebViewGroup.setFullScreenTapListener {
+            onBackPressedDispatcher.onBackPressed()
+        }
 
         tripleClickMenu = TripleClickMenu(this).apply {
             layoutParams = FrameLayout.LayoutParams(
