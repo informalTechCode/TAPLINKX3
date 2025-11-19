@@ -65,7 +65,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private lateinit var leftSystemInfoView: SystemInfoView
 
-    val leftNavigationBar: View
+    lateinit var leftNavigationBar: View
     private val verticalBarSize = 480 - 48
     private val nButtons    = 10
     private val buttonHeight = verticalBarSize / nButtons
@@ -75,7 +75,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var anchoredGestureActive = false
 
-    val leftToggleBar: View
+    lateinit var leftToggleBar: View
     private var isHorizontalScroll = false
 
     var scrollDirectionListener: ScrollDirectionListener? = null
