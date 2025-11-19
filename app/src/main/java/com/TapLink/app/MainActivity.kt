@@ -3426,6 +3426,11 @@ class MainActivity : AppCompatActivity(),
 
     private fun attachFullscreenDoubleTapListener(targetView: View) {
         val detector = GestureDetector(this, object : SimpleOnGestureListener() {
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                toggleFullscreenPlayback()
+                return true
+            }
+
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 hideFullScreenCustomView()
                 return true
@@ -3442,6 +3447,16 @@ class MainActivity : AppCompatActivity(),
 
     private fun detachFullscreenDoubleTapListener(targetView: View) {
         targetView.setOnTouchListener(null)
+    }
+
+    private fun toggleFullscreenPlayback() {
+        val manager = audioManager ?: return
+
+        val downEvent = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+        val upEvent = KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+
+        manager.dispatchMediaKeyEvent(downEvent)
+        manager.dispatchMediaKeyEvent(upEvent)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
