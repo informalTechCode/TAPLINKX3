@@ -5,10 +5,10 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
 <a href="https://www.buymeacoffee.com/informaltech" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 ## Highlights
 
-- **Dual-eye rendering** that mirrors a single `WebView` into a left-eye clip with a cursor and a right-eye `SurfaceView` preview. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L40-L84】
-- **Custom keyboard** with anchored and focus-driven modes, supporting casing toggles, symbol layouts, and dynamic buttons wired through `CustomKeyboardView`. 【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L101-L339】
-- **Navigation and triple-click overlays** supplying quick actions, bookmarking, and anchor toggles from `DualWebViewGroup` and `TripleClickMenu`. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L90-L148】【F:app/src/main/java/com/TapLink/app/tripleClickMenu.kt†L72-L190】
-- **Persistent bookmarks** managed through `BookmarksView` with storage handled by `BookmarkManager`. 【F:app/src/main/java/com/TapLink/app/BookmarksView.kt†L24-L120】
+- **Dual-eye rendering** that mirrors a single `WebView` into a left-eye clip with a cursor and a right-eye `SurfaceView` preview. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L51-L121】
+- **Custom keyboard** with anchored and focus-driven modes, supporting casing toggles, symbol layouts, and dynamic buttons wired through `CustomKeyboardView`. 【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L173-L260】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L648-L716】
+- **Navigation and triple-click overlays** supplying quick actions, bookmarking, and anchor toggles from `DualWebViewGroup` and `TripleClickMenu`. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1592-L1774】【F:app/src/main/java/com/TapLink/app/tripleClickMenu.kt†L72-L160】
+- **Persistent bookmarks** managed through `BookmarksView` with storage handled by `BookmarkManager`. 【F:app/src/main/java/com/TapLink/app/BookmarksView.kt†L21-L156】【F:app/src/main/java/com/TapLink/app/BookmarksView.kt†L640-L718】
 
 ## Project layout
 
@@ -30,7 +30,7 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
 
 ## Build & run
 
-1. Install Android Studio (Giraffe or newer) with Android SDK 33.
+1. Install Android Studio (Giraffe or newer) with Android SDK 34.
 2. Import the repository as a Gradle project.
 3. Select the `app` run configuration and deploy to an Android 10 (API 29) or newer device/headset.
 4. The default start URL is derived from the bookmark home entry; the keyboard opens via the navigation bar or triple-click menu.
@@ -42,9 +42,14 @@ Gradle wrapper commands are available for CI:
 ./gradlew test
 ```
 
+### Installation & sideloading
+
+- To install without Android Studio, build or download the APK and sideload it onto your headset/phone. A step-by-step walkthrough is available here: https://www.youtube.com/watch?v=l3wu7x14LKY.
+- When sideloading via ADB, enable developer options on the target device and confirm that unknown sources are allowed in the headset settings before installing the APK.
+
 ## Architectural overview
 
-TapLink revolves around `MainActivity`, which wires input devices, audio, speech recognition, and the dual-eye surface. `DualWebViewGroup` hosts the left eye UI stack (navigation, keyboard container, bookmarks) and mirrors frames to the right eye. Input funnels through `CustomKeyboardView` and `LinkEditingListener` callbacks so that keyboard interactions can either populate the WebView or manipulate bookmark fields. 【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3720-L3826】【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L40-L214】
+TapLink revolves around `MainActivity`, which wires input devices, audio, speech recognition, and the dual-eye surface. `DualWebViewGroup` hosts the left eye UI stack (navigation, keyboard container, bookmarks) and mirrors frames to the right eye. Input funnels through `CustomKeyboardView` and `LinkEditingListener` callbacks so that keyboard interactions can either populate the WebView or manipulate bookmark fields. 【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3848-L3990】【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L51-L214】
 
 ### Core data flow
 
@@ -74,14 +79,14 @@ flowchart LR
     Bookmarks -->|BookmarkListener| MA
 ```
 
-This chart captures how controller, speech, and touch events enter `MainActivity`, which orchestrates the `DualWebViewGroup`. Keyboard callbacks loop through the `OnKeyboardActionListener` interface implemented by `MainActivity` to ultimately send text or commands to the `WebView` or bookmark editors. 【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3720-L3826】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L101-L339】
+This chart captures how controller, speech, and touch events enter `MainActivity`, which orchestrates the `DualWebViewGroup`. Keyboard callbacks loop through the `OnKeyboardActionListener` interface implemented by `MainActivity` to ultimately send text or commands to the `WebView` or bookmark editors. 【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3848-L3940】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L173-L260】
 
 ## Input modes
 
 TapLink exposes two complementary keyboard modes:
 
-- **Anchored mode**: The keyboard is fixed in the viewport and taps are redirected based on the cursor location. Drag and fling listeners are suppressed so only discrete taps are processed. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1495-L1689】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L173-L207】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L626-L716】
-- **Free (focus) mode**: The keyboard is navigated via horizontal drags and flings that move the focus highlight before triggering `performFocusedTap()`. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1689-L1708】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L626-L716】
+- **Anchored mode**: The keyboard is fixed in the viewport and taps are redirected based on the cursor location. Drag and fling listeners are suppressed so only discrete taps are processed. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1592-L1774】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L173-L260】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L648-L716】
+- **Free (focus) mode**: The keyboard is navigated via horizontal drags and flings that move the focus highlight before triggering `performFocusedTap()`. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1650-L1664】【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1785-L1803】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L648-L716】
 
 ### Anchored tap pipeline
 
@@ -102,15 +107,15 @@ sequenceDiagram
     Activity->>Web: sendCharacterToWebView / bookmark edit
 ```
 
-In anchored mode, drag and fling routines (`handleDrag`, `handleFlingEvent`) bail early so only the anchored tap path fires. Once `handleAnchoredTap` identifies the target key it forwards to `handleButtonClick`, which emits callbacks such as `onKeyPressed`, `onEnterPressed`, or `onHideKeyboard`. `MainActivity` routes those callbacks to the active destination—either the inline URL editor, bookmark panel, or the `WebView`. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1495-L1689】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L173-L339】【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3720-L3826】
+In anchored mode, drag and fling routines (`handleDrag`, `handleFlingEvent`) bail early so only the anchored tap path fires. Once `handleAnchoredTap` identifies the target key it forwards to `handleButtonClick`, which emits callbacks such as `onKeyPressed`, `onEnterPressed`, or `onHideKeyboard`. `MainActivity` routes those callbacks to the active destination—either the inline URL editor, bookmark panel, or the `WebView`. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1592-L1774】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L173-L260】【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3848-L3940】
 
 ### Focus-driven tap pipeline
 
-When the keyboard is unanchored, `DualWebViewGroup` ignores anchored interception and instead forwards drag events to `CustomKeyboardView.handleDrag`, which advances the highlighted key. A tap (`ACTION_UP`) invokes `performFocusedTap()` so the currently focused button emits callbacks without cursor remapping. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1641-L1708】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L626-L716】
+When the keyboard is unanchored, `DualWebViewGroup` ignores anchored interception and instead forwards drag events to `CustomKeyboardView.handleDrag`, which advances the highlighted key. A tap (`ACTION_UP`) invokes `performFocusedTap()` so the currently focused button emits callbacks without cursor remapping. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1650-L1664】【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1785-L1803】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L648-L716】
 
 ## Bookmark management
 
-Bookmarks persist inside `BookmarkManager`, which stores entries in shared preferences. The `BookmarksView` exposes navigation, editing, and keyboard integration via `BookmarkListener`, `BookmarkKeyboardListener`, and `BookmarkStateListener`. `MainActivity` implements these hooks to open URLs, edit titles, and inject keyboard characters. 【F:app/src/main/java/com/TapLink/app/BookmarksView.kt†L24-L230】【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3775-L3826】
+Bookmarks persist inside `BookmarkManager`, which stores entries in shared preferences. The `BookmarksView` exposes navigation, editing, and keyboard integration via `BookmarkListener`, `BookmarkKeyboardListener`, and `BookmarkStateListener`. `MainActivity` implements these hooks to open URLs, edit titles, and inject keyboard characters. 【F:app/src/main/java/com/TapLink/app/BookmarksView.kt†L21-L233】【F:app/src/main/java/com/TapLink/app/BookmarksView.kt†L640-L718】【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3848-L3940】
 
 ## Further reading
 
