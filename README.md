@@ -44,7 +44,8 @@ Gradle wrapper commands are available for CI:
 
 ### Installation & sideloading
 
-- To install without Android Studio, build or download the APK and sideload it onto your headset/phone. A step-by-step walkthrough is available here: https://www.youtube.com/watch?v=l3wu7x14LKY.
+- To install without Android Studio, build or download the APK and sideload it onto your headset/phone. A step-by-step walkthrough is available here.
+-   [![TapLink X3 sideloading walkthrough](https://img.youtube.com/vi/l3wu7x14LKY/maxresdefault.jpg)](https://www.youtube.com/watch?v=l3wu7x14LKY)
 - When sideloading via ADB, enable developer options on the target device and confirm that unknown sources are allowed in the headset settings before installing the APK.
 
 ## Architectural overview
