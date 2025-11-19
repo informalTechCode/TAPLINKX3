@@ -41,6 +41,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.ViewConfiguration
 import android.view.inputmethod.BaseInputConnection
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
@@ -3389,6 +3390,30 @@ class MainActivity : AppCompatActivity(),
         customViewCallback = callback
         originalSystemUiVisibility = window.decorView.systemUiVisibility
         originalOrientation = requestedOrientation
+
+        // Listen for taps on the fullscreen content to exit fullscreen via back navigation
+        var downX = 0f
+        var downY = 0f
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        view.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    false
+                }
+                MotionEvent.ACTION_UP -> {
+                    val isTap = abs(event.x - downX) < touchSlop && abs(event.y - downY) < touchSlop
+                    if (isTap) {
+                        onBackPressedDispatcher.onBackPressed()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                else -> false
+            }
+        }
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.decorView.systemUiVisibility = (
