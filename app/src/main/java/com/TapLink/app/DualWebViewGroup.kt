@@ -197,6 +197,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         clipToPadding = true
         setBackgroundColor(Color.BLACK)
         visibility = View.GONE
+        isClickable = true
+        isFocusable = true
     }
 
     private val fullScreenHiddenViews: List<View> by lazy {
@@ -1590,6 +1592,11 @@ class DualWebViewGroup @JvmOverloads constructor(
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
         Log.d("GestureDebug", "DualWebViewGroup onInterceptTouchEvent: ${ev.action}")
 
+        if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
+            fullScreenTapDetector.onTouchEvent(ev)
+            return true
+        }
+
         if (keyboardContainer.visibility == View.VISIBLE && isAnchored) {
             val localCoords = computeAnchoredKeyboardCoordinates()
             if (localCoords != null) {
@@ -1721,6 +1728,11 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val kbVisible = (keyboardContainer.visibility == View.VISIBLE)
+
+        if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
+            fullScreenTapDetector.onTouchEvent(event)
+            return true
+        }
 
         if (kbVisible && isAnchored) {
             when (event.action) {
