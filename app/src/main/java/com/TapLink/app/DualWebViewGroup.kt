@@ -3,6 +3,7 @@ package com.TapLink.app
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -19,6 +20,7 @@ import android.text.TextWatcher
 import android.util.AttributeSet
 import android.util.Log
 import android.view.Gravity
+import android.view.GestureDetector
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.PixelCopy
@@ -109,6 +111,8 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var isHoveringZoomIn = false
     private var isHoveringZoomOut = false
 
+    private lateinit var fullScreenTapDetector: GestureDetector
+
     var isAnchored = false
     private var isHoveringAnchorToggle = false
 
@@ -193,6 +197,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         clipToPadding = true
         setBackgroundColor(Color.BLACK)
         visibility = View.GONE
+        isClickable = true
+        isFocusable = true
     }
 
     private val fullScreenHiddenViews: List<View> by lazy {
@@ -286,6 +292,30 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Set the background of the entire DualWebViewGroup to black
         setBackgroundColor(Color.BLACK)
+
+        fullScreenTapDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean {
+                // Always accept the initial down event so we can track the full gesture
+                return fullScreenOverlayContainer.visibility == View.VISIBLE
+            }
+
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
+                    (context as? AppCompatActivity)?.onBackPressedDispatcher?.onBackPressed()
+                    return true
+                }
+                return false
+            }
+        })
+
+        fullScreenOverlayContainer.setOnTouchListener { _, event ->
+            if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
+                fullScreenTapDetector.onTouchEvent(event)
+                true
+            } else {
+                false
+            }
+        }
 
         // Configure WebView for left eye
         webView.apply {
@@ -1562,6 +1592,11 @@ class DualWebViewGroup @JvmOverloads constructor(
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
         Log.d("GestureDebug", "DualWebViewGroup onInterceptTouchEvent: ${ev.action}")
 
+        if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
+            fullScreenTapDetector.onTouchEvent(ev)
+            return true
+        }
+
         if (keyboardContainer.visibility == View.VISIBLE && isAnchored) {
             val localCoords = computeAnchoredKeyboardCoordinates()
             if (localCoords != null) {
@@ -1693,6 +1728,11 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val kbVisible = (keyboardContainer.visibility == View.VISIBLE)
+
+        if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
+            fullScreenTapDetector.onTouchEvent(event)
+            return true
+        }
 
         if (kbVisible && isAnchored) {
             when (event.action) {
