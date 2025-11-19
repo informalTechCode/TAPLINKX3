@@ -2147,16 +2147,28 @@ class DualWebViewGroup @JvmOverloads constructor(
     private fun scrollViewportByFraction(directionMultiplier: Int) {
         val script = """
             (function() {
-                const viewportHeight = window.innerHeight
+                const fallbackViewportHeight = window.innerHeight
                     || (document.documentElement && document.documentElement.clientHeight)
                     || (document.body && document.body.clientHeight)
                     || 0;
-                const scrollAmount = viewportHeight * $verticalScrollFraction;
-                window.scrollBy({
-                    top: scrollAmount * $directionMultiplier,
-                    behavior: 'smooth'
-                });
-                return scrollAmount * $directionMultiplier;
+                const hud = document.querySelector('.hud');
+                const target = (hud && hud.scrollHeight > hud.clientHeight) ? hud : window;
+                const targetHeight = (target === hud && hud && hud.clientHeight) ? hud.clientHeight : fallbackViewportHeight;
+                const scrollAmount = targetHeight * $verticalScrollFraction;
+                const delta = scrollAmount * $directionMultiplier;
+
+                if (target === window) {
+                    window.scrollBy({ top: delta, behavior: 'smooth' });
+                    return delta;
+                }
+
+                const start = target.scrollTop;
+                if (typeof target.scrollBy === 'function') {
+                    target.scrollBy({ top: delta, behavior: 'smooth' });
+                } else {
+                    target.scrollTop += delta;
+                }
+                return target.scrollTop - start;
             })();
         """.trimIndent()
 

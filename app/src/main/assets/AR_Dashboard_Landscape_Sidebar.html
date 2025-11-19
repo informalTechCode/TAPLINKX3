@@ -282,7 +282,7 @@
        and scrolls the inner .hud container instead. Bridge those calls so scroll buttons work. */
     (function bridgeScrollByToHud(){
       const hud = document.querySelector('.hud');
-      if(!hud || typeof hud.scrollBy !== 'function'){ return; }
+      if(!hud){ return; }
 
       const originalScrollBy = window.scrollBy.bind(window);
       const originalScrollTo = window.scrollTo.bind(window);
@@ -301,15 +301,37 @@
         };
       }
 
+      function scrollHudBy(left, top, behavior){
+        try {
+          if(typeof hud.scrollBy === 'function'){
+            hud.scrollBy({ left, top, behavior });
+            return;
+          }
+        } catch(e){}
+        if(typeof left === 'number'){ hud.scrollLeft += left; }
+        if(typeof top === 'number'){ hud.scrollTop += top; }
+      }
+
+      function scrollHudTo(left, top, behavior){
+        try {
+          if(typeof hud.scrollTo === 'function'){
+            hud.scrollTo({ left, top, behavior });
+            return;
+          }
+        } catch(e){}
+        if(typeof left === 'number'){ hud.scrollLeft = left; }
+        if(typeof top === 'number'){ hud.scrollTop = top; }
+      }
+
       window.scrollBy = function(arg0, arg1){
         const {left, top, behavior} = normalizeScrollArgs(arg0, arg1);
-        hud.scrollBy({ left, top, behavior });
+        scrollHudBy(left, top, behavior);
         return originalScrollBy(arg0, arg1);
       };
 
       window.scrollTo = function(arg0, arg1){
         const {left, top, behavior} = normalizeScrollArgs(arg0, arg1);
-        hud.scrollTo({ left, top, behavior });
+        scrollHudTo(left, top, behavior);
         return originalScrollTo(arg0, arg1);
       };
     })();
