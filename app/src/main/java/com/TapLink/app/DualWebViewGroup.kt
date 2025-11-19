@@ -19,6 +19,7 @@ import android.text.TextWatcher
 import android.util.AttributeSet
 import android.util.Log
 import android.view.Gravity
+import android.view.GestureDetector
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.PixelCopy
@@ -108,6 +109,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var isHoveringZoomIn = false
     private var isHoveringZoomOut = false
+
+    private lateinit var fullScreenTapDetector: GestureDetector
 
     var isAnchored = false
     private var isHoveringAnchorToggle = false
@@ -286,6 +289,21 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Set the background of the entire DualWebViewGroup to black
         setBackgroundColor(Color.BLACK)
+
+        fullScreenTapDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onSingleTapUp(e: MotionEvent?): Boolean {
+                if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
+                    (context as? Activity)?.onBackPressedDispatcher?.onBackPressed()
+                    return true
+                }
+                return false
+            }
+        })
+
+        fullScreenOverlayContainer.setOnTouchListener { _, event ->
+            fullScreenTapDetector.onTouchEvent(event)
+            false
+        }
 
         // Configure WebView for left eye
         webView.apply {
