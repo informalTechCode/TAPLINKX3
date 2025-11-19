@@ -2931,7 +2931,7 @@ class MainActivity : AppCompatActivity(),
                 // Security and Access Settings
                 saveFormData = true
                 savePassword = true
-                allowFileAccess = false
+                allowFileAccess = true
                 allowContentAccess = true
                 setGeolocationEnabled(true)
 

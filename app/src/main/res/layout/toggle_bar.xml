@@ -43,6 +43,17 @@
         android:clipToPadding="true"/>
 
     <ImageButton
+        android:id="@+id/btnARDashboard"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/nav_button_background"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:clickable="true"
+        android:focusable="true"
+        android:clipToPadding="true"/>
+
+    <ImageButton
         android:id="@+id/btnBookmarks"
         android:layout_width="48dp"
         android:layout_height="48dp"
