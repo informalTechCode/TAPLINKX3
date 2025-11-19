@@ -415,10 +415,6 @@ class DualWebViewGroup @JvmOverloads constructor(
                 left = leftNavigationBar.findViewById(R.id.btnHome),
                 right = leftNavigationBar.findViewById(R.id.btnHome)
             ),
-            "ring" to NavButton(
-                left = leftNavigationBar.findViewById(R.id.btnRingSwitch),
-                right = leftNavigationBar.findViewById(R.id.btnRingSwitch)
-            ),
             "link" to NavButton(
                 left = leftNavigationBar.findViewById(R.id.btnLink),
                 right = leftNavigationBar.findViewById(R.id.btnLink)
@@ -449,11 +445,6 @@ class DualWebViewGroup @JvmOverloads constructor(
                 isClickable = true
                 isFocusable = true
             }
-        }
-
-        navButtons["ring"]?.left?.apply {
-            isEnabled = false  // Initially disabled
-            alpha = 0.5f      // Visual feedback for disabled state
         }
 
 
@@ -2056,17 +2047,16 @@ class DualWebViewGroup @JvmOverloads constructor(
             val buttonWidth = 48
             // Adjust the padding to account for all buttons
             val usableWidth = halfWidth - 16  // Total width minus padding (8dp on each side)
-            val remainingSpace = usableWidth - (7 * buttonWidth)  // Space for 5 buttons now
-            val gap = remainingSpace / 6  // Size of each gap (now 4 gaps)
+            val remainingSpace = usableWidth - (6 * buttonWidth)
+            val gap = remainingSpace / 5  // Size of each gap
 
             // Define button zones based on layout
             val backZone     = 8..(8 + buttonWidth)
             val homeZone     = (8 +   buttonWidth +   gap)..(8 + 2*buttonWidth +   gap)
-            val ringZone     = (8 + 2*buttonWidth + 2*gap)..(8 + 3*buttonWidth + 2*gap)
-            val linkZone     = (8 + 3*buttonWidth + 3*gap)..(8 + 4*buttonWidth + 3*gap)
-            val settingsZone = (8 + 4*buttonWidth + 4*gap)..(8 + 5*buttonWidth + 4*gap)
-            val refreshZone  = (8 + 5*buttonWidth + 5*gap)..(8 + 6*buttonWidth + 5*gap)
-            val quitZone     = (8 + 6*buttonWidth + 6*gap)..(8 + 7*buttonWidth + 6*gap)
+            val linkZone     = (8 + 2*buttonWidth + 2*gap)..(8 + 3*buttonWidth + 2*gap)
+            val settingsZone = (8 + 3*buttonWidth + 3*gap)..(8 + 4*buttonWidth + 3*gap)
+            val refreshZone  = (8 + 4*buttonWidth + 4*gap)..(8 + 5*buttonWidth + 4*gap)
+            val quitZone     = (8 + 5*buttonWidth + 5*gap)..(8 + 6*buttonWidth + 5*gap)
 
             // Clear all hover states initially
             clearNavigationButtonHoverStates()
@@ -2088,16 +2078,6 @@ class DualWebViewGroup @JvmOverloads constructor(
                         button.isHovered = true
                         button.left.isHovered = true
                         button.right.isHovered = true
-                    }
-                }
-                in ringZone -> {
-                    navButtons["ring"]?.let { button ->
-                        // Only allow hover state if button is enabled
-                        if (button.left.isEnabled) {
-                            button.isHovered = true
-                            button.left.isHovered = true
-                            button.right.isHovered = true
-                        }
                     }
                 }
                 in linkZone -> {
@@ -2462,19 +2442,18 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         if (y >= height - 48) {
             Log.d("AnchoredTouchDebug","handling navigation click")
-            navButtons.entries.find { it.value.isHovered }?.let { (key, button) ->
-                showButtonClickFeedback(button.left)
-                showButtonClickFeedback(button.right)
-                navigationListener?.let { listener ->
-                    when (key) {
-                        "back"     -> listener.onNavigationBackPressed()
-                        "home"     -> listener.onHomePressed()
-                        "ring"     -> listener.onRingPressed()
-                        "link"     -> listener.onHyperlinkPressed()
-                        "settings" -> listener.onSettingsPressed()
-                        "refresh"  -> listener.onRefreshPressed()
-                        "quit"     -> listener.onQuitPressed()
-                    }
+                    navButtons.entries.find { it.value.isHovered }?.let { (key, button) ->
+                        showButtonClickFeedback(button.left)
+                        showButtonClickFeedback(button.right)
+                        navigationListener?.let { listener ->
+                            when (key) {
+                                "back"     -> listener.onNavigationBackPressed()
+                                "home"     -> listener.onHomePressed()
+                                "link"     -> listener.onHyperlinkPressed()
+                                "settings" -> listener.onSettingsPressed()
+                                "refresh"  -> listener.onRefreshPressed()
+                                "quit"     -> listener.onQuitPressed()
+                            }
                 }
             }
         }
@@ -3081,11 +3060,6 @@ class DualWebViewGroup @JvmOverloads constructor(
             invalidate()
         }
     }
-
-    fun updateRingStatus(isConnected: Boolean) {
-        leftSystemInfoView.updateRingStatus(isConnected)
-    }
-
 
     fun getSettingsMenuLocation(location: IntArray) {
         settingsMenu?.getLocationOnScreen(location)
