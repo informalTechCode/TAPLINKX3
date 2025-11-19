@@ -1146,6 +1146,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val toggleBarWidth = 48
         val navBarHeight = 48
         val keyboardHeight = 220
+        val keyboardWidth = halfWidth - toggleBarWidth
 
         // Position the WebView differently based on scroll mode
         if (isInScrollMode) {
@@ -1201,7 +1202,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 //    """.trimIndent())
 
         val keyboardY = height - keyboardHeight
-        keyboardContainer.layout(0, keyboardY, halfWidth, height)
+        keyboardContainer.layout(toggleBarWidth, keyboardY, toggleBarWidth + keyboardWidth, height)
 
         // Hide navigation bars
         leftNavigationBar.visibility = View.GONE
@@ -1209,7 +1210,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         if (keyboardContainer.visibility == View.VISIBLE) {
             // Position keyboards at the bottom
             val keyboardY = height - keyboardHeight
-            keyboardContainer.layout(0, keyboardY, halfWidth, height)
+            keyboardContainer.layout(toggleBarWidth, keyboardY, toggleBarWidth + keyboardWidth, height)
 
             // Hide navigation bars
             leftNavigationBar.visibility = View.GONE
@@ -1260,7 +1261,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             //Log.d("EditFieldDebug", "Skipping edit field positioning - conditions not met")
 
             // Hide keyboard containers
-            keyboardContainer.layout(0, height, halfWidth, height + keyboardHeight)
+            keyboardContainer.layout(toggleBarWidth, height, toggleBarWidth + keyboardWidth, height + keyboardHeight)
 
             // Position bookmarks when keyboard is not visible
             if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
@@ -1575,6 +1576,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         val halfWidth = widthSize / 2
         val navBarHeight = 48
         val keyboardHeight = 240
+        val toggleBarWidth = 48
+        val keyboardWidth = halfWidth - toggleBarWidth
 
         val contentHeight = if (keyboardContainer.visibility == View.VISIBLE) {
             heightSize - 220  // keyboard height
@@ -1607,7 +1610,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         )
 
         keyboardContainer.measure(
-            MeasureSpec.makeMeasureSpec(halfWidth, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(keyboardWidth, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(keyboardHeight, MeasureSpec.EXACTLY)
         )
 
