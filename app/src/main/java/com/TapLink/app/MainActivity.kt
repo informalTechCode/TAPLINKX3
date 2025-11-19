@@ -115,6 +115,7 @@ class MainActivity : AppCompatActivity(),
     private val Y_INVERT = 1.0f   // 1 = drag up -> up. Use -1 to flip if needed.
     lateinit var dualWebViewGroup: DualWebViewGroup
     private lateinit var webView: WebView
+    private lateinit var mainContainer: FrameLayout
     private lateinit var gestureDetector: GestureDetector
     private var isSimulatingTouchEvent = false
     private var isCursorVisible = true
@@ -198,6 +199,11 @@ class MainActivity : AppCompatActivity(),
     private val cameraThread = HandlerThread("CameraThread").apply { start() }
     private val cameraHandler = Handler(cameraThread.looper)
     private var capturedImageData: ByteArray? = null
+
+    private var fullScreenCustomView: View? = null
+    private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+    private var originalSystemUiVisibility: Int = 0
+    private var originalOrientation: Int = 0
     private var wasKeyboardDismissedByEnter = false
 
     private var preMaskCursorState = false
@@ -211,6 +217,9 @@ class MainActivity : AppCompatActivity(),
         override fun handleOnBackPressed() {
             Log.d("MainActivity", "Back key pressed")
             when {
+                fullScreenCustomView != null -> {
+                    hideFullScreenCustomView()
+                }
                 isKeyboardVisible || dualWebViewGroup.isUrlEditing() -> {
                     // Hide keyboard and exit URL editing
                     hideCustomKeyboard()
@@ -383,6 +392,8 @@ class MainActivity : AppCompatActivity(),
 
 
         findViewById<View>(android.R.id.content).setBackgroundColor(Color.BLACK)
+
+        mainContainer = findViewById(R.id.mainContainer)
 
         initializeRing()
 
@@ -1035,7 +1046,7 @@ class MainActivity : AppCompatActivity(),
         }
 
         // Add cursor views to the main container
-        (findViewById<FrameLayout>(R.id.mainContainer)).apply {
+        mainContainer.apply {
             addView(cursorLeftView)
             addView(cursorRightView)
         }
@@ -3326,6 +3337,18 @@ class MainActivity : AppCompatActivity(),
                 // Reset audio source when permissions are cancelled
                 audioManager?.setParameters("audio_source_record=off")
             }
+
+            override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                if (view == null) {
+                    callback?.onCustomViewHidden()
+                    return
+                }
+                showFullScreenCustomView(view, callback)
+            }
+
+            override fun onHideCustomView() {
+                hideFullScreenCustomView()
+            }
         }
 
         // Additional WebView settings for media support
@@ -3354,6 +3377,50 @@ class MainActivity : AppCompatActivity(),
                 audioManager?.setParameters("audio_source_record=off")
             }
         }, "AndroidMediaInterface")
+    }
+
+    private fun showFullScreenCustomView(view: View, callback: WebChromeClient.CustomViewCallback?) {
+        if (fullScreenCustomView != null) {
+            callback?.onCustomViewHidden()
+            return
+        }
+
+        fullScreenCustomView = view
+        customViewCallback = callback
+        originalSystemUiVisibility = window.decorView.systemUiVisibility
+        originalOrientation = requestedOrientation
+
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            )
+
+        dualWebViewGroup.showFullScreenOverlay(view)
+        cursorLeftView.visibility = View.GONE
+        cursorRightView.visibility = View.GONE
+    }
+
+    private fun hideFullScreenCustomView() {
+        if (fullScreenCustomView == null) {
+            return
+        }
+        dualWebViewGroup.hideFullScreenOverlay()
+        fullScreenCustomView = null
+
+        window.decorView.systemUiVisibility = originalSystemUiVisibility
+        requestedOrientation = originalOrientation
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        cursorLeftView.visibility = if (isCursorVisible) View.VISIBLE else View.GONE
+        cursorRightView.visibility = if (isCursorVisible) View.VISIBLE else View.GONE
+
+        customViewCallback?.onCustomViewHidden()
+        customViewCallback = null
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

@@ -65,7 +65,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private lateinit var leftSystemInfoView: SystemInfoView
 
-    val leftNavigationBar: View
+    lateinit var leftNavigationBar: View
     private val verticalBarSize = 480 - 48
     private val nButtons    = 10
     private val buttonHeight = verticalBarSize / nButtons
@@ -75,7 +75,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var anchoredGestureActive = false
 
-    val leftToggleBar: View
+    lateinit var leftToggleBar: View
     private var isHorizontalScroll = false
 
     var scrollDirectionListener: ScrollDirectionListener? = null
@@ -187,6 +187,26 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         setBackgroundColor(Color.TRANSPARENT)  // Make sure background is transparent
     }
+
+    private val fullScreenOverlayContainer = FrameLayout(context).apply {
+        clipChildren = true
+        clipToPadding = true
+        setBackgroundColor(Color.BLACK)
+        visibility = View.GONE
+    }
+
+    private val fullScreenHiddenViews: List<View> by lazy {
+        listOf(
+            webView,
+            leftToggleBar,
+            leftNavigationBar,
+            keyboardContainer,
+            leftSystemInfoView,
+            urlEditText
+        )
+    }
+
+    private val previousFullScreenVisibility = mutableMapOf<View, Int>()
 
     val leftEyeClipParent = FrameLayout(context).apply {
         // Force it to be exactly 640px wide and match height (or some fixed height).
@@ -592,7 +612,6 @@ class DualWebViewGroup @JvmOverloads constructor(
             addView(keyboardContainer)
             addView(leftSystemInfoView)
             addView(urlEditText)
-
             postDelayed({
 
 
@@ -629,8 +648,42 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Add the clip parent to the main view
         addView(leftEyeClipParent)
         addView(rightEyeView)  // Keep right eye view separate
+        addView(fullScreenOverlayContainer)
         addView(maskOverlay)   // Keep overlay on top
 
+    }
+
+    fun showFullScreenOverlay(view: View) {
+        if (view.parent is ViewGroup) {
+            (view.parent as ViewGroup).removeView(view)
+        }
+
+        fullScreenOverlayContainer.removeAllViews()
+        fullScreenOverlayContainer.addView(
+            view,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        previousFullScreenVisibility.clear()
+        fullScreenHiddenViews.forEach { target ->
+            previousFullScreenVisibility[target] = target.visibility
+            target.visibility = View.GONE
+        }
+
+        fullScreenOverlayContainer.visibility = View.VISIBLE
+        fullScreenOverlayContainer.bringToFront()
+    }
+
+    fun hideFullScreenOverlay() {
+        fullScreenOverlayContainer.removeAllViews()
+        fullScreenOverlayContainer.visibility = View.GONE
+        previousFullScreenVisibility.forEach { (target, visibility) ->
+            target.visibility = visibility
+        }
+        previousFullScreenVisibility.clear()
     }
 
     fun maskScreen() {
@@ -1181,6 +1234,13 @@ class DualWebViewGroup @JvmOverloads constructor(
             height
         )
 
+        fullScreenOverlayContainer.layout(
+            leftEyeClipParent.left,
+            leftEyeClipParent.top,
+            leftEyeClipParent.right,
+            leftEyeClipParent.bottom
+        )
+
         // Position SurfaceView exactly like WebView but offset horizontally for right eye
         rightEyeView.layout(
             halfWidth,
@@ -1613,6 +1673,11 @@ class DualWebViewGroup @JvmOverloads constructor(
         keyboardContainer.measure(
             MeasureSpec.makeMeasureSpec(keyboardWidth, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(keyboardHeight, MeasureSpec.EXACTLY)
+        )
+
+        fullScreenOverlayContainer.measure(
+            MeasureSpec.makeMeasureSpec(640, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(heightSize, MeasureSpec.EXACTLY)
         )
 
         setMeasuredDimension(widthSize, heightSize)
