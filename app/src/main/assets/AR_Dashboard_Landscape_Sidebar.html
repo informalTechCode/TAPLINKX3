@@ -277,6 +277,42 @@
     }
     notesEl.addEventListener('input', ()=>{ localStorage.setItem(notesKey, notesEl.value); autoresizeNotesBox(); });
     setTimeout(autoresizeNotesBox, 0);
+
+    /* The Android scroll buttons issue scrollBy() calls, but this layout keeps the body fixed
+       and scrolls the inner .hud container instead. Bridge those calls so scroll buttons work. */
+    (function bridgeScrollByToHud(){
+      const hud = document.querySelector('.hud');
+      if(!hud || typeof hud.scrollBy !== 'function'){ return; }
+
+      const originalScrollBy = window.scrollBy.bind(window);
+      const originalScrollTo = window.scrollTo.bind(window);
+
+      function normalizeScrollArgs(arg0, arg1){
+        if(typeof arg0 === 'object' && arg0){
+          return {
+            left: Number(arg0.left || 0),
+            top: Number(arg0.top || 0),
+            behavior: arg0.behavior
+          };
+        }
+        return {
+          left: Number(arg0 || 0),
+          top: Number(arg1 || 0)
+        };
+      }
+
+      window.scrollBy = function(arg0, arg1){
+        const {left, top, behavior} = normalizeScrollArgs(arg0, arg1);
+        hud.scrollBy({ left, top, behavior });
+        return originalScrollBy(arg0, arg1);
+      };
+
+      window.scrollTo = function(arg0, arg1){
+        const {left, top, behavior} = normalizeScrollArgs(arg0, arg1);
+        hud.scrollTo({ left, top, behavior });
+        return originalScrollTo(arg0, arg1);
+      };
+    })();
   </script>
 </body>
 </html>
