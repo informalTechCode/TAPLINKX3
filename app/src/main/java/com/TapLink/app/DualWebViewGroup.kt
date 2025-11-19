@@ -193,17 +193,14 @@ class DualWebViewGroup @JvmOverloads constructor(
         clipToPadding = true
         setBackgroundColor(Color.BLACK)
         visibility = View.GONE
+        layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        )
     }
 
     private val fullScreenHiddenViews: List<View> by lazy {
-        listOf(
-            webView,
-            leftToggleBar,
-            leftNavigationBar,
-            keyboardContainer,
-            leftSystemInfoView,
-            urlEditText
-        )
+        listOf(webView)
     }
 
     private val previousFullScreenVisibility = mutableMapOf<View, Int>()
@@ -603,6 +600,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             addView(webView, FrameLayout.LayoutParams(640 - 48, LayoutParams.MATCH_PARENT).apply {
                 leftMargin = 48  // Position after toggle bar
             })
+            addView(fullScreenOverlayContainer)
             addView(leftToggleBar)
             Log.d("ViewDebug", "Toggle bar added to UI container with hash: ${leftToggleBar.hashCode()}")
 
@@ -648,7 +646,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Add the clip parent to the main view
         addView(leftEyeClipParent)
         addView(rightEyeView)  // Keep right eye view separate
-        addView(fullScreenOverlayContainer)
         addView(maskOverlay)   // Keep overlay on top
 
     }
@@ -674,7 +671,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         fullScreenOverlayContainer.visibility = View.VISIBLE
-        fullScreenOverlayContainer.bringToFront()
     }
 
     fun hideFullScreenOverlay() {
@@ -1234,13 +1230,6 @@ class DualWebViewGroup @JvmOverloads constructor(
             height
         )
 
-        fullScreenOverlayContainer.layout(
-            leftEyeClipParent.left,
-            leftEyeClipParent.top,
-            leftEyeClipParent.right,
-            leftEyeClipParent.bottom
-        )
-
         // Position SurfaceView exactly like WebView but offset horizontally for right eye
         rightEyeView.layout(
             halfWidth,
@@ -1673,11 +1662,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         keyboardContainer.measure(
             MeasureSpec.makeMeasureSpec(keyboardWidth, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(keyboardHeight, MeasureSpec.EXACTLY)
-        )
-
-        fullScreenOverlayContainer.measure(
-            MeasureSpec.makeMeasureSpec(640, MeasureSpec.EXACTLY),
-            MeasureSpec.makeMeasureSpec(heightSize, MeasureSpec.EXACTLY)
         )
 
         setMeasuredDimension(widthSize, heightSize)
