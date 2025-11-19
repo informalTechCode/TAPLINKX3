@@ -59,6 +59,8 @@ class SystemInfoView @JvmOverloads constructor(
         }
     }
 
+    private var updatesStarted = false
+
     init {
         try {
             orientation = HORIZONTAL
@@ -68,8 +70,6 @@ class SystemInfoView @JvmOverloads constructor(
             minimumHeight = 24    // Ensure consistent height
 
             setupViews()
-
-            post { startUpdates() }
         } catch (e: Exception) {
             Log.e("SystemInfoView", "Initialization error", e)
         }
@@ -129,9 +129,12 @@ class SystemInfoView @JvmOverloads constructor(
     }
 
     private fun startUpdates() {
+        if (updatesStarted) return
         try {
             context.registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             context.registerReceiver(timeReceiver, IntentFilter(Intent.ACTION_TIME_TICK))
+
+            updatesStarted = true
 
             updateConnectivity()
             updateTimeAndDate()
@@ -235,11 +238,15 @@ class SystemInfoView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
-        try {
-            context.unregisterReceiver(batteryReceiver)
-            context.unregisterReceiver(timeReceiver)
-        } catch (e: Exception) {
-            Log.e("SystemInfoView", "Error unregistering receivers", e)
+        if (updatesStarted) {
+            try {
+                context.unregisterReceiver(batteryReceiver)
+                context.unregisterReceiver(timeReceiver)
+            } catch (e: Exception) {
+                Log.e("SystemInfoView", "Error unregistering receivers", e)
+            } finally {
+                updatesStarted = false
+            }
         }
         super.onDetachedFromWindow()
     }

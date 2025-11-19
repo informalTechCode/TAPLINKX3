@@ -74,7 +74,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.1")
 
     implementation("com.google.android.exoplayer:exoplayer:2.18.7")
-    implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:11.1.0")
 
     implementation("com.google.code.gson:gson:2.10.1")
 
