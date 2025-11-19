@@ -26,7 +26,6 @@ class SystemInfoView @JvmOverloads constructor(
 
     private var connectivityIcon: ImageView? = null
     private var batteryIcon: ImageView? = null
-    private var ringIcon: ImageView? = null
     private var timeText: TextView? = null
     private var dateText: TextView? = null
 
@@ -78,9 +77,6 @@ class SystemInfoView @JvmOverloads constructor(
     private fun setupViews() {
         removeAllViews()
 
-        // Create and add ring icon
-        ringIcon = createIconView().also { addView(it) }
-
         // Create and add connectivity icon
         connectivityIcon = createIconView().also { addView(it) }
 
@@ -94,8 +90,6 @@ class SystemInfoView @JvmOverloads constructor(
         // Set initial values
         connectivityIcon?.setImageResource(R.drawable.wifi_off)
         batteryIcon?.setImageResource(R.drawable.battery_full)
-        // Add this line to set initial ring icon state
-        ringIcon?.setImageResource(R.drawable.ic_ring_disabled)  // Initially disabled
         timeText?.text = "--:--"
         dateText?.text = "--/--"
     }
@@ -194,13 +188,6 @@ class SystemInfoView @JvmOverloads constructor(
             Log.e("SystemInfoView", "Battery update error", e)
             batteryIcon?.setImageResource(R.drawable.battery_full)
         }
-    }
-
-    fun updateRingStatus(isConnected: Boolean) {
-        ringIcon?.setImageResource(
-            if (isConnected) R.drawable.ic_ring_enabled
-            else R.drawable.ic_ring_disabled
-        )
     }
 
     private fun updateTimeAndDate() {

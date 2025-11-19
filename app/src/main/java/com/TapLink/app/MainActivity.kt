@@ -53,7 +53,6 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import android.widget.ImageButton
 import android.widget.ImageView
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
@@ -77,7 +76,6 @@ import androidx.core.content.edit
 interface NavigationListener {
     fun onNavigationBackPressed()
     fun onQuitPressed()
-    fun onRingPressed()
     fun onSettingsPressed()
     fun onRefreshPressed()
     fun onHomePressed()
@@ -286,7 +284,7 @@ class MainActivity : AppCompatActivity(),
     private var isProcessingDoubleTap = false
     private val DOUBLE_TAP_CONFIRMATION_DELAY = 200L
 
-    private var isRingSwitchEnabled = true
+    private var isRingSwitchEnabled = false
     private var settingsMenu: View? = null
 
     private val ringResponseListener = Launcher.OnResponseListener { response ->
@@ -303,25 +301,7 @@ class MainActivity : AppCompatActivity(),
                         isRingConnected = jo.getBoolean("ring_connected")
                         imuStatus = jo.getInt("ring_imu_status")
 
-                        // Update UI elements for ring status
-                        runOnUiThread {
-                            // Update ring button through DualWebViewGroup
-                            dualWebViewGroup.leftNavigationBar.findViewById<ImageButton>(R.id.btnRingSwitch)?.let { button ->
-                                button.isEnabled = isRingConnected
-                                button.alpha = if (isRingConnected) 1.0f else 0.5f
-                                // Set initial state when ring connects
-                                if (isRingConnected) {
-                                    isRingSwitchEnabled = true
-                                    button.setImageResource(R.drawable.ic_ring_enabled)
-                                } else {
-                                    isRingSwitchEnabled = false
-                                    button.setImageResource(R.drawable.ic_ring_disabled)
-                                }
-                            }
-                        }
-
-                        // Add this line to update the SystemInfoView
-                        dualWebViewGroup.updateRingStatus(isRingConnected)
+                        isRingSwitchEnabled = isRingConnected
 
                         if (isRingConnected && imuStatus != 1) {
                             RingIPCHelper.setRingIMU(this, true)
@@ -1263,13 +1243,6 @@ class MainActivity : AppCompatActivity(),
             Log.e("Sensor", "No rotation vector sensor found")
         } else {
             Log.d("Sensor", "Rotation vector sensor found")
-        }
-
-        // Get reference to ring button through DualWebViewGroup's navigation bar
-        dualWebViewGroup.leftNavigationBar.findViewById<ImageButton>(R.id.btnRingSwitch)?.apply {
-            isEnabled = false  // Initially disabled
-            alpha = 0.5f      // Visual feedback for disabled state
-            setImageResource(R.drawable.ic_ring_disabled)
         }
 
     }
@@ -3992,19 +3965,6 @@ class MainActivity : AppCompatActivity(),
         //Log.d("Navigation", "Home pressed")
         val homeUrl = dualWebViewGroup.getBookmarksView().getHomeUrl()
         webView.loadUrl(homeUrl)
-    }
-
-    // In the implementation of NavigationListener
-    override fun onRingPressed() {
-        Log.d("Navigation", "Ring switch pressed")
-        if (isRingConnected) {  // Only allow toggle if ring is connected
-            isRingSwitchEnabled = !isRingSwitchEnabled
-            // Update button icon through DualWebViewGroup
-            dualWebViewGroup.leftNavigationBar.findViewById<ImageButton>(R.id.btnRingSwitch)?.setImageResource(
-                if (isRingSwitchEnabled) R.drawable.ic_ring_enabled
-                else R.drawable.ic_ring_disabled
-            )
-        }
     }
 
     // In the implementation of NavigationListener
