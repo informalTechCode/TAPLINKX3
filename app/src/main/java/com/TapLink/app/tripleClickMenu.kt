@@ -130,8 +130,13 @@ class TripleClickMenu(context: Context) : FrameLayout(context) {
         quitButton.setBackgroundResource(R.drawable.tripleclickmenu_item_background)
         backButton.setBackgroundResource(R.drawable.tripleclickmenu_item_background)
 
-        buttons.forEach { button ->
+        buttons.forEachIndexed { index, button ->
             menuContainer.addView(button)
+
+            // Allow direct taps on the buttons in addition to gesture-based selection.
+            button.setOnClickListener {
+                performAction(index)
+            }
         }
 
         addView(menuContainer)
@@ -317,7 +322,13 @@ class TripleClickMenu(context: Context) : FrameLayout(context) {
 
         Log.d("MenuDebug", "Handling tap in menu, currentFocusIndex: $currentFocusIndex")
 
-        when (currentFocusIndex) {
+        performAction(currentFocusIndex)
+    }
+
+    private fun performAction(index: Int) {
+        if (!isVisible) return
+
+        when (index) {
             0 -> {
                 hide()
                 listener?.onAnchorTogglePressed()
