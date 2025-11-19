@@ -2225,7 +2225,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 }
             }
             // Special handling for left/right scroll buttons
-            if (y >= 7*buttonHeight && y < 8*buttonHeight) {  // Y-range for horizontal scroll buttons
+            if (y >= 6*buttonHeight && y < 7*buttonHeight) {  // Y-range for horizontal scroll buttons
                 if (localX < smallButtonWidth) {
                     // Left scroll button
                     leftToggleBar.findViewById<ImageButton>(R.id.btnScrollLeft)?.let { button ->
