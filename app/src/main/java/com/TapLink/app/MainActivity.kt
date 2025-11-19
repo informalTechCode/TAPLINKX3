@@ -3403,12 +3403,21 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.showFullScreenOverlay(view)
         cursorLeftView.visibility = View.GONE
         cursorRightView.visibility = View.GONE
+
+        view.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_UP) {
+                onBackPressedDispatcher.onBackPressed()
+            }
+            false
+        }
     }
 
     private fun hideFullScreenCustomView() {
         if (fullScreenCustomView == null) {
             return
         }
+
+        fullScreenCustomView?.setOnTouchListener(null)
         dualWebViewGroup.hideFullScreenOverlay()
         fullScreenCustomView = null
 
