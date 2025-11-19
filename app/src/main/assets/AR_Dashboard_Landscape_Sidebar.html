@@ -30,6 +30,7 @@
     .section::after{content:""; flex:1; height:1px; background: linear-gradient(90deg, rgba(255,255,255,.25), rgba(255,255,255,.05)); border-radius:999px}
     .section .label{filter: drop-shadow(0 0 6px var(--sec-glow, rgba(255,255,255,.25))); display:inline-flex; align-items:center; gap:6px}
     .sec-nav{ --sec-glow:#7ecbff }
+    .sec-browser{ --sec-glow:#b0fffb }
     .sec-social{ --sec-glow:#69f0ae }
     .sec-music{ --sec-glow:#ffea7f }
     .sec-creative{ --sec-glow:#d0a8ff }
@@ -114,6 +115,9 @@
 
     /* Apps list */
     const appsList={
+      // Browser Settings
+      protectedcontent:{ name:'Chrome: Protected Content', url:'chrome://settings/content/protectedContent' },
+
       // Social & Messaging
       whatsapp:{ name:'WhatsApp', url:'https://web.whatsapp.com' },
       instagram:{ name:'Instagram', url:'https://www.instagram.com' },
@@ -178,6 +182,7 @@
     const search = document.getElementById('appSearch');
 
     const specialIcons={
+      protectedcontent:'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23b0fffb%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><rect x=%224%22 y=%2210%22 width=%2216%22 height=%229%22 rx=%222.5%22 ry=%222.5%22 fill=%22%230b0f1a%22 stroke=%22%23b0fffb%22/><path d=%22M8 10V7a4 4 0 018 0v3%22/></svg>',
       whatsapp:'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 256 256%22 width=%2220%22 height=%2220%22><path fill=%22%2325D366%22 d=%22M128 0a128 128 0 0 0-110 190L8 248l60-9A128 128 0 1 0 128 0Z"/><path fill=%22%23fff%22 d=%22M193 178c-9 4-21 9-34 5c-30-9-77-48-91-83c-7-17 2-31 7-36c4-4 9-5 12-5l8 1c3 1 6 9 7 12s5 12 5 12s1 3 0 5c-1 3-7 7-7 9s-1 3 1 6a142 142 0 0 0 25 30c18 16 31 21 35 22s5 0 7-2s8-10 10-13s5-3 8-2l20 9c3 1 5 3 5 5s-9 13-18 19Z"/></svg>'
     };
 
@@ -206,6 +211,7 @@
     }
 
     const groups=[
+      { title:'🔒 Browser Settings', cls:'sec-browser', keys:['protectedcontent'] },
       { title:'🧭 Navigation / Entertainment', cls:'sec-nav', keys:['youtube','hbomax','disneyplus','hulu','peacock','paramount','gmaps','minijuegos','tiktok'] },
       { title:'💬 Social / Communication', cls:'sec-social', keys:['whatsapp','instagram','telegram','discord'] },
       { title:'🎧 Music / Streaming', cls:'sec-music', keys:['spotify','applemusic','tidal','deezer','audiomack','ytmusic','soundcloud'] },
