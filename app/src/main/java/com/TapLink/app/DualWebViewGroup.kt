@@ -67,7 +67,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     val leftNavigationBar: View
     private val verticalBarSize = 480 - 48
-    private val nButtons    = 11
+    private val nButtons    = 10
     private val buttonHeight = verticalBarSize / nButtons
     private val buttonFeedbackDuration = 200L
     var lastCursorX = 0f
@@ -87,7 +87,6 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var isDesktopMode = false
     private var isHoveringModeToggle = false
     private var isHoveringScrollToggle = false
-    private var isHoveringYouTubeToggle = false
     private var isHoveringDashboardToggle = false
     private var isHoveringBookmarksMenu = false
     private val desktopUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -449,11 +448,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             configureToggleButton(R.drawable.ic_mode_mobile)
         }
 
-        val leftYouTubeButton = leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube).apply {
-            configureToggleButton(R.drawable.ic_youtube)
-        }
-
-        val leftDashboardButton = leftToggleBar.findViewById<ImageButton>(R.id.btnARDashboard).apply {
+        val leftDashboardButton = leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube).apply {
             configureToggleButton(R.drawable.ic_dashboard)
         }
 
@@ -1810,10 +1805,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
     }
 
-    private fun loadYouTube(){
-        webView.loadUrl("https://www.youtube.com")
-    }
-
     private fun loadARDashboard(){
         webView.loadUrl("file:///android_asset/AR_Dashboard_Landscape_Sidebar.html")
     }
@@ -2044,9 +2035,9 @@ class DualWebViewGroup @JvmOverloads constructor(
         else if (localX < buttonHeight) {
             // For left/right scroll buttons, check both X and Y coordinates
 
-            val zoomButtonsY = 5*buttonHeight
+            val zoomButtonsY = 4*buttonHeight
 
-            if (y >= 7*buttonHeight && y < 8*buttonHeight) {  // Y-range for horizontal scroll buttons
+            if (y >= 6*buttonHeight && y < 7*buttonHeight) {  // Y-range for horizontal scroll buttons
                 if (localX < smallButtonSize) {
                     // Zoom out button
                     isHoveringScrollLeft = true
@@ -2077,13 +2068,12 @@ class DualWebViewGroup @JvmOverloads constructor(
             val toggleButtons = mapOf(
                 (  0f                     ..  buttonHeight.toFloat()) to Pair(R.id.btnScrollToggle , "ScrollToggle" ),
                 (  buttonHeight.toFloat() ..2*buttonHeight.toFloat()) to Pair(R.id.btnModeToggle   , "ModeToggle"   ),
-                (2*buttonHeight.toFloat() ..3*buttonHeight.toFloat()) to Pair(R.id.btnYouTube      , "YouTube"      ),
-                (3*buttonHeight.toFloat() ..4*buttonHeight.toFloat()) to Pair(R.id.btnARDashboard  , "Dashboard"    ),
-                (4*buttonHeight.toFloat() ..5*buttonHeight.toFloat()) to Pair(R.id.btnBookmarks    , "Bookmarks"    ),
-                (6*buttonHeight.toFloat() ..7*buttonHeight.toFloat()) to Pair(R.id.btnScrollUp     , "ScrollUp"     ),
-                (8*buttonHeight.toFloat() ..9*buttonHeight.toFloat()) to Pair(R.id.btnScrollDown   , "ScrollDown"   ),
-                (9*buttonHeight.toFloat()..10*buttonHeight.toFloat()) to Pair(R.id.btnMask         , "Mask"         ),
-                (10*buttonHeight.toFloat()..11*buttonHeight.toFloat()) to Pair(R.id.btnAnchor       , "Anchor"       )
+                (2*buttonHeight.toFloat() ..3*buttonHeight.toFloat()) to Pair(R.id.btnYouTube      , "Dashboard"    ),
+                (3*buttonHeight.toFloat() ..4*buttonHeight.toFloat()) to Pair(R.id.btnBookmarks    , "Bookmarks"    ),
+                (5*buttonHeight.toFloat() ..6*buttonHeight.toFloat()) to Pair(R.id.btnScrollUp     , "ScrollUp"     ),
+                (7*buttonHeight.toFloat() ..8*buttonHeight.toFloat()) to Pair(R.id.btnScrollDown   , "ScrollDown"   ),
+                (8*buttonHeight.toFloat() ..9*buttonHeight.toFloat()) to Pair(R.id.btnMask         , "Mask"         ),
+                (9*buttonHeight.toFloat()..10*buttonHeight.toFloat()) to Pair(R.id.btnAnchor       , "Anchor"       )
             )
 
             toggleButtons.forEach { (range, buttonInfo) ->
@@ -2092,13 +2082,12 @@ class DualWebViewGroup @JvmOverloads constructor(
                     when (buttonInfo.second) {
                         "ScrollToggle" -> isHoveringScrollToggle  = true
                         "ModeToggle"   -> isHoveringModeToggle    = true
-                        "YouTube"      -> isHoveringYouTubeToggle = true
                         "Dashboard"    -> isHoveringDashboardToggle = true
                         "Bookmarks"    -> isHoveringBookmarksMenu = true
                         "ScrollUp"     -> isHoveringScrollUp      = true
                         "ScrollDown"   -> isHoveringScrollDown    = true
                         "Mask"         -> isHoveringMaskToggle    = true
-                        "3DOF"         -> isHoveringAnchorToggle  = true
+                        "Anchor"       -> isHoveringAnchorToggle  = true
 
                     }
 
@@ -2116,7 +2105,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Clear toggle button states
         isHoveringScrollToggle  = false
         isHoveringModeToggle    = false
-        isHoveringYouTubeToggle = false
         isHoveringDashboardToggle = false
         isHoveringBookmarksMenu = false
         isHoveringZoomIn        = false
@@ -2133,7 +2121,6 @@ class DualWebViewGroup @JvmOverloads constructor(
             R.id.btnScrollToggle,
             R.id.btnModeToggle,
             R.id.btnYouTube,
-            R.id.btnARDashboard,
             R.id.btnBookmarks,
             R.id.btnZoomIn,
             R.id.btnZoomOut,
@@ -2279,33 +2266,26 @@ class DualWebViewGroup @JvmOverloads constructor(
                 },
                 2*buttonHeight.toFloat()..3*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnYouTube,
-                    "YouTube"
-                ) { button ->
-                    showButtonClickFeedback(button)
-                    loadYouTube()
-                },
-                3*buttonHeight.toFloat()..4*buttonHeight.toFloat() to ToggleButtonInfo(
-                    R.id.btnARDashboard,
-                    "ARDashboard"
+                    "Dashboard"
                 ) { button ->
                     showButtonClickFeedback(button)
                     loadARDashboard()
                 },
-                4*buttonHeight.toFloat()..5*buttonHeight.toFloat() to ToggleButtonInfo(
+                3*buttonHeight.toFloat()..4*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnBookmarks,
                     "Bookmarks"
                 ) { button ->
                     showButtonClickFeedback(button)
                     toggleBookmarks()
                 },
-                6*buttonHeight.toFloat()..7*buttonHeight.toFloat() to ToggleButtonInfo(
+                5*buttonHeight.toFloat()..6*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnScrollUp,
                     "ScrollUp"
                 ) { button ->
                     showButtonClickFeedback(button)
                     webView.evaluateJavascript("window.scrollBy(0, -50);", null)
                 },
-                8*buttonHeight.toFloat()..9*buttonHeight.toFloat() to ToggleButtonInfo(
+                7*buttonHeight.toFloat()..8*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnScrollDown,
                     "ScrollDown"
                 ) { button ->
@@ -2645,8 +2625,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Get references to all buttons
         val leftScrollToggleButton = leftToggleBar.findViewById<ImageButton>(R.id.btnScrollToggle)
         val leftModeToggleButton   = leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle)
-        val leftYouTubeButton      = leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube)
-        val leftDashboardButton    = leftToggleBar.findViewById<ImageButton>(R.id.btnARDashboard)
+        val leftDashboardButton    = leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube)
         val leftBookmarksButton    = leftToggleBar.findViewById<ImageButton>(R.id.btnBookmarks)
         val leftZoomInButton       = leftToggleBar.findViewById<ImageButton>(R.id.btnZoomIn)
         val leftZoomOutButton      = leftToggleBar.findViewById<ImageButton>(R.id.btnZoomOut)
@@ -2667,21 +2646,19 @@ class DualWebViewGroup @JvmOverloads constructor(
 // Calculate Y positions based on consistent spacing (56dp per button)
         val scrollToggleY    = 0
         val modeToggleY      = buttonHeight
-        val youtubeY         = buttonHeight * 2
-        val dashboardY       = buttonHeight * 3
-        val bookmarksY       = buttonHeight * 4
-        val zoomButtonsY     = buttonHeight * 5
-        val scrollUpY        = buttonHeight * 6
-        val leftRightScrollY = buttonHeight * 7
-        val scrollDownY      = buttonHeight * 8
-        val maskY            = buttonHeight * 9
-        val anchorY          = buttonHeight * 10
+        val dashboardY       = buttonHeight * 2
+        val bookmarksY       = buttonHeight * 3
+        val zoomButtonsY     = buttonHeight * 4
+        val scrollUpY        = buttonHeight * 5
+        val leftRightScrollY = buttonHeight * 6
+        val scrollDownY      = buttonHeight * 7
+        val maskY            = buttonHeight * 8
+        val anchorY          = buttonHeight * 9
 
 // Configure main feature buttons (top section)
         listOf(
             leftScrollToggleButton to scrollToggleY,
             leftModeToggleButton to modeToggleY,
-            leftYouTubeButton to youtubeY,
             leftDashboardButton to dashboardY,
             leftBookmarksButton to bookmarksY
         ).forEach { (button, yPosition) ->
