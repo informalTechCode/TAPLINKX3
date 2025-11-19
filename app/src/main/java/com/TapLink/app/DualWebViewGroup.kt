@@ -1328,13 +1328,15 @@ class DualWebViewGroup @JvmOverloads constructor(
             // Handle edit fields for both URL and bookmark editing
             if (isUrlEditing || isBookmarkEditing) {
                 val editFieldHeight = 48
+                val editFieldLeft = toggleBarWidth
+                val editFieldRight = editFieldLeft + keyboardWidth
 
                 // Position left edit field only
                 urlEditText.apply {
                     layout(
-                        toggleBarWidth,
+                        editFieldLeft,
                         0,
-                        halfWidth - 16,
+                        editFieldRight,
                         editFieldHeight
                     )
                     translationY = (keyboardY - editFieldHeight).toFloat()
