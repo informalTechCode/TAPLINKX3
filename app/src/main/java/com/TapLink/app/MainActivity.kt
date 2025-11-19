@@ -275,6 +275,7 @@ class MainActivity : AppCompatActivity(),
 
     private val doubleTapLock = Object()
     private var isProcessingDoubleTap = false
+    private val DOUBLE_TAP_CONFIRMATION_DELAY = 200L
 
     private var isRingSwitchEnabled = true
     private var settingsMenu: View? = null
@@ -750,47 +751,50 @@ class MainActivity : AppCompatActivity(),
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                Log.d("DoubleTapDebug", """isCursorVisible: $isCursorVisible, 
-                        isProcessingDoubleTap: $isProcessingDoubleTap,
-                        doubleTapLock: $doubleTapLock""")
+                Log.d(
+                    "DoubleTapDebug",
+                    """Handling double tap as back navigation. isProcessingDoubleTap: $isProcessingDoubleTap"""
+                )
+
                 synchronized(doubleTapLock) {
                     if (isProcessingDoubleTap) return true
                     isProcessingDoubleTap = true
-
                     pendingDoubleTapAction = true
 
                     handler.postDelayed({
                         synchronized(doubleTapLock) {
                             try {
                                 if (pendingDoubleTapAction && tapCount < 3) {
-                                    if (!dualWebViewGroup.isScreenMasked() &&
-                                        !dualWebViewGroup.handleBookmarkDoubleTap()) {
-
-                                        if (isCursorVisible) {
-                                            Log.d("DoubleTapDebug", "in isCursorVisible condition. isCursorVisible: $isCursorVisible")
-                                            // Force cursor hide and ensure state is consistent
-                                            toggleCursorVisibility(forceHide = true)
-                                            cursorJustAppeared = false
-                                            isSimulatingTouchEvent = false
-                                            isToggling = false
-                                        } else if (!isKeyboardVisible && webView.canGoBack()) {
-                                            webView.goBack()
-                                        }
-                                    }
-                                    // Reset states
-                                    tapCount = 0
-                                    lastTapTime = 0L
-                                    pendingDoubleTapAction = false
-                                    isProcessingDoubleTap = false
+                                    performDoubleTapBackNavigation()
                                 }
                             } finally {
+                                tapCount = 0
+                                lastTapTime = 0L
+                                pendingDoubleTapAction = false
                                 isProcessingDoubleTap = false
                             }
                         }
-                    }, 200)
+                    }, DOUBLE_TAP_CONFIRMATION_DELAY)
                 }
-                isProcessingDoubleTap = false
+
                 return true
+            }
+
+            private fun performDoubleTapBackNavigation() {
+                val isScreenMasked = dualWebViewGroup.isScreenMasked()
+                val hasHistory = webView.canGoBack()
+
+                Log.d(
+                    "DoubleTapDebug",
+                    """Double tap confirmed. isScreenMasked=$isScreenMasked, isKeyboardVisible=$isKeyboardVisible, canGoBack=$hasHistory"""
+                )
+
+                if (!hasHistory) {
+                    Log.d("DoubleTapDebug", "No history entry available for goBack()")
+                    return
+                }
+
+                onNavigationBackPressed()
             }
             private var continuousScrollRunnable: Runnable? = null
 
