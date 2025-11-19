@@ -188,6 +188,17 @@ class DualWebViewGroup @JvmOverloads constructor(
         setBackgroundColor(Color.TRANSPARENT)  // Make sure background is transparent
     }
 
+    private val fullScreenOverlayContainer = FrameLayout(context).apply {
+        clipChildren = true
+        clipToPadding = true
+        layoutParams = FrameLayout.LayoutParams(
+            LayoutParams.MATCH_PARENT,
+            LayoutParams.MATCH_PARENT
+        )
+        setBackgroundColor(Color.BLACK)
+        visibility = View.GONE
+    }
+
     val leftEyeClipParent = FrameLayout(context).apply {
         // Force it to be exactly 640px wide and match height (or some fixed height).
         // Using MATCH_PARENT for height is common if you want the full vertical space.
@@ -575,6 +586,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Set up the container hierarchy
         leftEyeClipParent.addView(leftEyeUIContainer)
+        leftEyeClipParent.addView(fullScreenOverlayContainer)
 
         // Add views to UI container
         leftEyeUIContainer.apply {
@@ -631,6 +643,31 @@ class DualWebViewGroup @JvmOverloads constructor(
         addView(rightEyeView)  // Keep right eye view separate
         addView(maskOverlay)   // Keep overlay on top
 
+    }
+
+    fun showFullScreenOverlay(view: View) {
+        if (view.parent is ViewGroup) {
+            (view.parent as ViewGroup).removeView(view)
+        }
+
+        fullScreenOverlayContainer.removeAllViews()
+        fullScreenOverlayContainer.addView(
+            view,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        leftEyeUIContainer.visibility = View.GONE
+        fullScreenOverlayContainer.visibility = View.VISIBLE
+        fullScreenOverlayContainer.bringToFront()
+    }
+
+    fun hideFullScreenOverlay() {
+        fullScreenOverlayContainer.removeAllViews()
+        fullScreenOverlayContainer.visibility = View.GONE
+        leftEyeUIContainer.visibility = View.VISIBLE
     }
 
     fun maskScreen() {

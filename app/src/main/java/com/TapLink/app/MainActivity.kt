@@ -3396,30 +3396,22 @@ class MainActivity : AppCompatActivity(),
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
             )
 
-        mainContainer.addView(
-            view,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-        )
-
-        dualWebViewGroup.visibility = View.GONE
+        dualWebViewGroup.showFullScreenOverlay(view)
         cursorLeftView.visibility = View.GONE
         cursorRightView.visibility = View.GONE
     }
 
     private fun hideFullScreenCustomView() {
-        val customView = fullScreenCustomView ?: return
-
-        mainContainer.removeView(customView)
+        if (fullScreenCustomView == null) {
+            return
+        }
+        dualWebViewGroup.hideFullScreenOverlay()
         fullScreenCustomView = null
 
         window.decorView.systemUiVisibility = originalSystemUiVisibility
         requestedOrientation = originalOrientation
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        dualWebViewGroup.visibility = View.VISIBLE
         cursorLeftView.visibility = if (isCursorVisible) View.VISIBLE else View.GONE
         cursorRightView.visibility = if (isCursorVisible) View.VISIBLE else View.GONE
 
