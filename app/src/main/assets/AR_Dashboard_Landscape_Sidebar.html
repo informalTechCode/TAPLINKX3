@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
@@ -9,14 +9,14 @@
       --bg:#0b0f1a; --bg-2:#0f1629; --card:#121a2e; --accent:#69f0ae; --accent-2:#82b1ff; --text:#e6f1ff; --muted:#9db3d1;
       --brightness:1; --scale:1; --radius:18px; --shadow:0 8px 24px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.035);
     }
-    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,sans-serif;overflow:hidden;}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,sans-serif;overflow-y:auto;}
     /* Portrait lock */
     .rotate{display:none;position:fixed;inset:0;align-items:center;justify-content:center;color:#fff;background:rgba(8,12,20,.95);z-index:1000;text-align:center;padding:24px}
     .rotate .box{border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:18px 22px;background:rgba(255,255,255,.05);box-shadow:0 10px 28px rgba(0,0,0,.45)}
     .rotate h1{margin:0 0 8px 0;font-size:18px}
     .rotate p{margin:0;font-size:13px;opacity:.85}
     @media (orientation:portrait){ .hud{display:none !important;} .rotate{display:flex;} }
-    .hud{width:100vw;max-width:640px;margin:0 auto;height:100vh;display:flex;flex-direction:column;overflow-y:auto;scroll-behavior:smooth;filter:brightness(var(--brightness));transform:scale(var(--scale));padding:0 8px;box-sizing:border-box;}
+    .hud{width:100vw;max-width:640px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;overflow-y:auto;scroll-behavior:smooth;filter:brightness(var(--brightness));transform:scale(var(--scale));padding:0 8px 16px;box-sizing:border-box;}
     .topbar{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,.05);border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;backdrop-filter:blur(10px);z-index:5;flex-wrap:wrap;}
     .btn{border:none;background:rgba(255,255,255,.08);padding:8px 12px;border-radius:10px;color:var(--text);cursor:pointer}
     .search{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:8px 10px;color:var(--text);outline:none;min-width:140px;flex:1;}
@@ -63,8 +63,8 @@
 <body>
   <div class="rotate">
     <div class="box">
-      <h1>Gira el dispositivo</h1>
-      <p>Este Dashboard está optimizado para orientación horizontal.</p>
+      <h1>Rotate your device</h1>
+      <p>This dashboard is optimized for landscape orientation.</p>
     </div>
   </div>
 
@@ -72,9 +72,8 @@
     <div class="topbar">
       <strong style="color:var(--text)">AR Glasses Dashboard</strong>
       <div style="flex:1"></div>
-      <input id="appSearch" class="search" placeholder="Filtrar apps…" />
+      <input id="appSearch" class="search" placeholder="Filter apps…" />
       <button class="btn" id="themeToggle">☀️ Light</button>
-      <button class="btn" id="fullscreenBtn">⤢ Fullscreen</button>
     </div>
 
     <div class="content">
@@ -86,28 +85,27 @@
 
       <!-- Right: Tasks + Notes -->
       <div class="card" id="rightPane">
-        <h3>Tareas & Notas</h3>
+        <h3>Tasks & Notes</h3>
         <div class="tasks">
           <div class="muted" style="margin-bottom:6px">Checklist</div>
           <div style="display:flex; gap:8px; margin-bottom:8px">
-            <input id="newTask" type="text" placeholder="Nueva tarea…" />
-            <button id="addTask" class="btn">Añadir</button>
+            <input id="newTask" type="text" placeholder="New task…" />
+            <button id="addTask" class="btn">Add</button>
           </div>
           <div id="taskList"></div>
         </div>
-        <div class="muted" style="margin:12px 0 6px">Notas</div>
-        <textarea id="notes" class="notes-area" placeholder="Escribe notas aquí…"></textarea>
+        <div class="muted" style="margin:12px 0 6px">Notes</div>
+        <textarea id="notes" class="notes-area" placeholder="Write notes here…"></textarea>
       </div>
     </div>
   </div>
 
   <script>
-    /* Theme + fullscreen */
+    /* Theme */
     const themeToggle=document.getElementById('themeToggle');
     function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('theme',t);themeToggle.textContent=(t==='dark')?'☀️ Light':'🌙 Dark';}
     setTheme(localStorage.getItem('theme')||'dark');
     themeToggle.addEventListener('click',()=>{const c=document.documentElement.getAttribute('data-theme')||'dark';setTheme(c==='dark'?'light':'dark');});
-    const fs=document.getElementById('fullscreenBtn');fs.addEventListener('click',()=>{if(!document.fullscreenElement)document.body.requestFullscreen();else document.exitFullscreen();});
 
     /* Apps list */
     const appsList={
@@ -133,7 +131,7 @@
       soundcloud:{ name:'SoundCloud', url:'https://soundcloud.com' },
 
       // Creativity / Multimedia
-      photopea:{ name:'Photopea (Foto)', url:'https://www.photopea.com' },
+      photopea:{ name:'Photopea (Photo)', url:'https://www.photopea.com' },
       clipchamp:{ name:'Clipchamp (Video)', url:'https://clipchamp.com/en/video-editor/' },
       bandlab:{ name:'BandLab (DAW)', url:'https://www.bandlab.com' },
       wireframe:{ name:'Wireframe.cc', url:'https://wireframe.cc' },
@@ -141,7 +139,7 @@
 
       // Productivity / Docs
       todoist:{ name:'Todoist', url:'https://www.todoist.com' },
-      stackedit:{ name:'StackEdit (Texto)', url:'https://stackedit.io/app' },
+      stackedit:{ name:'StackEdit (Text)', url:'https://stackedit.io/app' },
       sejda:{ name:'Sejda PDF Editor', url:'https://www.sejda.com/pdf-editor' },
 
       // LLMs / Chatbots
@@ -151,8 +149,8 @@
       grok:{ name:'Grok', url:'https://grok.com' },
 
       // AI Music Generation
-      suno:{ name:'Suno (AI Música)', url:'https://suno.com' },
-      udio:{ name:'Udio (AI Música)', url:'https://www.udio.com' },
+      suno:{ name:'Suno (AI Music)', url:'https://suno.com' },
+      udio:{ name:'Udio (AI Music)', url:'https://www.udio.com' },
       stableaudio:{ name:'Stable Audio', url:'https://stableaudio.com' },
 
       // AI Video Generation
@@ -161,8 +159,8 @@
       luma:{ name:'Luma Dream Machine', url:'https://lumalabs.ai/dream-machine' },
 
       // AI Voice / Cloning
-      elevenlabs:{ name:'ElevenLabs (Voz)', url:'https://elevenlabs.io' },
-      playht:{ name:'PlayHT (Voz)', url:'https://play.ht' },
+      elevenlabs:{ name:'ElevenLabs (Voice)', url:'https://elevenlabs.io' },
+      playht:{ name:'PlayHT (Voice)', url:'https://play.ht' },
 
       // System
       settings:{ name:'Settings', url:'' }
@@ -200,16 +198,16 @@
     }
 
     const groups=[
-      { title:'🧭 Navegación / Entretenimiento', cls:'sec-nav', keys:['youtube','gmaps','minijuegos','tiktok'] },
-      { title:'💬 Social / Comunicación', cls:'sec-social', keys:['whatsapp','instagram','telegram','discord'] },
-      { title:'🎧 Música / Streaming', cls:'sec-music', keys:['spotify','applemusic','tidal','deezer','audiomack','ytmusic','soundcloud'] },
-      { title:'🎨 Creatividad / Multimedia', cls:'sec-creative', keys:['photopea','clipchamp','bandlab','wireframe','kleki'] },
-      { title:'💼 Productividad / Documentos', cls:'sec-prod', keys:['todoist','stackedit','sejda'] },
-      { title:'🧠 IA / Chatbots', cls:'sec-llm', keys:['chatgpt','claude','deepseek','grok'] },
-      { title:'🎹 IA de Música', cls:'sec-aimusic', keys:['suno','udio','stableaudio'] },
-      { title:'🎥 IA de Video', cls:'sec-aivideo', keys:['runway','pika','luma'] },
-      { title:'🗣️ IA de Voz', cls:'sec-voice', keys:['elevenlabs','playht'] },
-      { title:'⚙️ Sistema', cls:'sec-system', keys:['settings'] }
+      { title:'🧭 Navigation / Entertainment', cls:'sec-nav', keys:['youtube','gmaps','minijuegos','tiktok'] },
+      { title:'💬 Social / Communication', cls:'sec-social', keys:['whatsapp','instagram','telegram','discord'] },
+      { title:'🎧 Music / Streaming', cls:'sec-music', keys:['spotify','applemusic','tidal','deezer','audiomack','ytmusic','soundcloud'] },
+      { title:'🎨 Creativity / Multimedia', cls:'sec-creative', keys:['photopea','clipchamp','bandlab','wireframe','kleki'] },
+      { title:'💼 Productivity / Documents', cls:'sec-prod', keys:['todoist','stackedit','sejda'] },
+      { title:'🧠 AI / Chatbots', cls:'sec-llm', keys:['chatgpt','claude','deepseek','grok'] },
+      { title:'🎹 AI Music', cls:'sec-aimusic', keys:['suno','udio','stableaudio'] },
+      { title:'🎥 AI Video', cls:'sec-aivideo', keys:['runway','pika','luma'] },
+      { title:'🗣️ AI Voice', cls:'sec-voice', keys:['elevenlabs','playht'] },
+      { title:'⚙️ System', cls:'sec-system', keys:['settings'] }
     ];
 
     function renderAll(){
@@ -222,7 +220,7 @@
         if(filtered.length){
           for(const it of filtered){ body.append( createAppButton(it.k, it.m) ); }
         } else {
-          const ph=document.createElement('div'); ph.className='muted'; ph.textContent='— sin coincidencias —'; body.append(ph);
+          const ph=document.createElement('div'); ph.className='muted'; ph.textContent='— no matches —'; body.append(ph);
         }
       }
     }

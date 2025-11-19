@@ -3131,16 +3131,18 @@ class MainActivity : AppCompatActivity(),
             val lastUrl = prefs.getString(keyLastUrl, null)
             Log.d("WebViewDebug", "Last saved URL: $lastUrl")
 
+            val defaultDashboardUrl = "file:///android_asset/AR_Dashboard_Landscape_Sidebar.html"
+
             if (lastUrl != null && !lastUrl.startsWith("about:blank")) {
                 Log.d("WebViewDebug", "Loading saved URL: $lastUrl")
                 webView.loadUrl(lastUrl)
             } else {
-                Log.d("WebViewDebug", "No valid saved URL, loading default page")
-                webView.loadUrl("https://www.google.com")
+                Log.d("WebViewDebug", "No valid saved URL, loading default AR dashboard")
+                webView.loadUrl(defaultDashboardUrl)
             }
         } catch (e: Exception) {
             Log.e("WebViewDebug", "Error restoring session", e)
-            webView.loadUrl("https://www.google.com")
+            webView.loadUrl("file:///android_asset/AR_Dashboard_Landscape_Sidebar.html")
         }
 
         setupMediaWebView()
