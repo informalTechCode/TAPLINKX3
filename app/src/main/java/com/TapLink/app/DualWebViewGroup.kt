@@ -191,13 +191,22 @@ class DualWebViewGroup @JvmOverloads constructor(
     private val fullScreenOverlayContainer = FrameLayout(context).apply {
         clipChildren = true
         clipToPadding = true
-        layoutParams = FrameLayout.LayoutParams(
-            LayoutParams.MATCH_PARENT,
-            LayoutParams.MATCH_PARENT
-        )
         setBackgroundColor(Color.BLACK)
         visibility = View.GONE
     }
+
+    private val fullScreenHiddenViews: List<View> by lazy {
+        listOf(
+            webView,
+            leftToggleBar,
+            leftNavigationBar,
+            keyboardContainer,
+            leftSystemInfoView,
+            urlEditText
+        )
+    }
+
+    private val previousFullScreenVisibility = mutableMapOf<View, Int>()
 
     val leftEyeClipParent = FrameLayout(context).apply {
         // Force it to be exactly 640px wide and match height (or some fixed height).
@@ -586,7 +595,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Set up the container hierarchy
         leftEyeClipParent.addView(leftEyeUIContainer)
-        leftEyeClipParent.addView(fullScreenOverlayContainer)
 
         // Add views to UI container
         leftEyeUIContainer.apply {
@@ -604,6 +612,10 @@ class DualWebViewGroup @JvmOverloads constructor(
             addView(keyboardContainer)
             addView(leftSystemInfoView)
             addView(urlEditText)
+            addView(fullScreenOverlayContainer, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
 
             postDelayed({
 
@@ -659,7 +671,12 @@ class DualWebViewGroup @JvmOverloads constructor(
             )
         )
 
-        leftEyeUIContainer.visibility = View.GONE
+        previousFullScreenVisibility.clear()
+        fullScreenHiddenViews.forEach { target ->
+            previousFullScreenVisibility[target] = target.visibility
+            target.visibility = View.GONE
+        }
+
         fullScreenOverlayContainer.visibility = View.VISIBLE
         fullScreenOverlayContainer.bringToFront()
     }
@@ -667,7 +684,10 @@ class DualWebViewGroup @JvmOverloads constructor(
     fun hideFullScreenOverlay() {
         fullScreenOverlayContainer.removeAllViews()
         fullScreenOverlayContainer.visibility = View.GONE
-        leftEyeUIContainer.visibility = View.VISIBLE
+        previousFullScreenVisibility.forEach { (target, visibility) ->
+            target.visibility = visibility
+        }
+        previousFullScreenVisibility.clear()
     }
 
     fun maskScreen() {
