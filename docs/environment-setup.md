@@ -7,11 +7,11 @@ Follow these steps to ensure commands run from the correct working directory and
    cd /workspace/TAPLINKX3
    pwd  # should output /workspace/TAPLINKX3
    ```
-2. **Use the Gradle wrapper**
+2. **Use the Gradle wrapper (with API 34 installed)**
    ```bash
    ./gradlew --version
    ```
-   The wrapper resolves project-relative paths; avoid invoking a system-wide `gradle` binary.
+   The wrapper resolves project-relative paths; avoid invoking a system-wide `gradle` binary. If you see SDK warnings, install Android API 34 to match the module's `compileSdk`/`targetSdk`.
 3. **Optional: export a helper alias**
    Add this to your shell profile if you frequently open new sessions:
    ```bash
