@@ -750,34 +750,28 @@ class MainActivity : AppCompatActivity(),
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                Log.d("DoubleTapDebug", """isCursorVisible: $isCursorVisible, 
-                        isProcessingDoubleTap: $isProcessingDoubleTap,
-                        doubleTapLock: $doubleTapLock""")
+                Log.d(
+                    "DoubleTapDebug",
+                    """Handling double tap as back navigation. isProcessingDoubleTap: $isProcessingDoubleTap"""
+                )
+
                 synchronized(doubleTapLock) {
                     if (isProcessingDoubleTap) return true
                     isProcessingDoubleTap = true
-
                     pendingDoubleTapAction = true
 
                     handler.postDelayed({
                         synchronized(doubleTapLock) {
                             try {
                                 if (pendingDoubleTapAction && tapCount < 3) {
-                                    if (!dualWebViewGroup.isScreenMasked() &&
-                                        !dualWebViewGroup.handleBookmarkDoubleTap()) {
-
-                                        if (isCursorVisible) {
-                                            Log.d("DoubleTapDebug", "in isCursorVisible condition. isCursorVisible: $isCursorVisible")
-                                            // Force cursor hide and ensure state is consistent
-                                            toggleCursorVisibility(forceHide = true)
-                                            cursorJustAppeared = false
-                                            isSimulatingTouchEvent = false
-                                            isToggling = false
-                                        } else if (!isKeyboardVisible && webView.canGoBack()) {
+                                    if (!dualWebViewGroup.isScreenMasked() && !isKeyboardVisible) {
+                                        if (webView.canGoBack()) {
                                             webView.goBack()
+                                        } else {
+                                            Log.d("DoubleTapDebug", "No history entry available for goBack()")
                                         }
                                     }
-                                    // Reset states
+
                                     tapCount = 0
                                     lastTapTime = 0L
                                     pendingDoubleTapAction = false
@@ -789,7 +783,7 @@ class MainActivity : AppCompatActivity(),
                         }
                     }, 200)
                 }
-                isProcessingDoubleTap = false
+
                 return true
             }
             private var continuousScrollRunnable: Runnable? = null
