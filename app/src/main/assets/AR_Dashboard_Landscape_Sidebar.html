@@ -21,8 +21,7 @@
     .topbar{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,.05);border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;backdrop-filter:blur(10px);z-index:5;flex-wrap:wrap;}
     .btn{border:none;background:rgba(255,255,255,.08);padding:8px 12px;border-radius:10px;color:var(--text);cursor:pointer}
     .search{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:8px 10px;color:var(--text);outline:none;min-width:140px;flex:1;}
-    .content{display:grid;grid-template-columns:1fr 280px;gap:10px;padding:10px;box-sizing:border-box;min-height:0}
-    @media (max-width:900px){ .content{grid-template-columns:1fr 240px} }
+    .content{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:10px;box-sizing:border-box;min-height:0}
     @media (max-width:720px){ .content{grid-template-columns:1fr} #rightPane{width:100%} }
     .card{background:var(--card);border:1px solid rgba(255,255,255,.08);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px}
     .card h3{margin:0 0 10px 0;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
