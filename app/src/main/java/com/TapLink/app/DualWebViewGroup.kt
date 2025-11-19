@@ -16,6 +16,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.text.Editable
+import android.text.TextUtils
 import android.text.TextWatcher
 import android.util.AttributeSet
 import android.util.Log
@@ -40,6 +41,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
+import kotlin.math.roundToInt
 
 @SuppressLint("ClickableViewAccessibility")
 class DualWebViewGroup @JvmOverloads constructor(
@@ -167,6 +169,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     // Properties for link editing
     lateinit var urlEditText: EditText
+    private val urlFieldMinHeight = 56.dp()
 
     private var leftEditField: EditText
     private var rightEditField: EditText
@@ -947,8 +950,8 @@ class DualWebViewGroup @JvmOverloads constructor(
     private fun setupUrlEditText(isRight: Boolean = false): EditText {
         return EditText(context).apply {
             layoutParams = FrameLayout.LayoutParams(
-                640 - 48,
-                48,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP
             ).apply {
                 leftMargin = 48  // Single margin for left side
@@ -956,7 +959,12 @@ class DualWebViewGroup @JvmOverloads constructor(
             setBackgroundColor(Color.parseColor("#202020"))
             setTextColor(Color.WHITE)
             textSize = 16f
-            setPadding(32, 0, 32, 0)
+            setPadding(32, 12, 32, 12)
+            isSingleLine = true
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = urlFieldMinHeight
             visibility = View.GONE
             isFocusable = true
             isFocusableInTouchMode = true
@@ -1318,14 +1326,17 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             // Handle edit fields for both URL and bookmark editing
             if (isUrlEditing || isBookmarkEditing) {
-                val editFieldHeight = 48
+                val editFieldHeight = maxOf(urlFieldMinHeight, urlEditText.measuredHeight)
+                val editFieldLeft = keyboardContainer.left.takeIf { it > 0 } ?: toggleBarWidth
+                val editFieldRight = keyboardContainer.right.takeIf { it > editFieldLeft }
+                    ?: (editFieldLeft + keyboardWidth)
 
                 // Position left edit field only
                 urlEditText.apply {
                     layout(
-                        toggleBarWidth,
+                        editFieldLeft,
                         0,
-                        halfWidth - 16,
+                        editFieldRight,
                         editFieldHeight
                     )
                     translationY = (keyboardY - editFieldHeight).toFloat()
@@ -1489,6 +1500,8 @@ class DualWebViewGroup @JvmOverloads constructor(
     fun hideInfoBars() {
         leftSystemInfoView.visibility = View.GONE
     }
+
+    private fun Int.dp(): Int = (this * resources.displayMetrics.density).roundToInt()
 
 
     // Add keyboard mirror handling
