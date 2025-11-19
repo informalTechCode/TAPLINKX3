@@ -291,6 +291,11 @@ class DualWebViewGroup @JvmOverloads constructor(
         setBackgroundColor(Color.BLACK)
 
         fullScreenTapDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent?): Boolean {
+                // Always accept the initial down event so we can track the full gesture
+                return fullScreenOverlayContainer.visibility == View.VISIBLE
+            }
+
             override fun onSingleTapUp(e: MotionEvent?): Boolean {
                 if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
                     (context as? Activity)?.onBackPressedDispatcher?.onBackPressed()
@@ -301,8 +306,12 @@ class DualWebViewGroup @JvmOverloads constructor(
         })
 
         fullScreenOverlayContainer.setOnTouchListener { _, event ->
-            fullScreenTapDetector.onTouchEvent(event)
-            false
+            if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
+                fullScreenTapDetector.onTouchEvent(event)
+                true
+            } else {
+                false
+            }
         }
 
         // Configure WebView for left eye
