@@ -39,17 +39,3 @@ Depending on the callback, `MainActivity` performs one of three actions:
 3. **Web content input** – otherwise, characters and commands are sent to the embedded `WebView` via JavaScript bridges. 【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3870-L3940】
 
 This routing ensures anchored taps behave consistently regardless of which overlay is active.
-
-## Credits
-
-The original TapLink release log at https://pastebin.com/80GGhiEK captures how anchored interactions evolved across versions. Relevant excerpts are preserved here for easy reference:
-
-- **TapLink 0.8 (February 16, 2025)** – Enabled the ring controller, added an in-app toggle to disable it, exposed sound and brightness sliders, and tuned tap responsiveness for anchored clicking.
-- **TapLink 0.7 (January 31, 2025)** – Introduced the triple tap menu for rapid feature access, ensured triple tap recenters anchored layouts, and fixed several anchored-mode reliability issues (crashes, toggle visibility, loss of anchored state, and narrow-target taps).
-- **TapLink 0.6 (January 4, 2025)** – Delivered 3DoF support so the cursor and keyboard could be controlled by head tracking when anchored, plus a keyboard logic fix that improved input fidelity.
-- **TapLink 0.5 (December 31, 2024)** – Added UI affordances like clickable scroll buttons, zoom controls, a screen mask, and a compact status bar to complement anchored browsing.
-- **TapLink 0.4.1 (December 25, 2024)** – Addressed mis-positioned keyboards and clear-button reliability problems that affected anchored typing.
-- **TapLink 0.4 (December 24, 2024)** – Brought bookmarks, a customizable home link, broader input-field detection, camera/microphone support, and session restoration—features that defined the anchored experience inherited by TapLink X3.
-
-For the full list of download links and documentation preserved from the original project, see the [Credits section of the README](../README.md#credits).
-
