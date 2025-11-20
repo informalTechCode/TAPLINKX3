@@ -3978,24 +3978,40 @@ class MainActivity : AppCompatActivity(),
 
     // Add the navigation interface implementations
     override fun onNavigationBackPressed() {
-        webView.copyBackForwardList().let { list ->
-            Log.d("NavigationDebug", """
+        val historyList = webView.copyBackForwardList()
+        val canGoBack = webView.canGoBack()
+
+        Log.d(
+            "NavigationDebug",
+            """
             Back pressed:
             Current URL: ${webView.url}
-            Can go back: ${webView.canGoBack()}
-            History size: ${list.size}
-        """.trimIndent())
+            Can go back: $canGoBack
+            History size: ${historyList.size}
+        """.trimIndent()
+        )
 
-            if (list.size > 1) {
-                val previousUrl = list.getItemAtIndex(list.size - 2).url
-                Log.d("NavigationDebug", "Attempting to go back to: $previousUrl")
+        if (!canGoBack) {
+            Log.d("NavigationDebug", "No history entry available for goBack()")
+            return
+        }
 
-                // First, stop all JavaScript execution and ongoing loads
-                webView.evaluateJavascript("window.stop();", null)
-                webView.stopLoading()
+        val previousUrl = if (historyList.size > 1) {
+            historyList.getItemAtIndex(historyList.size - 2).url.also {
+                Log.d("NavigationDebug", "Attempting to go back to: $it")
+            }
+        } else {
+            Log.d("NavigationDebug", "History stack did not expose a previous URL")
+            null
+        }
 
-                // Clear all JavaScript intervals and timeouts
-                webView.evaluateJavascript("""
+        // First, stop all JavaScript execution and ongoing loads
+        webView.evaluateJavascript("window.stop();", null)
+        webView.stopLoading()
+
+        // Clear all JavaScript intervals and timeouts
+        webView.evaluateJavascript(
+            """
                 (function() {
                     // Clear all intervals and timeouts
                     const highestId = window.setInterval(() => {}, 0);
@@ -4003,31 +4019,33 @@ class MainActivity : AppCompatActivity(),
                         window.clearInterval(i);
                         window.clearTimeout(i);
                     }
-                    
+
                     // Clear onbeforeunload which some sites use to trap users
                     window.onbeforeunload = null;
-                    
+
                     // Force clear any alert/confirm/prompt dialogs
                     window.alert = function(){};
                     window.confirm = function(){return true;};
                     window.prompt = function(){return '';};
                 })();
-            """, null)
+            """.trimIndent(),
+            null
+        )
 
-                // Keep JavaScript enabled and go back
-                webView.goBack()
+        // Keep JavaScript enabled and go back
+        webView.goBack()
 
-                // After a short delay, verify we're at the right page
-                Handler(Looper.getMainLooper()).postDelayed({
-                    if (webView.url != previousUrl) {
-                        webView.loadUrl(previousUrl)
-                    }
-                }, 100)
-
-                webView.invalidate()
-                dualWebViewGroup.invalidate()
-            }
+        // After a short delay, verify we're at the right page
+        previousUrl?.let {
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (webView.url != it) {
+                    webView.loadUrl(it)
+                }
+            }, 100)
         }
+
+        webView.invalidate()
+        dualWebViewGroup.invalidate()
     }
 
     override fun onQuitPressed() {
