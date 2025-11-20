@@ -470,10 +470,6 @@ class MainActivity : AppCompatActivity(),
             Duration: ${e.eventTime - e.downTime}ms
         """.trimIndent())
 
-                // Check if this is a ring event and if ring is disabled
-                if (e.device?.name?.contains("Virtual", ignoreCase = true) == true && !isRingSwitchEnabled) {
-                    return true  // Consume the event without processing it
-                }
 
 
                 // Store the down event for potential tap
@@ -576,10 +572,6 @@ class MainActivity : AppCompatActivity(),
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
 
                 Log.d("RingInput", "Single Tap from device: ${e.device?.name}")
-                // Check if this is a ring event and if ring is disabled
-                if (e.device?.name?.contains("Virtual", ignoreCase = true) == true && !isRingSwitchEnabled) {
-                    return true  // Consume the event without processing it
-                }
 
 
                 handleUserInteraction()
@@ -848,15 +840,6 @@ class MainActivity : AppCompatActivity(),
     """.trimIndent())
                 val isX3 = com.ffalcon.mercury.android.sdk.util.DeviceUtil.isX3Device()
                 if (!isX3) {
-                    // Ring guard
-                    if (e2.device?.name?.contains(
-                            "Virtual",
-                            ignoreCase = true
-                        ) == true && !isRingSwitchEnabled
-                    ) {
-                        Log.d("GestureDebug", "Ignored fling (ring off)")
-                        return true
-                    }
                     if (e2.device?.name?.contains(
                             "Virtual",
                             ignoreCase = true
