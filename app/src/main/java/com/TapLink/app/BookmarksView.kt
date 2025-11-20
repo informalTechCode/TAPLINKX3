@@ -239,7 +239,7 @@ class BookmarksView @JvmOverloads constructor(
 
 
 
-    private fun addBookmarkView(entry: BookmarkEntry) {
+    private fun addBookmarkView(entry: BookmarkEntry, index: Int) {
         val bookmarkView = TextView(context).apply {
             // Set explicit text appearance
             text = entry.url
@@ -269,6 +269,12 @@ class BookmarksView @JvmOverloads constructor(
                 )
                 compoundDrawablePadding = 16
             }
+
+            setOnClickListener {
+                currentSelection = index
+                updateAllSelections()
+                performAction(index)
+            }
         }
 
         // Add to lists and update
@@ -295,7 +301,7 @@ class BookmarksView @JvmOverloads constructor(
 
         // Add bookmarks in order (0 to n-1)
         bookmarks.forEachIndexed { index, entry ->
-            addBookmarkView(entry)
+            addBookmarkView(entry, index)
             Log.d(TAG, "Added bookmark ${index}: ${entry.url}, isHome: ${entry.isHome}")
         }
 
@@ -362,6 +368,12 @@ class BookmarksView @JvmOverloads constructor(
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#303030"))
                 cornerRadius = 4f
+            }
+
+            setOnClickListener {
+                currentSelection = position
+                updateAllSelections()
+                performAction(position)
             }
         }
 
@@ -436,31 +448,35 @@ class BookmarksView @JvmOverloads constructor(
         Attempting action for selection: $currentSelection
     """.trimIndent())
 
-        return when (currentSelection) {
+        performAction(currentSelection)
+        return true
+    }
+
+    private fun performAction(index: Int) {
+        val bookmarks = bookmarkManager.getBookmarks()
+        Log.d(TAG, "Performing action for index: $index")
+
+        when (index) {
             in bookmarks.indices -> {
-                val selectedUrl = bookmarks[currentSelection].url
+                val selectedUrl = bookmarks[index].url
                 Log.d(TAG, "Loading URL from bookmark: $selectedUrl")
                 bookmarkListener?.let { listener ->
                     listener.onBookmarkSelected(selectedUrl)
                     Log.d(TAG, "Bookmark listener called successfully")
                 } ?: Log.e(TAG, "Bookmark listener is null!")
                 visibility = View.GONE
-                true
             }
             bookmarks.size -> {
-                Log.d(TAG, "New bookmark at index $currentSelection")
+                Log.d(TAG, "New bookmark at index $index")
                 startEditWithId("NEW_BOOKMARK", bookmarkListener?.getCurrentUrl() ?: "")
                 keyboardListener?.onShowKeyboardForNew()
-                true
             }
             bookmarks.size + 1 -> {
-                Log.d(TAG, "Close at index $currentSelection")
+                Log.d(TAG, "Close at index $index")
                 visibility = View.GONE
-                true
             }
             else -> {
-                Log.e(TAG, "Invalid selection index: $currentSelection")
-                false
+                Log.e(TAG, "Invalid selection index: $index")
             }
         }
     }
