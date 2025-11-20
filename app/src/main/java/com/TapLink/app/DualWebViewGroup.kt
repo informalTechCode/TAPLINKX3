@@ -195,6 +195,12 @@ class DualWebViewGroup @JvmOverloads constructor(
         setBackgroundColor(Color.TRANSPARENT)  // Make sure background is transparent
     }
 
+    val uiLayerContainer = FrameLayout(context).apply {
+        clipChildren = false
+        clipToOutline = false
+        setBackgroundColor(Color.TRANSPARENT)
+    }
+
     private val fullScreenOverlayContainer = FrameLayout(context).apply {
         clipChildren = true
         clipToPadding = true
@@ -673,6 +679,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         addView(leftEyeClipParent)
         addView(rightEyeView)  // Keep right eye view separate
         addView(fullScreenOverlayContainer)
+        addView(uiLayerContainer)
         addView(maskOverlay)   // Keep overlay on top
 
     }
@@ -1031,6 +1038,10 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftEyeUIContainer.translationX = yOffset
         leftEyeUIContainer.translationY = xOffset
         leftEyeUIContainer.rotation     = rotationDeg
+
+        uiLayerContainer.translationX = yOffset
+        uiLayerContainer.translationY = xOffset
+        uiLayerContainer.rotation     = rotationDeg
 
         val adjustedX: Float
         val adjustedY: Float
@@ -1426,6 +1437,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Layout the UI container to cover just the left half
         leftEyeUIContainer.layout(0, 0, halfWidth, height)
+
+        uiLayerContainer.layout(0, 0, halfWidth, height)
     }
 
     private fun toggleScreenMask() {
@@ -1593,10 +1606,36 @@ class DualWebViewGroup @JvmOverloads constructor(
         return Pair(localX, localY)
     }
 
+    private fun isTouchOnView(view: View, x: Float, y: Float): Boolean {
+        if (view.visibility != View.VISIBLE) return false
+
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+
+        val myLocation = IntArray(2)
+        getLocationOnScreen(myLocation)
+
+        val viewLeft = location[0] - myLocation[0]
+        val viewTop = location[1] - myLocation[1]
+        val viewRight = viewLeft + view.width
+        val viewBottom = viewTop + view.height
+
+        return x >= viewLeft && x <= viewRight &&
+                y >= viewTop && y <= viewBottom
+    }
+
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
         Log.d("GestureDebug", "DualWebViewGroup onInterceptTouchEvent: ${ev.action}")
 
         if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
+            // Allow interactions with menus that are on top
+            if (tripleClickMenu?.let { isTouchOnView(it, ev.x, ev.y) } == true) {
+                return false
+            }
+            if (::leftBookmarksView.isInitialized && isTouchOnView(leftBookmarksView, ev.x, ev.y)) {
+                return false
+            }
+
             fullScreenTapDetector.onTouchEvent(ev)
             return true
         }
@@ -2491,6 +2530,10 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftEyeUIContainer.translationY = 0f
         leftEyeUIContainer.rotation = 0f
 
+        uiLayerContainer.translationX = 0f
+        uiLayerContainer.translationY = 0f
+        uiLayerContainer.rotation = 0f
+
 
         // Reset translations on views
         leftEyeClipParent.translationX = 0f
@@ -2619,10 +2662,10 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         // Remove existing view if present
-        leftEyeUIContainer.removeView(leftBookmarksView)
+        (leftBookmarksView.parent as? ViewGroup)?.removeView(leftBookmarksView)
 
         // Add view to hierarchy
-        leftEyeUIContainer.addView(leftBookmarksView)
+        uiLayerContainer.addView(leftBookmarksView)
         leftBookmarksView.bringToFront()
 
         // Request layout update
@@ -2917,7 +2960,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         isTripleClickMenuInitialized = true
 
         // Add the menu to the left eye UI container with explicit dimensions and margins
-        leftEyeUIContainer.addView(menu, FrameLayout.LayoutParams(
+        (menu.parent as? ViewGroup)?.removeView(menu)
+        uiLayerContainer.addView(menu, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply {
