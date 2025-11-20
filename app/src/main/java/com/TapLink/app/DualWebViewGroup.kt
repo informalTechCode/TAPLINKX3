@@ -1593,10 +1593,24 @@ class DualWebViewGroup @JvmOverloads constructor(
         return Pair(localX, localY)
     }
 
+    private fun isTouchOnView(view: View, x: Float, y: Float): Boolean {
+        return view.visibility == View.VISIBLE &&
+                x >= view.left && x <= view.right &&
+                y >= view.top && y <= view.bottom
+    }
+
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
         Log.d("GestureDebug", "DualWebViewGroup onInterceptTouchEvent: ${ev.action}")
 
         if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
+            // Allow interactions with menus that are on top
+            if (tripleClickMenu?.let { isTouchOnView(it, ev.x, ev.y) } == true) {
+                return false
+            }
+            if (::leftBookmarksView.isInitialized && isTouchOnView(leftBookmarksView, ev.x, ev.y)) {
+                return false
+            }
+
             fullScreenTapDetector.onTouchEvent(ev)
             return true
         }
@@ -2619,10 +2633,10 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         // Remove existing view if present
-        leftEyeUIContainer.removeView(leftBookmarksView)
+        (leftBookmarksView.parent as? ViewGroup)?.removeView(leftBookmarksView)
 
         // Add view to hierarchy
-        leftEyeUIContainer.addView(leftBookmarksView)
+        addView(leftBookmarksView)
         leftBookmarksView.bringToFront()
 
         // Request layout update
@@ -2917,7 +2931,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         isTripleClickMenuInitialized = true
 
         // Add the menu to the left eye UI container with explicit dimensions and margins
-        leftEyeUIContainer.addView(menu, FrameLayout.LayoutParams(
+        (menu.parent as? ViewGroup)?.removeView(menu)
+        addView(menu, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply {
