@@ -1653,17 +1653,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Non-anchored keyboard handling
         if (keyboardContainer.visibility == View.VISIBLE && !isAnchored) {
-            when (ev.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    customKeyboard?.handleDrag(ev.x, ev.action)
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    customKeyboard?.handleDrag(ev.x, ev.action)
-                }
-                MotionEvent.ACTION_UP -> {
-                    customKeyboard?.endDrag()
-                }
-            }
             return true
         }
 

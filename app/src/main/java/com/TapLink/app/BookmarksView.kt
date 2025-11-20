@@ -139,8 +139,6 @@ class BookmarksView @JvmOverloads constructor(
 
     private val bookmarkViews = mutableListOf<TextView>()
 
-    private var _keyboardListener: BookmarkKeyboardListener? = null
-
     private val scrollContainer = ScrollView(context)
 
     private var editingBookmarkId: String? = null
@@ -534,7 +532,7 @@ class BookmarksView @JvmOverloads constructor(
             Log.d(TAG, "handleDoubleTap(): About to edit bookmark ${bookmark.id} with URL: ${bookmark.url}")
 
             // Ensure keyboard listener exists and is called
-            val listener = _keyboardListener
+            val listener = keyboardListener
             if (listener == null) {
                 Log.e(TAG, "No keyboard listener set!")
                 return false
@@ -575,7 +573,7 @@ class BookmarksView @JvmOverloads constructor(
             Log.e(TAG, "Could not find DualWebViewGroup in parent hierarchy!")
         }
 
-        Log.d(TAG, "Calling keyboard listener: ${_keyboardListener != null}")
+        Log.d(TAG, "Calling keyboard listener: ${keyboardListener != null}")
         keyboardListener?.onShowKeyboardForEdit(currentUrl)
     }
 
@@ -726,7 +724,7 @@ class BookmarksView @JvmOverloads constructor(
 
     fun setKeyboardListener(listener: BookmarkKeyboardListener) {
         Log.d(TAG, "Setting keyboard listener: $listener")
-        _keyboardListener = listener
+        keyboardListener = listener
     }
 
 }
