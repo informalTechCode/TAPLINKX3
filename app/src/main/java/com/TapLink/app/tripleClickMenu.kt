@@ -325,6 +325,31 @@ class TripleClickMenu(context: Context) : FrameLayout(context) {
         performAction(currentFocusIndex)
     }
 
+    fun updateFocusFromTap(event: MotionEvent) {
+        if (!isVisible) return
+
+        val tapX = event.rawX.toInt()
+        val tapY = event.rawY.toInt()
+
+        buttons.forEachIndexed { index, view ->
+            val location = IntArray(2)
+            view.getLocationOnScreen(location)
+
+            val left = location[0]
+            val top = location[1]
+            val right = left + view.width
+            val bottom = top + view.height
+
+            if (tapX in left..right && tapY in top..bottom) {
+                if (currentFocusIndex != index) {
+                    Log.d("MenuDebug", "Tap hit button $index, updating focus")
+                    currentFocusIndex = index
+                }
+                return
+            }
+        }
+    }
+
     private fun performAction(index: Int) {
         if (!isVisible) return
 

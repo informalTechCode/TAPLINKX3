@@ -905,10 +905,17 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
 
-    fun handleBookmarkTap(): Boolean {
+    fun handleBookmarkTap(event: MotionEvent? = null): Boolean {
         if (leftBookmarksView.visibility != View.VISIBLE) {
             Log.d("BookmarksDebug", "No tap handling - bookmarks not visible")
             return false
+        }
+
+        event?.let { tapEvent ->
+            val rawX = tapEvent.rawX
+            val rawY = tapEvent.rawY
+            Log.d("BookmarksDebug", "Updating selection from tap at ($rawX,$rawY)")
+            leftBookmarksView.updateSelectionFromTap(rawX, rawY)
         }
 
         // Let BookmarksView handle the tap

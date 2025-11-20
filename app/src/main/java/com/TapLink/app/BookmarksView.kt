@@ -452,6 +452,37 @@ class BookmarksView @JvmOverloads constructor(
         return true
     }
 
+    fun updateSelectionFromTap(rawX: Float, rawY: Float) {
+        if (visibility != View.VISIBLE || bookmarkViews.isEmpty()) {
+            Log.d(TAG, "Ignoring tap selection update - view not visible or empty")
+            return
+        }
+
+        val tapX = rawX.toInt()
+        val tapY = rawY.toInt()
+
+        Log.d(TAG, "Updating selection from tap at ($tapX,$tapY)")
+
+        bookmarkViews.forEachIndexed { index, view ->
+            val viewLocation = IntArray(2)
+            view.getLocationOnScreen(viewLocation)
+
+            val left = viewLocation[0]
+            val top = viewLocation[1]
+            val right = left + view.width
+            val bottom = top + view.height
+
+            if (tapX in left..right && tapY in top..bottom) {
+                if (currentSelection != index) {
+                    Log.d(TAG, "Tap hit view $index, updating selection from $currentSelection")
+                    currentSelection = index
+                    updateAllSelections()
+                }
+                return
+            }
+        }
+    }
+
     private fun performAction(index: Int) {
         val bookmarks = bookmarkManager.getBookmarks()
         Log.d(TAG, "Performing action for index: $index")

@@ -598,6 +598,7 @@ class MainActivity : AppCompatActivity(),
                 Log.d("TouchDebug", "checkpoint2")
 
                 if (tripleClickMenu.isMenuVisible()) {
+                    tripleClickMenu.updateFocusFromTap(e)
                     tripleClickMenu.handleTap()
                     return true
                 }
@@ -647,7 +648,7 @@ class MainActivity : AppCompatActivity(),
                     // Check if bookmarks are visible first
                     if (dualWebViewGroup.isBookmarksExpanded()) {
                         Log.d("BookmarksDebug", "Processing tap while bookmarks are visible")
-                        val handled = dualWebViewGroup.handleBookmarkTap()
+                        val handled = dualWebViewGroup.handleBookmarkTap(e)
                         if (handled) return true
                     }
 
