@@ -118,9 +118,6 @@ class DualWebViewGroup @JvmOverloads constructor(
     var isAnchored = false
     private var isHoveringAnchorToggle = false
 
-    private var tripleClickMenu: TripleClickMenu? = null
-    private var isTripleClickMenuInitialized = false
-
     private val bitmapLock = Object()
     private var settingsMenu: View? = null
     private var isSettingsVisible = false
@@ -164,6 +161,14 @@ class DualWebViewGroup @JvmOverloads constructor(
             navButton.isHovered = false
             navButton.left.isHovered = false
             navButton.right.isHovered = false
+        }
+    }
+
+    fun updateBookmarkStar(isBookmarked: Boolean) {
+        navButtons["bookmarkStar"]?.let { button ->
+            val icon = if (isBookmarked) R.drawable.ic_star else R.drawable.ic_star_outline
+            button.left.setImageResource(icon)
+            button.right.setImageResource(icon)
         }
     }
 
@@ -417,6 +422,10 @@ class DualWebViewGroup @JvmOverloads constructor(
             "home" to NavButton(
                 left = leftNavigationBar.findViewById(R.id.btnHome),
                 right = leftNavigationBar.findViewById(R.id.btnHome)
+            ),
+            "bookmarkStar" to NavButton(
+                left = leftNavigationBar.findViewById(R.id.btnBookmarkStar),
+                right = leftNavigationBar.findViewById(R.id.btnBookmarkStar)
             ),
             "link" to NavButton(
                 left = leftNavigationBar.findViewById(R.id.btnLink),
@@ -1187,12 +1196,6 @@ class DualWebViewGroup @JvmOverloads constructor(
                 refreshHandler.post(refreshRunnable)
             }
         }
-
-        tripleClickMenu?.let { menu ->
-            if (isTripleClickMenuInitialized && menu.visibility == View.VISIBLE) {
-                menu.invalidate()
-            }
-        }
     }
 
     fun stopRefreshing() {
@@ -1403,23 +1406,6 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftX + toggleBarWidth + infoBarWidth,
             infoBarY + infoBarHeight
         )
-
-        // Position the triple click menu if initialized
-        val menu = tripleClickMenu
-        if (isTripleClickMenuInitialized && menu != null && menu.visibility == View.VISIBLE) {
-            val menuWidth = menu.measuredWidth
-            val menuHeight = menu.measuredHeight
-            val menuLeft = (640 - menuWidth) / 2  // Center in left half of logical screen
-            val menuTop = (height - menuHeight) / 2
-
-            menu.layout(
-                menuLeft,
-                menuTop,
-                menuLeft + menuWidth,
-                menuTop + menuHeight
-            )
-        }
-
 
         // Add after other layout code but before super call
         maskOverlay.layout(0, 0, width, height)
@@ -2063,16 +2049,17 @@ class DualWebViewGroup @JvmOverloads constructor(
             val buttonWidth = 48
             // Adjust the padding to account for all buttons
             val usableWidth = halfWidth - 16  // Total width minus padding (8dp on each side)
-            val remainingSpace = usableWidth - (6 * buttonWidth)
-            val gap = remainingSpace / 5  // Size of each gap
+            val remainingSpace = usableWidth - (7 * buttonWidth)
+            val gap = remainingSpace / 6  // Size of each gap
 
             // Define button zones based on layout
-            val backZone     = 8..(8 + buttonWidth)
-            val homeZone     = (8 +   buttonWidth +   gap)..(8 + 2*buttonWidth +   gap)
-            val linkZone     = (8 + 2*buttonWidth + 2*gap)..(8 + 3*buttonWidth + 2*gap)
-            val settingsZone = (8 + 3*buttonWidth + 3*gap)..(8 + 4*buttonWidth + 3*gap)
-            val refreshZone  = (8 + 4*buttonWidth + 4*gap)..(8 + 5*buttonWidth + 4*gap)
-            val quitZone     = (8 + 5*buttonWidth + 5*gap)..(8 + 6*buttonWidth + 5*gap)
+            val backZone       = 8..(8 + buttonWidth)
+            val homeZone       = (8 +   buttonWidth +   gap)..(8 + 2*buttonWidth +   gap)
+            val starZone       = (8 + 2*buttonWidth + 2*gap)..(8 + 3*buttonWidth + 2*gap)
+            val linkZone       = (8 + 3*buttonWidth + 3*gap)..(8 + 4*buttonWidth + 3*gap)
+            val settingsZone   = (8 + 4*buttonWidth + 4*gap)..(8 + 5*buttonWidth + 4*gap)
+            val refreshZone    = (8 + 5*buttonWidth + 5*gap)..(8 + 6*buttonWidth + 5*gap)
+            val quitZone       = (8 + 6*buttonWidth + 6*gap)..(8 + 7*buttonWidth + 6*gap)
 
             // Clear all hover states initially
             clearNavigationButtonHoverStates()
@@ -2091,6 +2078,13 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 in homeZone -> {
                     navButtons["home"]?.let { button ->
+                        button.isHovered = true
+                        button.left.isHovered = true
+                        button.right.isHovered = true
+                    }
+                }
+                in starZone -> {
+                    navButtons["bookmarkStar"]?.let { button ->
                         button.isHovered = true
                         button.left.isHovered = true
                         button.right.isHovered = true
@@ -2412,7 +2406,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     "Bookmarks"
                 ) { button ->
                     showButtonClickFeedback(button)
-                    toggleBookmarks()
+                    navigationListener?.onBookmarksPressed()
                 },
                 5*buttonHeight.toFloat()..6*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnScrollUp,
@@ -2465,6 +2459,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                             when (key) {
                                 "back"     -> listener.onNavigationBackPressed()
                                 "home"     -> listener.onHomePressed()
+                                "bookmarkStar" -> listener.onBookmarkStarPressed()
                                 "link"     -> listener.onHyperlinkPressed()
                                 "settings" -> listener.onSettingsPressed()
                                 "refresh"  -> listener.onRefreshPressed()
@@ -2920,56 +2915,6 @@ class DualWebViewGroup @JvmOverloads constructor(
             alpha = 1f
             layout(left, anchorY, left + buttonWidth, anchorY + buttonHeight)
         }
-
-
-
-    }
-
-
-    fun setTripleClickMenu(menu: TripleClickMenu) {
-        this.tripleClickMenu = menu
-        isTripleClickMenuInitialized = true
-
-        // Add the menu to the left eye UI container with explicit dimensions and margins
-        (menu.parent as? ViewGroup)?.removeView(menu)
-        addView(menu, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            gravity = Gravity.CENTER
-            // Add explicit margins to ensure visibility
-            topMargin = 48
-            bottomMargin = 48
-        })
-
-        // Ensure proper z-ordering and visibility
-        menu.elevation = 1000f
-        menu.visibility = View.GONE
-        menu.bringToFront()
-
-        // Force immediate layout
-        menu.measure(
-            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
-            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-        )
-
-        // Add layout change listener
-        menu.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                menu.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                if (menu.visibility == View.VISIBLE) {
-                    menu.bringToFront()
-                    startRefreshing()
-                }
-            }
-        })
-
-        post {
-            requestLayout()
-            invalidate()
-            startRefreshing()
-        }
-    }
 
     fun isSettingsVisible(): Boolean {
         return isSettingsVisible

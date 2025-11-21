@@ -26,6 +26,7 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.os.Parcel
 import android.os.SystemClock
+import android.text.TextUtils
 import android.provider.MediaStore
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -79,6 +80,8 @@ interface NavigationListener {
     fun onSettingsPressed()
     fun onRefreshPressed()
     fun onHomePressed()
+    fun onBookmarksPressed()
+    fun onBookmarkStarPressed()
     fun onHyperlinkPressed()
 }
 
@@ -173,6 +176,8 @@ class MainActivity : AppCompatActivity(),
     private var keyboardView: CustomKeyboardView? = null
     private var isKeyboardVisible = false
 
+    private lateinit var bookmarksView: BookmarksView
+
     private var originalWebViewHeight = 0
 
 
@@ -251,7 +256,6 @@ class MainActivity : AppCompatActivity(),
 
     private var sensorEventListener = createSensorEventListener()
 
-    private lateinit var tripleClickMenu: TripleClickMenu
     private var lastTapTime = 0L
     private var firstTapTime = 0L
     private var tapCount = 0
@@ -414,40 +418,6 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.navigationListener = this
         dualWebViewGroup.maskToggleListener = this
 
-        tripleClickMenu = TripleClickMenu(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.CENTER
-            }
-            // Add explicit background to make it visible
-            setBackgroundColor(Color.parseColor("#202020"))
-            setPadding(32, 32, 32, 32)  // Add padding for better visibility
-            elevation = 1000f
-
-            listener = object : TripleClickMenu.TripleClickMenuListener {
-                override fun onAnchorTogglePressed() {
-                    toggleAnchor()
-                    centerCursor()
-                    tripleClickMenu.updateAnchorButtonState(!isAnchored)
-                }
-                override fun onQuitPressed() {
-                    finish()
-                }
-                override fun onBackPressed() {
-                    tripleClickMenu.hide()
-                }
-
-                override fun onMaskTogglePressed() {
-                    dualWebViewGroup.maskToggleListener?.onMaskTogglePressed()
-                }
-            }
-        }
-
-        // Instead of adding directly to mainContainer, pass to DualWebViewGroup
-        dualWebViewGroup.setTripleClickMenu(tripleClickMenu)
-
 
 
 
@@ -500,13 +470,6 @@ class MainActivity : AppCompatActivity(),
                     // Reset translations to center the view
                     shouldResetInitialQuaternion = true
                     dualWebViewGroup.updateLeftEyePosition(0f, 0f, 0f)  // Reset translations and rotation
-
-                    if (!tripleClickMenu.isMenuVisible()) {
-                        tripleClickMenu.show()  // Use the original show() method which handles button states
-                        tripleClickMenu.updateAnchorButtonState(isAnchored)
-                    } else {
-                        tripleClickMenu.handleTapAt(lastCursorX, lastCursorY)
-                    }
                     tapCount = 0
                     return true
                 }
@@ -530,13 +493,6 @@ class MainActivity : AppCompatActivity(),
                 distanceX: Float,
                 distanceY: Float
             ): Boolean {
-                // Keep menu behavior first
-                if (tripleClickMenu?.isMenuVisible() == true) {
-                    val scaledDistance = -distanceX * 0.5f
-                    tripleClickMenu?.handleScroll(scaledDistance)
-                    return true
-                }
-
                 // When ANCHORED: both X and Y move the page vertically
                 if (isAnchored && !isKeyboardVisible && !dualWebViewGroup.isScreenMasked()) {
                     // Map horizontal to vertical: LEFT -> UP, RIGHT -> DOWN
@@ -590,17 +546,7 @@ class MainActivity : AppCompatActivity(),
                     return true
                 }
 
-//                if(!tripleClickMenu.isMenuVisible()) {
-//                    dualWebViewGroup.setScrollMode(false)
-//                }
-
-
                 Log.d("TouchDebug", "checkpoint2")
-
-                if (tripleClickMenu.isMenuVisible()) {
-                    tripleClickMenu.handleTapAt(lastCursorX, lastCursorY)
-                    return true
-                }
 
                 Log.d("TouchDebug", "checkpoint3")
 
@@ -882,8 +828,8 @@ class MainActivity : AppCompatActivity(),
 
                     handleUserInteraction()
 
-                    if (tripleClickMenu.isMenuVisible() || dualWebViewGroup.isScreenMasked()) {
-                        Log.d("GestureDebug", "Menu/mask active → consume")
+                    if (dualWebViewGroup.isScreenMasked()) {
+                        Log.d("GestureDebug", "Mask active → consume")
                         return true
                     }
 
@@ -982,7 +928,7 @@ class MainActivity : AppCompatActivity(),
 
 
         // Create and set up bookmarks view
-        val bookmarksView = BookmarksView(this).apply {
+        bookmarksView = BookmarksView(this).apply {
             setKeyboardListener(this@MainActivity)  // Set keyboard listener directly
             setBookmarkListener(this@MainActivity)  // Add this line to set the bookmark listener
         }
@@ -1107,6 +1053,8 @@ class MainActivity : AppCompatActivity(),
                     lastKnownCursorY = lastCursorY
                 }
 
+                updateBookmarkStarState(url)
+
 
             }
 
@@ -1114,6 +1062,8 @@ class MainActivity : AppCompatActivity(),
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+
+                updateBookmarkStarState(url)
 
                 // Force enable input on all potential input fields
                 webView.evaluateJavascript("""
@@ -1293,6 +1243,78 @@ class MainActivity : AppCompatActivity(),
             else -> "https://www.google.com/search?q=${Uri.encode(url)}"
         }
         webView.loadUrl(formattedUrl)
+    }
+
+    private fun bookmarkManager(): BookmarkManager = bookmarksView.getBookmarkManager()
+
+    private fun normalizeUrlForBookmark(rawUrl: String?): String? {
+        if (rawUrl.isNullOrBlank()) return null
+        val withScheme = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+            rawUrl
+        } else {
+            "https://$rawUrl"
+        }
+
+        val parsed = runCatching { Uri.parse(withScheme) }.getOrNull() ?: return null
+        return if (parsed.scheme.isNullOrBlank() || parsed.host.isNullOrBlank()) {
+            null
+        } else {
+            parsed.toString()
+        }
+    }
+
+    private fun baseUrlOf(rawUrl: String?): String? {
+        val normalized = normalizeUrlForBookmark(rawUrl) ?: return null
+        val uri = Uri.parse(normalized)
+        val port = if (uri.port != -1) ":${uri.port}" else ""
+        val host = uri.host ?: return null
+        val scheme = uri.scheme ?: return null
+        return "$scheme://$host$port"
+    }
+
+    private fun isUrlBookmarked(url: String?): Boolean {
+        val targetBase = baseUrlOf(url) ?: return false
+        return bookmarkManager().getBookmarks().any { existing ->
+            baseUrlOf(existing.url) == targetBase
+        }
+    }
+
+    private fun updateBookmarkStarState(url: String?) {
+        if (!::bookmarksView.isInitialized) return
+        dualWebViewGroup.updateBookmarkStar(isUrlBookmarked(url))
+    }
+
+    private fun openBookmarksPage() {
+        val bookmarks = bookmarkManager().getBookmarks()
+        val listItems = if (bookmarks.isEmpty()) {
+            "<li>No bookmarks saved</li>"
+        } else {
+            bookmarks.joinToString(separator = "") { entry ->
+                val safeUrl = TextUtils.htmlEncode(entry.url)
+                "<li><a href=\"$safeUrl\">$safeUrl</a></li>"
+            }
+        }
+
+        val html = """
+            <html>
+            <head>
+                <style>
+                    body { background:#111; color:#eee; font-family: sans-serif; padding: 16px; }
+                    h1 { font-size: 22px; margin-bottom: 12px; }
+                    ul { list-style-type: none; padding: 0; }
+                    li { margin: 8px 0; padding: 12px; background: #1e1e1e; border-radius: 8px; }
+                    a { color: #80cbc4; text-decoration: none; word-break: break-all; }
+                </style>
+            </head>
+            <body>
+                <h1>Bookmarks</h1>
+                <ul>$listItems</ul>
+            </body>
+            </html>
+        """.trimIndent()
+
+        webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+        updateBookmarkStarState(null)
     }
 
     private fun handleMaskToggle() {
@@ -2979,6 +3001,8 @@ class MainActivity : AppCompatActivity(),
                     super.onPageStarted(view, url, favicon)
                     Log.d("WebViewDebug", "Page started loading: $url")
 
+                    updateBookmarkStarState(url)
+
                     if (url != null && !url.startsWith("about:blank")) {
                         lastValidUrl = url
                         view?.visibility = View.INVISIBLE
@@ -2992,6 +3016,8 @@ class MainActivity : AppCompatActivity(),
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     Log.d("WebViewDebug", "Page finished loading: $url")
+
+                    updateBookmarkStarState(url)
 
                     if (url != null && !url.startsWith("about:blank")) {
                         view?.visibility = View.VISIBLE
@@ -3952,9 +3978,6 @@ class MainActivity : AppCompatActivity(),
 
         // Always let gestureDetector see the event
         val handled = gestureDetector.onTouchEvent(event)
-        if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
-            tripleClickMenu.stopFling()
-        }
 
         // If gesture detector handled it, or if ring controls are active, consume the event
         return handled || shouldUseRingControls() || super.onTouchEvent(event)
@@ -3965,6 +3988,19 @@ class MainActivity : AppCompatActivity(),
         //Log.d("Navigation", "Home pressed")
         val homeUrl = dualWebViewGroup.getBookmarksView().getHomeUrl()
         webView.loadUrl(homeUrl)
+    }
+
+    override fun onBookmarksPressed() {
+        openBookmarksPage()
+    }
+
+    override fun onBookmarkStarPressed() {
+        val normalized = normalizeUrlForBookmark(webView.url) ?: return
+        if (!isUrlBookmarked(normalized)) {
+            bookmarkManager().addBookmark(normalized)
+            bookmarksView.refreshBookmarks()
+        }
+        updateBookmarkStarState(normalized)
     }
 
     // In the implementation of NavigationListener

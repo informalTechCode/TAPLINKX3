@@ -40,6 +40,21 @@
         android:layout_weight="1"/>
 
     <ImageButton
+        android:id="@+id/btnBookmarkStar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_star_outline"
+        android:background="@drawable/nav_button_background"
+        android:contentDescription="Bookmark"
+        android:padding="12dp"
+        android:scaleType="fitCenter"/>
+
+    <Space
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"/>
+
+    <ImageButton
         android:id="@+id/btnLink"
         android:layout_width="48dp"
         android:layout_height="48dp"
