@@ -120,7 +120,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private val bitmapLock = Object()
     private var settingsMenu: View? = null
-    private var isSettingsVisible = false
+    private var settingsVisible = false
 
     interface DualWebViewGroupListener {
         fun onCursorPositionChanged(x: Float, y: Float, isVisible: Boolean)
@@ -284,7 +284,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var _translationY = 0f
     private var _rotationZ    = 0f
 
-    private var isInScrollMode = false
+    private var scrollModeEnabled = false
     private var settingsScrim: View? = null
 
     init {
@@ -1227,7 +1227,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val keyboardWidth = halfWidth - toggleBarWidth
 
         // Position the WebView differently based on scroll mode
-        if (isInScrollMode) {
+        if (scrollModeEnabled) {
             webView.layout(
                 0,  // No left margin in scroll mode
                 0,
@@ -1376,7 +1376,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Calculate system info bar position
         val infoBarHeight = 24
-        val infoBarY = if (isInScrollMode) {
+        val infoBarY = if (scrollModeEnabled) {
             height - infoBarHeight  // Position at very bottom in scroll mode
         } else {
             height - navBarHeight - infoBarHeight  // Position above nav bar normally
@@ -1664,7 +1664,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         // Measure WebView with different dimensions based on scroll mode
-        if (isInScrollMode) {
+        if (scrollModeEnabled) {
             webView.measure(
                 MeasureSpec.makeMeasureSpec(640, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY)
@@ -2292,7 +2292,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     """.trimIndent())
 
         // First check if settings menu is visible and if click is within its bounds
-        if (isSettingsVisible && settingsMenu != null) {
+        if (settingsVisible && settingsMenu != null) {
             val menuLocation = IntArray(2)
             settingsMenu?.getLocationOnScreen(menuLocation)
             val menuWidth = settingsMenu?.width ?: 0
@@ -2904,7 +2904,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
     fun isSettingsVisible(): Boolean {
-        return isSettingsVisible
+        return settingsVisible
     }
 
     private fun initializeSettingsBars() {
@@ -2940,7 +2940,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
     fun showSettings() {
-        Log.d("SettingsDebug", "showSettings() called, isSettingsVisible: $isSettingsVisible")
+        Log.d("SettingsDebug", "showSettings() called, isSettingsVisible: $settingsVisible")
 
         if (settingsMenu == null) {
             settingsMenu = LayoutInflater.from(context)
@@ -2956,7 +2956,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             // Add click handler for close button
             settingsMenu?.findViewById<Button>(R.id.btnCloseSettings)?.setOnClickListener {
                 Log.d("SettingsDebug", "Close button clicked")
-                isSettingsVisible = false
+                settingsVisible = false
                 settingsMenu?.visibility = View.GONE
                 settingsScrim?.visibility = View.GONE
                 startRefreshing()
@@ -2981,12 +2981,12 @@ class DualWebViewGroup @JvmOverloads constructor(
         initializeSettingsBars()
 
         // Toggle visibility state
-        isSettingsVisible = !isSettingsVisible
+        settingsVisible = !settingsVisible
 
-        settingsMenu?.visibility = if (isSettingsVisible) View.VISIBLE else View.GONE
-        settingsScrim?.visibility = if (isSettingsVisible) View.VISIBLE else View.GONE
+        settingsMenu?.visibility = if (settingsVisible) View.VISIBLE else View.GONE
+        settingsScrim?.visibility = if (settingsVisible) View.VISIBLE else View.GONE
 
-        if (isSettingsVisible) {
+        if (settingsVisible) {
             settingsScrim?.bringToFront()
             settingsMenu?.bringToFront()
 
@@ -3107,7 +3107,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     Handler(Looper.getMainLooper()).postDelayed({
                         closeButton.isPressed = false
                         // Close settings
-                        isSettingsVisible = false
+                        settingsVisible = false
                         settingsMenu?.visibility = View.GONE
                         settingsScrim?.visibility = View.GONE
                         startRefreshing()
@@ -3157,14 +3157,14 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     fun isInScrollMode(): Boolean {
-        return isInScrollMode
+        return scrollModeEnabled
     }
 
     fun setScrollMode(enabled: Boolean) {
-        Log.d("ScrollMode", "setScrollMode called with enabled=$enabled, current isInScrollMode=$isInScrollMode")
+        Log.d("ScrollMode", "setScrollMode called with enabled=$enabled, current isInScrollMode=$scrollModeEnabled")
 
-        if (isInScrollMode == enabled) return
-        isInScrollMode = enabled
+        if (scrollModeEnabled == enabled) return
+        scrollModeEnabled = enabled
 
         if (enabled) {
             // First set WebView to full size
@@ -3236,7 +3236,5 @@ class DualWebViewGroup @JvmOverloads constructor(
             startRefreshing()
         }
     }
-
-}
 
 }
