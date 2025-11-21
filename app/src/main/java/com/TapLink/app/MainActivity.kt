@@ -246,7 +246,7 @@ class MainActivity : AppCompatActivity(),
 
 
     private var firstSensorReading = true
-    private val TRANSLATION_SCALE = 3000f // Adjusted for better visual stability (approx 36 deg FOV)
+    private val TRANSLATION_SCALE = 2000f // Adjusted for better visual stability (approx 36 deg FOV)
     private val ANCHOR_SMOOTHING_FACTOR = 0.25f // Factor for quaternion smoothing (0.0 = no update, 1.0 = instant)
 
 
@@ -1479,7 +1479,7 @@ class MainActivity : AppCompatActivity(),
 
     private fun quaternionSlerp(qa: FloatArray, qb: FloatArray, t: Float): FloatArray {
         // q = [w, x, y, z]
-        var w1 = qa[0]; var x1 = qa[1]; var y1 = qa[2]; var z1 = qa[3]
+        val w1 = qa[0]; val x1 = qa[1]; val y1 = qa[2]; val z1 = qa[3]
         var w2 = qb[0]; var x2 = qb[1]; var y2 = qb[2]; var z2 = qb[3]
 
         var dot = w1*w2 + x1*x2 + y1*y2 + z1*z2
@@ -1513,10 +1513,10 @@ class MainActivity : AppCompatActivity(),
         val s1 = sin_theta / sin_theta_0
 
         return floatArrayOf(
-            (s0 * w1 + s1 * w2).toFloat(),
-            (s0 * x1 + s1 * x2).toFloat(),
-            (s0 * y1 + s1 * y2).toFloat(),
-            (s0 * z1 + s1 * z2).toFloat()
+            s0 * w1 + s1 * w2,
+            s0 * x1 + s1 * x2,
+            s0 * y1 + s1 * y2,
+            s0 * z1 + s1 * z2
         )
     }
 
