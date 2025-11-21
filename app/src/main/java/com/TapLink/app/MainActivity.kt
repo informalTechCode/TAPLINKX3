@@ -246,7 +246,8 @@ class MainActivity : AppCompatActivity(),
 
 
     private var firstSensorReading = true
-    private val TRANSLATION_SCALE = 4000f // Large scale factor since we want content to move off-screen
+    private val TRANSLATION_SCALE = 2000f // Adjusted for better visual stability (approx 36 deg FOV)
+    private val ANCHOR_SMOOTHING_FACTOR = 0.25f // Factor for quaternion smoothing (0.0 = no update, 1.0 = instant)
 
 
     private var sensorEventListener = createSensorEventListener()
@@ -1466,6 +1467,57 @@ class MainActivity : AppCompatActivity(),
         if (magnitudeSquared == 0f) return floatArrayOf(0f, 0f, 0f, 0f)
         val invMagnitude = 1f / magnitudeSquared
         return floatArrayOf(q[0]*invMagnitude, -q[1]*invMagnitude, -q[2]*invMagnitude, -q[3]*invMagnitude)
+    }
+
+    private fun normalizeQuaternion(q: FloatArray): FloatArray {
+        val len = kotlin.math.sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3])
+        if (len > 0) {
+            return floatArrayOf(q[0]/len, q[1]/len, q[2]/len, q[3]/len)
+        }
+        return q
+    }
+
+    private fun quaternionSlerp(qa: FloatArray, qb: FloatArray, t: Float): FloatArray {
+        // q = [w, x, y, z]
+        var w1 = qa[0]; var x1 = qa[1]; var y1 = qa[2]; var z1 = qa[3]
+        var w2 = qb[0]; var x2 = qb[1]; var y2 = qb[2]; var z2 = qb[3]
+
+        var dot = w1*w2 + x1*x2 + y1*y2 + z1*z2
+
+        // If the dot product is negative, slerp won't take the shorter path.
+        // So we negate one quaternion.
+        if (dot < 0.0f) {
+            w2 = -w2; x2 = -x2; y2 = -y2; z2 = -z2
+            dot = -dot
+        }
+
+        val DOT_THRESHOLD = 0.9995f
+        if (dot > DOT_THRESHOLD) {
+            // If the inputs are too close for comfort, linearly interpolate
+            // and normalize.
+            val result = floatArrayOf(
+                w1 + t * (w2 - w1),
+                x1 + t * (x2 - x1),
+                y1 + t * (y2 - y1),
+                z1 + t * (z2 - z1)
+            )
+            return normalizeQuaternion(result)
+        }
+
+        val theta_0 = kotlin.math.acos(dot)        // theta_0 = angle between input vectors
+        val theta = theta_0 * t              // theta = angle between v0 and result
+        val sin_theta = kotlin.math.sin(theta)     // compute this value only once
+        val sin_theta_0 = kotlin.math.sin(theta_0) // compute this value only once
+
+        val s0 = kotlin.math.cos(theta) - dot * sin_theta / sin_theta_0  // == sin(theta_0 - theta) / sin(theta_0)
+        val s1 = sin_theta / sin_theta_0
+
+        return floatArrayOf(
+            (s0 * w1 + s1 * w2).toFloat(),
+            (s0 * x1 + s1 * x2).toFloat(),
+            (s0 * y1 + s1 * y2).toFloat(),
+            (s0 * z1 + s1 * z2).toFloat()
+        )
     }
 
 
@@ -3651,6 +3703,8 @@ class MainActivity : AppCompatActivity(),
     private fun createSensorEventListener(): SensorEventListener {
         return object : SensorEventListener {
             var initialQuaternion: FloatArray? = null
+            var smoothedQuaternion: FloatArray? = null
+
             override fun onSensorChanged(event: SensorEvent) {
                 if (!isAnchored || event.sensor.type != Sensor.TYPE_ROTATION_VECTOR) return
 
@@ -3660,15 +3714,26 @@ class MainActivity : AppCompatActivity(),
                 val qw = event.values[3]
                 val currentQuaternion = floatArrayOf(qw, qx, qy, qz)
 
+                // Initialize smoothed quaternion if needed
+                if (smoothedQuaternion == null) {
+                    smoothedQuaternion = currentQuaternion.clone()
+                } else {
+                    // Apply smoothing (SLERP)
+                    smoothedQuaternion = quaternionSlerp(smoothedQuaternion!!, currentQuaternion, ANCHOR_SMOOTHING_FACTOR)
+                }
+
+                // Use the smoothed quaternion for calculations
+                val activeQuaternion = smoothedQuaternion!!
+
                 // Reset initial quaternion if requested
                 if (shouldResetInitialQuaternion || initialQuaternion == null) {
-                    initialQuaternion = currentQuaternion.clone()
+                    initialQuaternion = activeQuaternion.clone()
                     shouldResetInitialQuaternion = false
                     return
                 }
 
                 val initialQuaternionInv = quaternionInverse(initialQuaternion!!)
-                val relativeQuaternion = quaternionMultiply(initialQuaternionInv, currentQuaternion)
+                val relativeQuaternion = quaternionMultiply(initialQuaternionInv, activeQuaternion)
 
                 val euler = quaternionToEuler(relativeQuaternion) // [roll, pitch, yaw]
                 val rollRad = euler[2]  // or [2], etc., depends on your system
