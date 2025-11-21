@@ -1112,14 +1112,6 @@ class DualWebViewGroup @JvmOverloads constructor(
                     urlEditText.invalidate()
                 }
 
-                // If triple click menu is visible, ensure it's properly layered
-                tripleClickMenu?.let { menu ->
-                    if (menu.visibility == View.VISIBLE) {
-                        menu.bringToFront()
-                        menu.invalidate()
-                    }
-                }
-
                 val captureRect = android.graphics.Rect(0, 0, halfWidth, height)
                 val window = (context as Activity).window
 
@@ -1590,9 +1582,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
             // Allow interactions with menus that are on top
-            if (tripleClickMenu?.let { isTouchOnView(it, ev.x, ev.y) } == true) {
-                return false
-            }
             if (::leftBookmarksView.isInitialized && isTouchOnView(leftBookmarksView, ev.x, ev.y)) {
                 return false
             }
@@ -2576,7 +2565,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Use unbarred anchor icon when anchored
         leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)?.setImageResource(R.drawable.ic_anchor)
-        tripleClickMenu?.updateAnchorButtonState(true)
     }
 
     fun stopAnchoring() {
@@ -2604,7 +2592,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         customKeyboard?.setAnchoredMode(false)
 
         leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)?.setImageResource(R.drawable.ic_anchor_barred)
-        tripleClickMenu?.updateAnchorButtonState(false)
         webView.visibility = View.VISIBLE
         rightEyeView.visibility = View.VISIBLE
 
