@@ -505,7 +505,7 @@ class MainActivity : AppCompatActivity(),
                         tripleClickMenu.show()  // Use the original show() method which handles button states
                         tripleClickMenu.updateAnchorButtonState(isAnchored)
                     } else {
-                        tripleClickMenu.handleTap()
+                        tripleClickMenu.handleTapAt(lastCursorX, lastCursorY)
                     }
                     tapCount = 0
                     return true
@@ -598,7 +598,7 @@ class MainActivity : AppCompatActivity(),
                 Log.d("TouchDebug", "checkpoint2")
 
                 if (tripleClickMenu.isMenuVisible()) {
-                    tripleClickMenu.handleTap()
+                    tripleClickMenu.handleTapAt(lastCursorX, lastCursorY)
                     return true
                 }
 

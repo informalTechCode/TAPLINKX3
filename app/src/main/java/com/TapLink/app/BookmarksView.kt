@@ -465,6 +465,32 @@ class BookmarksView @JvmOverloads constructor(
         }
     }
 
+    fun handleTapAt(x: Float, y: Float): Boolean {
+        val targetIndex = findBookmarkIndexAt(x, y)
+        if (targetIndex != null) {
+            currentSelection = targetIndex
+            updateAllSelections()
+        }
+
+        return handleTap()
+    }
+
+    private fun findBookmarkIndexAt(x: Float, y: Float): Int? {
+        bookmarkViews.forEachIndexed { index, view ->
+            val location = IntArray(2)
+            view.getLocationOnScreen(location)
+            val left = location[0]
+            val top = location[1]
+            val right = left + view.width
+            val bottom = top + view.height
+
+            if (x in left.toFloat()..right.toFloat() && y in top.toFloat()..bottom.toFloat()) {
+                return index
+            }
+        }
+        return null
+    }
+
     fun toggle() {
         if (visibility == View.VISIBLE) {
             Log.d(TAG, "Hiding bookmarks menu")

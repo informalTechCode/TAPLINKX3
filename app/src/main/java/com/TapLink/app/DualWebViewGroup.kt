@@ -904,8 +904,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             return false
         }
 
-        // Let BookmarksView handle the tap
-        val handled = leftBookmarksView.handleTap()
+        // Let BookmarksView handle the tap using the current cursor position
+        val handled = leftBookmarksView.handleTapAt(lastCursorX, lastCursorY)
         if (handled) {
             // Force refresh to update the mirrored view
             startRefreshing()
