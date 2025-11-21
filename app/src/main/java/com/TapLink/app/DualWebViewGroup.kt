@@ -3022,113 +3022,96 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     fun dispatchSettingsTouchEvent(x: Float, y: Float) {
-        settingsMenu?.let { menu ->
-            // Get locations of all interactive elements
-            val volumeSeekBar = menu.findViewById<SeekBar>(R.id.volumeSeekBar)
-            val brightnessSeekBar = menu.findViewById<SeekBar>(R.id.brightnessSeekBar)
-            val closeButton = menu.findViewById<Button>(R.id.btnCloseSettings)
+        val menu = settingsMenu ?: return
 
-            // Get screen locations
-            val volumeLocation = IntArray(2)
-            val brightnessLocation = IntArray(2)
-            val closeLocation = IntArray(2)
+        // Grab handles once to simplify control flow
+        val volumeSeekBar = menu.findViewById<SeekBar>(R.id.volumeSeekBar)
+        val brightnessSeekBar = menu.findViewById<SeekBar>(R.id.brightnessSeekBar)
+        val closeButton = menu.findViewById<Button>(R.id.btnCloseSettings)
 
-            val menuLocation = IntArray(2)
-            menu.getLocationOnScreen(menuLocation)
+        // Resolve layout positions
+        val menuLocation = IntArray(2)
+        val volumeLocation = IntArray(2)
+        val brightnessLocation = IntArray(2)
+        val closeLocation = IntArray(2)
 
-            volumeSeekBar?.getLocationOnScreen(volumeLocation)
-            brightnessSeekBar?.getLocationOnScreen(brightnessLocation)
-            closeButton?.getLocationOnScreen(closeLocation)
+        menu.getLocationOnScreen(menuLocation)
+        volumeSeekBar?.getLocationOnScreen(volumeLocation)
+        brightnessSeekBar?.getLocationOnScreen(brightnessLocation)
+        closeButton?.getLocationOnScreen(closeLocation)
 
-            if (x >= menuLocation[0] && x <= menuLocation[0] + menu.width &&
-                y >= menuLocation[1] && y <= menuLocation[1] + menu.height) {
-                // Check if click is on volume seekbar
-                if (volumeSeekBar != null &&
-                    x >= volumeLocation[0] && x <= volumeLocation[0] + volumeSeekBar.width &&
-                    y >= volumeLocation[1] && y <= volumeLocation[1] + volumeSeekBar.height) {
+        val withinMenu = x >= menuLocation[0] && x <= menuLocation[0] + menu.width &&
+                y >= menuLocation[1] && y <= menuLocation[1] + menu.height
+        if (!withinMenu) return
 
-                    // Calculate relative position on seekbar
-                    val relativeX = x - volumeLocation[0]
-                    val percentage = relativeX.coerceIn(0f, volumeSeekBar.width.toFloat()) / volumeSeekBar.width
-                    val newProgress = (percentage * volumeSeekBar.max).toInt()
+        if (volumeSeekBar != null &&
+            x >= volumeLocation[0] && x <= volumeLocation[0] + volumeSeekBar.width &&
+            y >= volumeLocation[1] && y <= volumeLocation[1] + volumeSeekBar.height) {
 
-                    // Update volume
-                    volumeSeekBar.progress = newProgress
-                    (context.getSystemService(Context.AUDIO_SERVICE) as AudioManager).apply {
-                        setStreamVolume(
-                            AudioManager.STREAM_MUSIC,
-                            newProgress,
-                            AudioManager.FLAG_SHOW_UI
-                        )
-                    }
+            val relativeX = x - volumeLocation[0]
+            val percentage = relativeX.coerceIn(0f, volumeSeekBar.width.toFloat()) / volumeSeekBar.width
+            val newProgress = (percentage * volumeSeekBar.max).toInt()
 
-                    // **Play system sound for feedback**
-                    playSystemSound(context)
+            volumeSeekBar.progress = newProgress
+            (context.getSystemService(Context.AUDIO_SERVICE) as AudioManager).setStreamVolume(
+                AudioManager.STREAM_MUSIC,
+                newProgress,
+                AudioManager.FLAG_SHOW_UI
+            )
 
-                    // Visual feedback
-                    volumeSeekBar.isPressed = true
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        volumeSeekBar.isPressed = false
-                    }, 100)
-                    return
-                }
+            playSystemSound(context)
 
-                // Check if click is on brightness seekbar
-                if (brightnessSeekBar != null &&
-                    x >= brightnessLocation[0] && x <= brightnessLocation[0] + brightnessSeekBar.width &&
-                    y >= brightnessLocation[1] && y <= brightnessLocation[1] + brightnessSeekBar.height) {
-
-                    // Calculate relative position on seekbar
-                    val relativeX = x - brightnessLocation[0]
-                    val percentage = relativeX.coerceIn(0f, brightnessSeekBar.width.toFloat()) / brightnessSeekBar.width
-                    val newProgress = (percentage * brightnessSeekBar.max).toInt()
-
-                    // Update brightness
-                    brightnessSeekBar.progress = newProgress
-                    (context as? Activity)?.window?.attributes = (context as Activity).window.attributes.apply {
-                        screenBrightness = newProgress / 100f
-                    }
-
-                    // Visual feedback
-                    brightnessSeekBar.isPressed = true
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        brightnessSeekBar.isPressed = false
-                    }, 100)
-                    return
-                }
-
-                // Check if click is on close button
-                if (closeButton != null &&
-                    x >= closeLocation[0] && x <= closeLocation[0] + closeButton.width &&
-                    y >= closeLocation[1] && y <= closeLocation[1] + closeButton.height) {
-
-                    // Visual feedback
-                    closeButton.isPressed = true
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        closeButton.isPressed = false
-                        // Close settings
-                        settingsVisible = false
-                        settingsMenu?.visibility = View.GONE
-                        settingsScrim?.visibility = View.GONE
-                        startRefreshing()
-                    }, 100)
-                    return
-                }
-
-                Log.d("SettingsDebug", """
-            Touch at ($x, $y)
-            Volume seekbar at (${volumeLocation[0]}, ${volumeLocation[1]}) size ${volumeSeekBar?.width}x${volumeSeekBar?.height}
-            Brightness seekbar at (${brightnessLocation[0]}, ${brightnessLocation[1]}) size ${brightnessSeekBar?.width}x${brightnessSeekBar?.height}
-            Close button at (${closeLocation[0]}, ${closeLocation[1]}) size ${closeButton?.width}x${closeButton?.height}
-        """.trimIndent())
-            }
-            else {
-                return
-            }
-
-
-
+            volumeSeekBar.isPressed = true
+            Handler(Looper.getMainLooper()).postDelayed({
+                volumeSeekBar.isPressed = false
+            }, 100)
+            return
         }
+
+        if (brightnessSeekBar != null &&
+            x >= brightnessLocation[0] && x <= brightnessLocation[0] + brightnessSeekBar.width &&
+            y >= brightnessLocation[1] && y <= brightnessLocation[1] + brightnessSeekBar.height) {
+
+            val relativeX = x - brightnessLocation[0]
+            val percentage = relativeX.coerceIn(0f, brightnessSeekBar.width.toFloat()) / brightnessSeekBar.width
+            val newProgress = (percentage * brightnessSeekBar.max).toInt()
+
+            brightnessSeekBar.progress = newProgress
+            (context as? Activity)?.window?.attributes = (context as Activity).window.attributes.apply {
+                screenBrightness = newProgress / 100f
+            }
+
+            brightnessSeekBar.isPressed = true
+            Handler(Looper.getMainLooper()).postDelayed({
+                brightnessSeekBar.isPressed = false
+            }, 100)
+            return
+        }
+
+        if (closeButton != null &&
+            x >= closeLocation[0] && x <= closeLocation[0] + closeButton.width &&
+            y >= closeLocation[1] && y <= closeLocation[1] + closeButton.height) {
+
+            closeButton.isPressed = true
+            Handler(Looper.getMainLooper()).postDelayed({
+                closeButton.isPressed = false
+                settingsVisible = false
+                settingsMenu?.visibility = View.GONE
+                settingsScrim?.visibility = View.GONE
+                startRefreshing()
+            }, 100)
+            return
+        }
+
+        Log.d(
+            "SettingsDebug",
+            """
+                Touch at ($x, $y)
+                Volume seekbar at (${volumeLocation[0]}, ${volumeLocation[1]}) size ${volumeSeekBar?.width}x${volumeSeekBar?.height}
+                Brightness seekbar at (${brightnessLocation[0]}, ${brightnessLocation[1]}) size ${brightnessSeekBar?.width}x${brightnessSeekBar?.height}
+                Close button at (${closeLocation[0]}, ${closeLocation[1]}) size ${closeButton?.width}x${closeButton?.height}
+            """.trimIndent()
+        )
     }
 
     fun playSystemSound(context: Context) {
