@@ -246,7 +246,7 @@ class MainActivity : AppCompatActivity(),
 
 
     private var firstSensorReading = true
-    private val TRANSLATION_SCALE = 2000f // Adjusted for better visual stability (approx 36 deg FOV)
+    private val TRANSLATION_SCALE = 3000f // Adjusted for better visual stability (approx 36 deg FOV)
     private val ANCHOR_SMOOTHING_FACTOR = 0.25f // Factor for quaternion smoothing (0.0 = no update, 1.0 = instant)
 
 
