@@ -3238,3 +3238,5 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
 }
+
+}
