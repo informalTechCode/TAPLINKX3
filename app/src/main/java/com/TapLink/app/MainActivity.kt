@@ -506,7 +506,7 @@ class MainActivity : AppCompatActivity(),
                     tapCount = 0
                     return true
                 }
-                return false
+                return true
             }
 
             override fun onLongPress(e: MotionEvent) {
