@@ -78,6 +78,12 @@ class DualWebViewGroup @JvmOverloads constructor(
     var lastCursorY = 0f
 
     private var anchoredGestureActive = false
+    private var anchoredTarget = 0 // 0: None, 1: Keyboard, 2: Bookmarks, 3: Menu
+    private var anchoredTouchStartX = 0f
+    private var anchoredTouchStartY = 0f
+    private var lastAnchoredY = 0f
+    private var isAnchoredDrag = false
+    private val ANCHORED_TOUCH_SLOP = 10f
 
     lateinit var leftToggleBar: View
     private var isHorizontalScroll = false
@@ -1635,6 +1641,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     if (localX >= 0 && localX <= keyboardContainer.width &&
                         localY >= 0 && localY <= keyboardContainer.height) {
                         isOverTarget = true
+                        anchoredTarget = 1
                     }
                 }
             }
@@ -1644,6 +1651,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 if (cursorX >= leftBookmarksView.left && cursorX <= leftBookmarksView.right &&
                     cursorY >= leftBookmarksView.top && cursorY <= leftBookmarksView.bottom) {
                     isOverTarget = true
+                    anchoredTarget = 2
                     Log.d("TouchDebug", "Intercepting anchored tap for bookmarks")
                 }
             }
@@ -1654,6 +1662,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     if (cursorX >= menu.left && cursorX <= menu.right &&
                         cursorY >= menu.top && cursorY <= menu.bottom) {
                         isOverTarget = true
+                        anchoredTarget = 3
                         Log.d("TouchDebug", "Intercepting anchored tap for menu")
                     }
                 }
@@ -1663,7 +1672,11 @@ class DualWebViewGroup @JvmOverloads constructor(
                 MotionEvent.ACTION_DOWN -> {
                     anchoredGestureActive = isOverTarget
                     if (anchoredGestureActive) {
-                        Log.d("TouchDebug", "Intercepting anchored ACTION_DOWN")
+                        anchoredTouchStartX = cursorX
+                        anchoredTouchStartY = cursorY
+                        lastAnchoredY = cursorY
+                        isAnchoredDrag = false
+                        Log.d("TouchDebug", "Intercepting anchored ACTION_DOWN target=$anchoredTarget")
                         return true
                     }
                 }
@@ -1683,6 +1696,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 MotionEvent.ACTION_CANCEL -> {
                     if (anchoredGestureActive) {
                         anchoredGestureActive = false
+                        anchoredTarget = 0
                         return true
                     }
                 }
@@ -1779,62 +1793,70 @@ class DualWebViewGroup @JvmOverloads constructor(
                     if (anchoredGestureActive) return true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (anchoredGestureActive) return true
+                    if (anchoredGestureActive) {
+                        val (cursorX, cursorY) = getCursorInContainerCoords()
+
+                        // Check for drag threshold
+                        if (!isAnchoredDrag) {
+                            val dx = kotlin.math.abs(cursorX - anchoredTouchStartX)
+                            val dy = kotlin.math.abs(cursorY - anchoredTouchStartY)
+                            if (dx > ANCHORED_TOUCH_SLOP || dy > ANCHORED_TOUCH_SLOP) {
+                                isAnchoredDrag = true
+                            }
+                        }
+
+                        if (isAnchoredDrag && anchoredTarget == 2) { // Bookmarks
+                             val deltaY = cursorY - lastAnchoredY
+                             // Multiply by 2 to counteract the 0.5 factor in handleAnchoredSwipe
+                             if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
+                                 leftBookmarksView.handleAnchoredSwipe(deltaY * 2)
+                             }
+                        }
+
+                        lastAnchoredY = cursorY
+                        return true
+                    }
                 }
                 MotionEvent.ACTION_UP -> {
                     val wasTracking = anchoredGestureActive
                     anchoredGestureActive = false
 
-                    // Calculate cursor position for dispatch
-                    val (cursorX, cursorY) = getCursorInContainerCoords()
-                    var dispatched = false
+                    if (wasTracking && !isAnchoredDrag) {
+                        val (cursorX, cursorY) = getCursorInContainerCoords()
 
-                    // Check Keyboard
-                    if (keyboardContainer.visibility == View.VISIBLE) {
-                        val localCoords = computeAnchoredKeyboardCoordinates()
-                        if (localCoords != null) {
-                            val (lx, ly) = localCoords
-                            if (lx >= 0 && lx <= keyboardContainer.width &&
-                                ly >= 0 && ly <= keyboardContainer.height) {
-                                Log.d("TouchDebug", "Dispatching anchored tap to keyboard at ($lx, $ly)")
-                                customKeyboard?.handleAnchoredTap(lx, ly)
-                                dispatched = true
+                        // Dispatch tap based on target determined at ACTION_DOWN
+                        when (anchoredTarget) {
+                            1 -> { // Keyboard
+                                val localCoords = computeAnchoredKeyboardCoordinates()
+                                localCoords?.let { (lx, ly) ->
+                                    Log.d("TouchDebug", "Dispatching anchored tap to keyboard at ($lx, $ly)")
+                                    customKeyboard?.handleAnchoredTap(lx, ly)
+                                }
+                            }
+                            2 -> { // Bookmarks
+                                if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
+                                    Log.d("TouchDebug", "Dispatching anchored tap to bookmarks")
+                                    leftBookmarksView.handleAnchoredTap(cursorX - leftBookmarksView.left, cursorY - leftBookmarksView.top)
+                                }
+                            }
+                            3 -> { // Menu
+                                tripleClickMenu?.let { menu ->
+                                    if (menu.visibility == View.VISIBLE) {
+                                        Log.d("TouchDebug", "Dispatching anchored tap to menu")
+                                        menu.handleAnchoredTap(cursorX - menu.left, cursorY - menu.top)
+                                    }
+                                }
                             }
                         }
                     }
 
-                    // Check Bookmarks
-                    if (!dispatched && ::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
-                        if (cursorX >= leftBookmarksView.left && cursorX <= leftBookmarksView.right &&
-                            cursorY >= leftBookmarksView.top && cursorY <= leftBookmarksView.bottom) {
-                            Log.d("TouchDebug", "Dispatching anchored tap to bookmarks")
-                            leftBookmarksView.handleAnchoredTap(cursorX - leftBookmarksView.left, cursorY - leftBookmarksView.top)
-                            dispatched = true
-                        }
-                    }
-
-                    // Check TripleClickMenu
-                    tripleClickMenu?.let { menu ->
-                        if (!dispatched && menu.visibility == View.VISIBLE) {
-                            if (cursorX >= menu.left && cursorX <= menu.right &&
-                                cursorY >= menu.top && cursorY <= menu.bottom) {
-                                Log.d("TouchDebug", "Dispatching anchored tap to menu")
-                                menu.handleAnchoredTap(cursorX - menu.left, cursorY - menu.top)
-                                dispatched = true
-                            }
-                        }
-                    }
-
-                    if (wasTracking || dispatched) {
-                        if (!dispatched) {
-                            Log.d("TouchDebug", "Anchored tap ended outside bounds")
-                        }
-                        return true
-                    }
+                    anchoredTarget = 0
+                    if (wasTracking) return true
                 }
                 MotionEvent.ACTION_CANCEL -> {
                     if (anchoredGestureActive) {
                         anchoredGestureActive = false
+                        anchoredTarget = 0
                         return true
                     }
                 }
