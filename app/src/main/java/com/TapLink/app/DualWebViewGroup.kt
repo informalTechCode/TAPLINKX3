@@ -2753,7 +2753,11 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
     }
 
-
+    fun handleAnchoredFling(velocity: Float) {
+        if (leftBookmarksView.visibility == View.VISIBLE) {
+            leftBookmarksView.handleAnchoredFling(velocity)
+        }
+    }
 
     fun handleFling(velocityX: Float) {
         //Log.d("Fling Debug", "Fling handled by DualWebViewGroup")

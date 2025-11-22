@@ -884,11 +884,20 @@ class MainActivity : AppCompatActivity(),
                     }
 
                     if (dualWebViewGroup.isBookmarksExpanded()) {
-                        Log.d(
-                            "GestureDebug",
-                            "Bookmarks open → DualWebViewGroup.handleFling($velocityX)"
-                        )
-                        dualWebViewGroup.handleFling(velocityX)
+                        if (isAnchored) {
+                            val horizontalAsVertical = (-velocityX) * X_INVERT * H2V_GAIN
+                            val verticalFromFling = velocityY * Y_INVERT
+                            val effectiveVelocity = horizontalAsVertical + verticalFromFling
+
+                            Log.d("GestureDebug", "Anchored Bookmarks Fling: $effectiveVelocity")
+                            dualWebViewGroup.handleAnchoredFling(effectiveVelocity * 2f)
+                        } else {
+                            Log.d(
+                                "GestureDebug",
+                                "Bookmarks open (non-anchored) → DualWebViewGroup.handleFling($velocityX)"
+                            )
+                            dualWebViewGroup.handleFling(velocityX)
+                        }
                         return true
                     }
 

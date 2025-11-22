@@ -478,6 +478,13 @@ class BookmarksView @JvmOverloads constructor(
         Log.d(TAG, "Anchored swipe: velocityY=$velocityY, scrollAmount=$scrollInt, residue=$scrollResidue")
     }
 
+    // Anchored mode: handle vertical fling
+    fun handleAnchoredFling(velocity: Float) {
+        if (!isAnchoredMode) return
+        scrollContainer.fling(velocity.toInt())
+        Log.d(TAG, "Anchored fling: velocity=$velocity")
+    }
+
     // Non-anchored mode: drag handling (similar to CustomKeyboardView)
     private var isDragging = false
     private var startX = 0f
