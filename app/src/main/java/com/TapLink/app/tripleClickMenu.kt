@@ -317,6 +317,21 @@ class TripleClickMenu(context: Context) : FrameLayout(context) {
     }
 
 
+    fun handleAnchoredTap(localX: Float, localY: Float): Boolean {
+        val containerX = localX - menuContainer.left
+        val containerY = localY - menuContainer.top
+
+        for (i in 0 until buttons.size) {
+            val button = buttons[i]
+            if (containerX >= button.left && containerX <= button.right &&
+                containerY >= button.top && containerY <= button.bottom) {
+                performAction(i)
+                return true
+            }
+        }
+        return false
+    }
+
     fun handleTap() {
         if (!isVisible) return
 

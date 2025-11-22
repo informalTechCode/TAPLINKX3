@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.util.AttributeSet
 import android.util.Log
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
@@ -130,7 +131,20 @@ class BookmarksView @JvmOverloads constructor(
 
     private val bookmarkManager = BookmarkManager(context)
     private val bookmarksList = LinearLayout(context)
-    private var currentSelection = 0
+    private var currentSelection = -1
+    private var isAnchoredMode = false
+
+    fun setAnchoredMode(anchored: Boolean) {
+        isAnchoredMode = anchored
+        if (anchored) {
+            currentSelection = -1
+        } else {
+            if (currentSelection == -1 && bookmarkViews.isNotEmpty()) {
+                currentSelection = 0
+            }
+        }
+        updateAllSelections()
+    }
 
     private var stateListener: BookmarkStateListener? = null
 
@@ -308,7 +322,9 @@ class BookmarksView @JvmOverloads constructor(
         Log.d(TAG, "Added close button at index ${bookmarks.size + 1}")
 
         // Ensure selection is within bounds
-        currentSelection = currentSelection.coerceIn(0, bookmarkViews.size - 1)
+        if (currentSelection != -1) {
+            currentSelection = currentSelection.coerceIn(0, bookmarkViews.size - 1)
+        }
         updateAllSelections()
     }
 
@@ -322,9 +338,6 @@ class BookmarksView @JvmOverloads constructor(
 
         Log.d(TAG, "Updating all selections, current=$currentSelection, total views=${bookmarkViews.size}")
 
-        // Ensure currentSelection is valid
-        currentSelection = currentSelection.coerceIn(0, bookmarkViews.size - 1)
-
         // Update all views
         bookmarkViews.forEachIndexed { index, view ->
             val isSelected = index == currentSelection
@@ -336,7 +349,9 @@ class BookmarksView @JvmOverloads constructor(
         }
 
         // Ensure selected view is visible
-        calculateAndSetScroll()
+        if (currentSelection != -1) {
+            calculateAndSetScroll()
+        }
 
         // Notify listeners
         stateListener?.onSelectionChanged(currentSelection)
@@ -418,6 +433,122 @@ class BookmarksView @JvmOverloads constructor(
         }
     }
 
+    fun handleAnchoredTap(localX: Float, localY: Float): Boolean {
+        if (editField.visibility == View.VISIBLE) {
+            if (localX >= editField.left && localX <= editField.right &&
+                localY >= editField.top && localY <= editField.bottom) {
+                return true
+            }
+        }
+
+        if (localX >= scrollContainer.left && localX <= scrollContainer.right &&
+            localY >= scrollContainer.top && localY <= scrollContainer.bottom) {
+
+            val scrollX = localX - scrollContainer.left
+            val scrollY = localY - scrollContainer.top + scrollContainer.scrollY
+
+            for (i in 0 until bookmarksList.childCount) {
+                val child = bookmarksList.getChildAt(i)
+                if (scrollX >= child.left && scrollX <= child.right &&
+                    scrollY >= child.top && scrollY <= child.bottom) {
+
+                    currentSelection = i
+                    updateAllSelections()
+                    
+                    // Navigate to the bookmark
+                    val bookmarks = bookmarkManager.getBookmarks()
+                    if (i in bookmarks.indices) {
+                        val selectedUrl = bookmarks[i].url
+                        Log.d(TAG, "Anchored tap: Loading URL from bookmark: $selectedUrl")
+                        bookmarkListener?.onBookmarkSelected(selectedUrl)
+                        visibility = View.GONE
+                        return true
+                    }
+                }
+            }
+        }
+        return false
+    }
+
+    // Anchored mode: handle vertical swipe to scroll
+    fun handleAnchoredSwipe(velocityY: Float) {
+        if (!isAnchoredMode) return
+        
+        // Scroll the container based on swipe velocity
+        val scrollAmount = (velocityY * 0.5f).toInt()
+        scrollContainer.smoothScrollBy(0, -scrollAmount)
+        
+        Log.d(TAG, "Anchored swipe: velocityY=$velocityY, scrollAmount=$scrollAmount")
+    }
+
+    // Non-anchored mode: drag handling (similar to CustomKeyboardView)
+    private var isDragging = false
+    private var startX = 0f
+    private var lastX = 0f
+    private var touchStartTime = 0L
+    private var accumulatedX = 0f
+    private val stepThresholdX = 100f
+    private val touchSlop by lazy { android.view.ViewConfiguration.get(context).scaledTouchSlop }
+
+    fun handleDrag(x: Float, action: Int) {
+        if (isAnchoredMode) {
+            return
+        }
+
+        when (action) {
+            MotionEvent.ACTION_DOWN -> {
+                startX = x
+                lastX = x
+                touchStartTime = System.currentTimeMillis()
+                isDragging = false
+                accumulatedX = 0f
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                val dx = x - lastX
+                val totalMove = kotlin.math.abs(x - startX)
+
+                if (!isDragging && totalMove > touchSlop) {
+                    isDragging = true
+                }
+
+                if (isDragging) {
+                    accumulatedX += dx
+
+                    while (accumulatedX >= stepThresholdX) {
+                        handleFling(true)
+                        accumulatedX -= stepThresholdX
+                    }
+                    while (accumulatedX <= -stepThresholdX) {
+                        handleFling(false)
+                        accumulatedX += stepThresholdX
+                    }
+                }
+
+                lastX = x
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                val dur = System.currentTimeMillis() - touchStartTime
+                val totalMove = kotlin.math.abs(lastX - startX)
+                val wasTap = !isDragging && totalMove < touchSlop && dur < 300L
+
+                if (wasTap) {
+                    performFocusedTap()
+                }
+
+                isDragging = false
+                accumulatedX = 0f
+            }
+        }
+    }
+
+    fun performFocusedTap() {
+        if (!isAnchoredMode && currentSelection >= 0) {
+            handleTap()
+        }
+    }
+
     fun handleTap(): Boolean {
         val bookmarks = bookmarkManager.getBookmarks()
         Log.d(TAG, """
@@ -484,11 +615,13 @@ class BookmarksView @JvmOverloads constructor(
             // Make visible
             visibility = View.VISIBLE
 
-            // Set initial selection
-            if (bookmarkViews.isNotEmpty()) {
+            // Set initial selection based on mode
+            if (isAnchoredMode) {
+                currentSelection = -1
+            } else if (bookmarkViews.isNotEmpty()) {
                 currentSelection = 0
-                updateAllSelections()
             }
+            updateAllSelections()
         }
     }
 

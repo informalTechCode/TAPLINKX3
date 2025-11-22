@@ -1404,23 +1404,6 @@ class DualWebViewGroup @JvmOverloads constructor(
             infoBarY + infoBarHeight
         )
 
-        // Position the triple click menu if initialized
-        val menu = tripleClickMenu
-        if (isTripleClickMenuInitialized && menu != null && menu.visibility == View.VISIBLE) {
-            val menuWidth = menu.measuredWidth
-            val menuHeight = menu.measuredHeight
-            val menuLeft = (640 - menuWidth) / 2  // Center in left half of logical screen
-            val menuTop = (height - menuHeight) / 2
-
-            menu.layout(
-                menuLeft,
-                menuTop,
-                menuLeft + menuWidth,
-                menuTop + menuHeight
-            )
-        }
-
-
         // Add after other layout code but before super call
         maskOverlay.layout(0, 0, width, height)
 
@@ -1593,6 +1576,23 @@ class DualWebViewGroup @JvmOverloads constructor(
         return Pair(localX, localY)
     }
 
+    private fun computeAnchoredCoordinates(screenX: Float, screenY: Float): Pair<Float, Float> {
+        val parent = leftEyeUIContainer.parent as View
+        val parentLocation = IntArray(2)
+        parent.getLocationOnScreen(parentLocation)
+
+        val relativeX = screenX - parentLocation[0]
+        val relativeY = screenY - parentLocation[1]
+
+        val points = floatArrayOf(relativeX, relativeY)
+
+        val inverse = android.graphics.Matrix()
+        leftEyeUIContainer.matrix.invert(inverse)
+        inverse.mapPoints(points)
+
+        return Pair(points[0], points[1])
+    }
+
     private fun isTouchOnView(view: View, x: Float, y: Float): Boolean {
         return view.visibility == View.VISIBLE &&
                 x >= view.left && x <= view.right &&
@@ -1667,6 +1667,13 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Non-anchored keyboard handling
         if (keyboardContainer.visibility == View.VISIBLE && !isAnchored) {
+            return true
+        }
+
+        // Non-anchored bookmarks handling
+        if (::leftBookmarksView.isInitialized && 
+            leftBookmarksView.visibility == View.VISIBLE && 
+            !isAnchored) {
             return true
         }
 
@@ -1789,6 +1796,31 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
         }
 
+        // Handle anchored taps for menus
+        if (isAnchored && event.action == MotionEvent.ACTION_UP) {
+            val (localX, localY) = computeAnchoredCoordinates(event.rawX, event.rawY)
+
+            // Check TripleClickMenu
+            tripleClickMenu?.let { menu ->
+                if (menu.visibility == View.VISIBLE) {
+                    if (localX >= menu.left && localX <= menu.right && 
+                        localY >= menu.top && localY <= menu.bottom) {
+                        menu.handleAnchoredTap(localX - menu.left, localY - menu.top)
+                        return true
+                    }
+                }
+            }
+
+            // Check Bookmarks
+            if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
+                if (localX >= leftBookmarksView.left && localX <= leftBookmarksView.right && 
+                    localY >= leftBookmarksView.top && localY <= leftBookmarksView.bottom) {
+                    leftBookmarksView.handleAnchoredTap(localX - leftBookmarksView.left, localY - leftBookmarksView.top)
+                    return true
+                }
+            }
+        }
+
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 downWhen = event.eventTime
@@ -1802,9 +1834,19 @@ class DualWebViewGroup @JvmOverloads constructor(
                 val wasTap = dur < 300 && travelX < 8 && travelY < 8
                 android.util.Log.d("TouchDebug",
                     "DWG UP: wasTap=$wasTap dur=${dur}ms travel=(${travelX},${travelY}) kbVisible=$kbVisible isAnchored=$isAnchored")
+                
+                // Handle non-anchored tap for keyboard
                 if (kbVisible && !isAnchored && wasTap) {
                     // Focus-driven tap: send the highlighted key
                     customKeyboard?.performFocusedTap()
+                    return true
+                }
+                
+                // Handle non-anchored tap for bookmarks
+                if (::leftBookmarksView.isInitialized && 
+                    leftBookmarksView.visibility == View.VISIBLE && 
+                    !isAnchored && wasTap) {
+                    leftBookmarksView.performFocusedTap()
                     return true
                 }
             }
@@ -1814,6 +1856,15 @@ class DualWebViewGroup @JvmOverloads constructor(
         if (kbVisible && !isAnchored) {
             return customKeyboard?.dispatchTouchEvent(event) == true
         }
+        
+        // Let the bookmarks view handle movement in non-anchored mode
+        if (::leftBookmarksView.isInitialized && 
+            leftBookmarksView.visibility == View.VISIBLE && 
+            !isAnchored) {
+            leftBookmarksView.handleDrag(event.x, event.action)
+            return true
+        }
+        
         return super.onTouchEvent(event)
     }
 
@@ -2579,6 +2630,11 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Update keyboard behavior
         customKeyboard?.setAnchoredMode(true)
 
+        // Update bookmarks view mode
+        if (::leftBookmarksView.isInitialized) {
+            leftBookmarksView.setAnchoredMode(true)
+        }
+
         // Use unbarred anchor icon when anchored
         leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)?.setImageResource(R.drawable.ic_anchor)
         tripleClickMenu?.updateAnchorButtonState(true)
@@ -2608,6 +2664,11 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Update keyboard behavior
         customKeyboard?.setAnchoredMode(false)
 
+        // Update bookmarks view mode
+        if (::leftBookmarksView.isInitialized) {
+            leftBookmarksView.setAnchoredMode(false)
+        }
+
         leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)?.setImageResource(R.drawable.ic_anchor_barred)
         tripleClickMenu?.updateAnchorButtonState(false)
         webView.visibility = View.VISIBLE
@@ -2636,7 +2697,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         (leftBookmarksView.parent as? ViewGroup)?.removeView(leftBookmarksView)
 
         // Add view to hierarchy
-        addView(leftBookmarksView)
+    leftEyeUIContainer.addView(leftBookmarksView)
         leftBookmarksView.bringToFront()
 
         // Request layout update
@@ -2932,7 +2993,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Add the menu to the left eye UI container with explicit dimensions and margins
         (menu.parent as? ViewGroup)?.removeView(menu)
-        addView(menu, FrameLayout.LayoutParams(
+    leftEyeUIContainer.addView(menu, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply {

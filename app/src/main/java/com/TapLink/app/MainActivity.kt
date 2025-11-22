@@ -534,6 +534,19 @@ class MainActivity : AppCompatActivity(),
                     return true
                 }
 
+                // Handle bookmarks scrolling in anchored mode
+                if (isAnchored && dualWebViewGroup.isBookmarksExpanded()) {
+                    // Map horizontal to vertical scrolling for bookmarks
+                    val horizontalAsVertical = (-distanceX) * X_INVERT * H2V_GAIN
+                    val verticalFromDrag = distanceY * Y_INVERT
+                    val verticalDelta = horizontalAsVertical + verticalFromDrag
+                    
+                    if (kotlin.math.abs(verticalDelta) >= 1f) {
+                        dualWebViewGroup.getBookmarksView().handleAnchoredSwipe(verticalDelta)
+                    }
+                    return true
+                }
+
                 // When ANCHORED: both X and Y move the page vertically
                 if (isAnchored && !isKeyboardVisible && !dualWebViewGroup.isScreenMasked()) {
                     // Map horizontal to vertical: LEFT -> UP, RIGHT -> DOWN
