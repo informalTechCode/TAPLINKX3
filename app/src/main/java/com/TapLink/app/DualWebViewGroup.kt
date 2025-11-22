@@ -1559,18 +1559,19 @@ class DualWebViewGroup @JvmOverloads constructor(
         val adjustedX = translatedX * cos + translatedY * sin
         val adjustedY = -translatedX * sin + translatedY * cos
 
-        val keyboardLocation = IntArray(2)
-        keyboard.getLocationOnScreen(keyboardLocation)
+        // Use local coordinates relative to view hierarchy, not screen coordinates
+        // This avoids issues with rotation where screen coordinates are transformed
+        val localXContainer = adjustedX - keyboard.x
+        val localYContainer = adjustedY - keyboard.y
 
-        val localOriginX = keyboardLocation[0] - uiLocation[0]
-        val localOriginY = keyboardLocation[1] - uiLocation[1]
+        val kbView = customKeyboard ?: return null
 
-        val localX = adjustedX - localOriginX
-        val localY = adjustedY - localOriginY
+        val localX = localXContainer - kbView.x
+        val localY = localYContainer - kbView.y
 
         Log.d(
             "TouchDebug",
-            "Anchored cursor mapped to keyboard local=($localX, $localY) size=(${keyboard.width}, ${keyboard.height})"
+            "Anchored cursor mapped to keyboard local=($localX, $localY) kbSize=(${kbView.width}, ${kbView.height})"
         )
 
         return Pair(localX, localY)
@@ -1617,11 +1618,12 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         if (keyboardContainer.visibility == View.VISIBLE && isAnchored) {
             val localCoords = computeAnchoredKeyboardCoordinates()
-            if (localCoords != null) {
+            val kbView = customKeyboard
+            if (localCoords != null && kbView != null) {
                 val (localX, localY) = localCoords
                 val withinBounds =
-                    localX >= 0 && localX <= keyboardContainer.width &&
-                        localY >= 0 && localY <= keyboardContainer.height
+                    localX >= 0 && localX <= kbView.width &&
+                        localY >= 0 && localY <= kbView.height
 
                 when (ev.action) {
                     MotionEvent.ACTION_DOWN -> {
@@ -1763,10 +1765,12 @@ class DualWebViewGroup @JvmOverloads constructor(
                 MotionEvent.ACTION_UP -> {
                     val wasTracking = anchoredGestureActive
                     val localCoords = computeAnchoredKeyboardCoordinates()
-                    val withinBounds = localCoords?.let { (localX, localY) ->
-                        localX >= 0 && localX <= keyboardContainer.width &&
-                            localY >= 0 && localY <= keyboardContainer.height
-                    } ?: false
+                    val kbView = customKeyboard
+                    val withinBounds = if (localCoords != null && kbView != null) {
+                        val (localX, localY) = localCoords
+                        localX >= 0 && localX <= kbView.width &&
+                                localY >= 0 && localY <= kbView.height
+                    } else false
 
                     anchoredGestureActive = false
 
@@ -1884,10 +1888,6 @@ class DualWebViewGroup @JvmOverloads constructor(
     fun dispatchKeyboardTap() {
         if (!isAnchored) return
 
-        // Get the cursor position relative to the keyboard
-        val keyboardLocation = IntArray(2)
-        keyboardContainer.getLocationOnScreen(keyboardLocation)
-
         val UILocation = IntArray(2)
         leftEyeUIContainer.getLocationOnScreen(UILocation)
 
@@ -1907,16 +1907,21 @@ class DualWebViewGroup @JvmOverloads constructor(
         val adjustedX = translatedX * cos + translatedY * sin
         val adjustedY = -translatedX * sin + translatedY * cos
 
-        // Calculate position relative to keyboard
-        val localX = adjustedX - (keyboardLocation[0] - UILocation[0])
-        val localY = adjustedY - (keyboardLocation[1] - UILocation[1])
+        // Calculate position relative to keyboard using view hierarchy
+        val localXContainer = adjustedX - keyboardContainer.x
+        val localYContainer = adjustedY - keyboardContainer.y
+
+        val kbView = customKeyboard ?: return
+
+        val localX = localXContainer - kbView.x
+        val localY = localYContainer - kbView.y
 
         Log.d("KeyboardDebug", """
         Keyboard tap:
         Cursor: ($cursorX, $cursorY)
         Adjusted: ($adjustedX, $adjustedY)
         Local: ($localX, $localY)
-        Keyboard location: (${keyboardLocation[0]}, ${keyboardLocation[1]})
+        Keyboard x/y: (${keyboardContainer.x}, ${keyboardContainer.y})
         UI location: (${UILocation[0]}, ${UILocation[1]})
     """.trimIndent())
 

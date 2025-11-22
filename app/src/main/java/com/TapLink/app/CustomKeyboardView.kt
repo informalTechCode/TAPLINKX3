@@ -853,11 +853,10 @@ class CustomKeyboardView @JvmOverloads constructor(
             return null
         }
 
-        val rootLocation = IntArray(2)
-        getLocationOnScreen(rootLocation)
-
-        val targetX = rootLocation[0].toFloat() + x
-        val targetY = rootLocation[1].toFloat() + y
+        // x and y are relative to CustomKeyboardView
+        // Calculate coordinates relative to the internal keyboard layout
+        val kX = x - keyboard.x
+        val kY = y - keyboard.y
 
         for (i in 0 until keyboard.childCount) {
             val row = keyboard.getChildAt(i) as? LinearLayout
@@ -866,36 +865,27 @@ class CustomKeyboardView @JvmOverloads constructor(
                 continue
             }
 
+            // Calculate coordinates relative to the row
+            val rX = kX - row.x
+            val rY = kY - row.y
+
+            // Optimization: Check if point is within row's vertical bounds
+            if (rY < 0 || rY > row.height) continue
+
             for (j in 0 until row.childCount) {
                 val button = row.getChildAt(j) as? Button ?: continue
                 if (button.visibility != View.VISIBLE) continue
 
-                val buttonLocation = IntArray(2)
-                button.getLocationOnScreen(buttonLocation)
-
-                val left = buttonLocation[0].toFloat()
-                val top = buttonLocation[1].toFloat()
-                val right = left + button.width.toFloat()
-                val bottom = top + button.height.toFloat()
-
-                Log.d(
-                    "KeyboardDebug",
-                    """
-                    Checking button: ${button.text}
-                    Button bounds: ($left, $top) to ($right, $bottom)
-                    Test point: ($targetX, $targetY)
-                """.trimIndent()
-                )
-
-                if (targetX >= left && targetX <= right &&
-                    targetY >= top && targetY <= bottom) {
+                // Check if point is within button bounds (relative to row)
+                if (rX >= button.left && rX <= button.right &&
+                    rY >= button.top && rY <= button.bottom) {
                     Log.d("KeyboardDebug", "Found matching button: ${button.text}")
                     return button
                 }
             }
         }
 
-        Log.d("KeyboardDebug", "No button found at ($targetX, $targetY)")
+        Log.d("KeyboardDebug", "No button found at ($x, $y)")
         return null
     }
 
