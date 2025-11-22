@@ -1575,6 +1575,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         keyboard.getLocationOnScreen(keyboardLocation)
         val uiLocation = IntArray(2)
         leftEyeUIContainer.getLocationOnScreen(uiLocation)
+        val localXContainer = adjustedX - keyboard.x
+        val localYContainer = adjustedY - keyboard.y
 
         val kbView = customKeyboard ?: return null
 
