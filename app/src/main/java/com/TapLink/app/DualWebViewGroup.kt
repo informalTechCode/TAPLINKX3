@@ -83,7 +83,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var anchoredTouchStartY = 0f
     private var lastAnchoredY = 0f
     private var isAnchoredDrag = false
-    private val ANCHORED_TOUCH_SLOP = 10f
+    private val ANCHORED_TOUCH_SLOP = 2f
 
     lateinit var leftToggleBar: View
     private var isHorizontalScroll = false
@@ -1799,8 +1799,12 @@ class DualWebViewGroup @JvmOverloads constructor(
                         if (!isAnchoredDrag) {
                             val dx = kotlin.math.abs(cursorX - anchoredTouchStartX)
                             val dy = kotlin.math.abs(cursorY - anchoredTouchStartY)
+
+                            Log.d("TouchDebug", "Anchored MOVE: dx=$dx, dy=$dy, threshold=$ANCHORED_TOUCH_SLOP")
+
                             if (dx > ANCHORED_TOUCH_SLOP || dy > ANCHORED_TOUCH_SLOP) {
                                 isAnchoredDrag = true
+                                Log.d("TouchDebug", "Anchored Drag STARTED")
                             }
                         }
 
