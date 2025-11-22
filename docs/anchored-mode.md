@@ -1,12 +1,12 @@
-# Anchored keyboard mode
+# Anchored interaction mode
 
-Anchored keyboard mode pins the on-screen keyboard relative to the viewport instead of the controller. The cursor is the only moving element; taps are projected from the cursor into the keyboard so users can "poke" at keys while the keyboard remains stationary.
+Anchored mode pins interactive UI elements (keyboard, bookmarks, menu) relative to the viewport. The cursor is the primary moving element; taps and gestures are projected from the cursor into the target view so users can "poke" at keys or scroll lists while the UI remains stationary.
 
 ## Gesture interception
 
-When the keyboard is visible and the layout reports `isAnchored = true`, `DualWebViewGroup.onInterceptTouchEvent` checks whether the cursor projection falls inside the keyboard bounds. Any qualifying `ACTION_DOWN`, `ACTION_MOVE`, or `ACTION_UP` event is intercepted and marked as an anchored gesture. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1592-L1650】
+When `isAnchored = true`, `DualWebViewGroup.onInterceptTouchEvent` checks whether the cursor projection falls inside the bounds of active targets (Keyboard, Bookmarks, or Triple-click Menu). Any qualifying `ACTION_DOWN`, `ACTION_MOVE`, or `ACTION_UP` event within these bounds is intercepted and marked as an anchored gesture. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1592-L1650】
 
-`onTouchEvent` then consumes the matching `ACTION_UP` event, recalculates the cursor-aligned keyboard coordinates, and forwards the tap to `CustomKeyboardView.handleAnchoredTap`. Drag and cancel events simply keep the interception state in sync. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1729-L1803】
+`onTouchEvent` then consumes the matching events. For taps, it recalculates the cursor-aligned coordinates and forwards the action to the target view (e.g., `CustomKeyboardView.handleAnchoredTap` or `BookmarksView.handleAnchoredTap`). For drags (bookmarks), it calculates vertical deltas and calls `handleAnchoredSwipe`. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1729-L1803】
 
 ```mermaid
 stateDiagram-v2
@@ -20,7 +20,13 @@ stateDiagram-v2
 
 ## Listener routing
 
-Once `handleAnchoredTap` is invoked, `CustomKeyboardView` resolves the button under the projected coordinates and emits an `OnKeyboardActionListener` callback. `MainActivity` implements this interface to distribute the action to the active surface (bookmark editor, URL bar, or WebView). 【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L173-L260】【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3848-L3940】
+Once an anchored gesture is confirmed, `DualWebViewGroup` dispatches the event to the appropriate target:
+
+- **Keyboard**: Calls `CustomKeyboardView.handleAnchoredTap`. The view resolves the button and emits an `OnKeyboardActionListener` callback.
+- **Bookmarks**: Calls `BookmarksView.handleAnchoredTap` or `handleAnchoredSwipe`.
+- **Triple-click Menu**: Calls `TripleClickMenu.handleAnchoredTap`.
+
+`MainActivity` implements `OnKeyboardActionListener` to distribute keyboard actions to the active surface. 【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L173-L260】【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3848-L3940】
 
 | Input listener | Anchored mode behavior | Relevant implementation |
 | --- | --- | --- |
