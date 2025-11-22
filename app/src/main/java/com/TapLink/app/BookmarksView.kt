@@ -461,15 +461,21 @@ class BookmarksView @JvmOverloads constructor(
         return false
     }
 
+    private var scrollResidue = 0f
+
     // Anchored mode: handle vertical swipe to scroll
-    fun handleAnchoredSwipe(velocityY: Float) {
+    fun handleAnchoredSwipe(verticalDelta: Float) {
         if (!isAnchoredMode) return
-        
-        // Scroll the container based on swipe velocity
-        val scrollAmount = (velocityY * 0.5f).toInt()
-        scrollContainer.smoothScrollBy(0, -scrollAmount)
-        
-        Log.d(TAG, "Anchored swipe: velocityY=$velocityY, scrollAmount=$scrollAmount")
+
+        // Accumulate the delta (fractional parts)
+        val totalDelta = verticalDelta + scrollResidue
+        val scrollPixels = totalDelta.toInt()
+        scrollResidue = totalDelta - scrollPixels
+
+        if (scrollPixels != 0) {
+            // Use scrollBy instead of smoothScrollBy for direct tracking
+            scrollContainer.scrollBy(0, scrollPixels)
+        }
     }
 
     // Non-anchored mode: drag handling (similar to CustomKeyboardView)

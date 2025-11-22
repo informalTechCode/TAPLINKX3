@@ -1575,6 +1575,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         keyboard.getLocationOnScreen(keyboardLocation)
         val uiLocation = IntArray(2)
         leftEyeUIContainer.getLocationOnScreen(uiLocation)
+        val localXContainer = adjustedX - keyboard.x
+        val localYContainer = adjustedY - keyboard.y
 
         val kbView = customKeyboard ?: return null
 
@@ -1805,10 +1807,9 @@ class DualWebViewGroup @JvmOverloads constructor(
                         }
 
                         if (isAnchoredDrag && anchoredTarget == 2) { // Bookmarks
-                             val deltaY = cursorY - lastAnchoredY
-                             // Multiply by 2 to counteract the 0.5 factor in handleAnchoredSwipe
+                             val deltaY = lastAnchoredY - cursorY
                              if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
-                                 leftBookmarksView.handleAnchoredSwipe(deltaY * 2)
+                                 leftBookmarksView.handleAnchoredSwipe(deltaY)
                              }
                         }
 

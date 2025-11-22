@@ -541,9 +541,7 @@ class MainActivity : AppCompatActivity(),
                     val verticalFromDrag = distanceY * Y_INVERT
                     val verticalDelta = horizontalAsVertical + verticalFromDrag
                     
-                    if (kotlin.math.abs(verticalDelta) >= 1f) {
-                        dualWebViewGroup.getBookmarksView().handleAnchoredSwipe(verticalDelta)
-                    }
+                    dualWebViewGroup.getBookmarksView().handleAnchoredSwipe(verticalDelta)
                     return true
                 }
 
