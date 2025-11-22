@@ -1539,13 +1539,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle)?.invalidate()
     }
 
-    private fun computeAnchoredKeyboardCoordinates(): Pair<Float, Float>? {
-        val keyboard = keyboardContainer
-        if (keyboard.width == 0 || keyboard.height == 0) {
-            Log.d("TouchDebug", "computeAnchoredKeyboardCoordinates: keyboard not laid out")
-            return null
-        }
-
+    private fun getCursorInContainerCoords(): Pair<Float, Float> {
         val uiLocation = IntArray(2)
         leftEyeUIContainer.getLocationOnScreen(uiLocation)
 
@@ -1559,8 +1553,22 @@ class DualWebViewGroup @JvmOverloads constructor(
         val adjustedX = translatedX * cos + translatedY * sin
         val adjustedY = -translatedX * sin + translatedY * cos
 
+        return Pair(adjustedX, adjustedY)
+    }
+
+    private fun computeAnchoredKeyboardCoordinates(): Pair<Float, Float>? {
+        val keyboard = keyboardContainer
+        if (keyboard.width == 0 || keyboard.height == 0) {
+            Log.d("TouchDebug", "computeAnchoredKeyboardCoordinates: keyboard not laid out")
+            return null
+        }
+
+        val (adjustedX, adjustedY) = getCursorInContainerCoords()
+
         val keyboardLocation = IntArray(2)
         keyboard.getLocationOnScreen(keyboardLocation)
+        val uiLocation = IntArray(2)
+        leftEyeUIContainer.getLocationOnScreen(uiLocation)
 
         val localOriginX = keyboardLocation[0] - uiLocation[0]
         val localOriginY = keyboardLocation[1] - uiLocation[1]
@@ -1615,53 +1623,70 @@ class DualWebViewGroup @JvmOverloads constructor(
             return true
         }
 
-        if (keyboardContainer.visibility == View.VISIBLE && isAnchored) {
-            val localCoords = computeAnchoredKeyboardCoordinates()
-            if (localCoords != null) {
-                val (localX, localY) = localCoords
-                val withinBounds =
-                    localX >= 0 && localX <= keyboardContainer.width &&
-                        localY >= 0 && localY <= keyboardContainer.height
+        if (isAnchored) {
+            var isOverTarget = false
+            val (cursorX, cursorY) = getCursorInContainerCoords()
 
-                when (ev.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        anchoredGestureActive = withinBounds
-                        if (anchoredGestureActive) {
-                            Log.d(
-                                "TouchDebug",
-                                "Intercepting anchored ACTION_DOWN at ($localX, $localY)"
-                            )
-                            return true
-                        }
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        if (anchoredGestureActive) {
-                            return true
-                        } else if (withinBounds) {
-                            anchoredGestureActive = true
-                            return true
-                        }
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        if (anchoredGestureActive || withinBounds) {
-                            Log.d(
-                                "TouchDebug",
-                                "Intercepting anchored ACTION_UP at ($localX, $localY)"
-                            )
-                            return true
-                        }
-                    }
-                    MotionEvent.ACTION_CANCEL -> {
-                        if (anchoredGestureActive) {
-                            anchoredGestureActive = false
-                            return true
-                        }
+            // Check Keyboard
+            if (keyboardContainer.visibility == View.VISIBLE) {
+                val localCoords = computeAnchoredKeyboardCoordinates()
+                if (localCoords != null) {
+                    val (localX, localY) = localCoords
+                    if (localX >= 0 && localX <= keyboardContainer.width &&
+                        localY >= 0 && localY <= keyboardContainer.height) {
+                        isOverTarget = true
                     }
                 }
-            } else if (ev.action == MotionEvent.ACTION_CANCEL) {
-                anchoredGestureActive = false
             }
 
+            // Check Bookmarks (if not already over keyboard)
+            if (!isOverTarget && ::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
+                if (cursorX >= leftBookmarksView.left && cursorX <= leftBookmarksView.right &&
+                    cursorY >= leftBookmarksView.top && cursorY <= leftBookmarksView.bottom) {
+                    isOverTarget = true
+                    Log.d("TouchDebug", "Intercepting anchored tap for bookmarks")
+                }
+            }
+
+            // Check TripleClickMenu
+            tripleClickMenu?.let { menu ->
+                if (!isOverTarget && menu.visibility == View.VISIBLE) {
+                    if (cursorX >= menu.left && cursorX <= menu.right &&
+                        cursorY >= menu.top && cursorY <= menu.bottom) {
+                        isOverTarget = true
+                        Log.d("TouchDebug", "Intercepting anchored tap for menu")
+                    }
+                }
+            }
+
+            when (ev.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    anchoredGestureActive = isOverTarget
+                    if (anchoredGestureActive) {
+                        Log.d("TouchDebug", "Intercepting anchored ACTION_DOWN")
+                        return true
+                    }
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (anchoredGestureActive) return true
+                    if (isOverTarget) {
+                        anchoredGestureActive = true
+                        return true
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (anchoredGestureActive || isOverTarget) {
+                        Log.d("TouchDebug", "Intercepting anchored ACTION_UP")
+                        return true
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    if (anchoredGestureActive) {
+                        anchoredGestureActive = false
+                        return true
+                    }
+                }
+            }
             return false
         }
 
@@ -1748,41 +1773,61 @@ class DualWebViewGroup @JvmOverloads constructor(
             return true
         }
 
-        if (kbVisible && isAnchored) {
+        if (isAnchored) {
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    if (anchoredGestureActive) {
-                        return true
-                    }
+                    if (anchoredGestureActive) return true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (anchoredGestureActive) {
-                        return true
-                    }
+                    if (anchoredGestureActive) return true
                 }
                 MotionEvent.ACTION_UP -> {
                     val wasTracking = anchoredGestureActive
-                    val localCoords = computeAnchoredKeyboardCoordinates()
-                    val withinBounds = localCoords?.let { (localX, localY) ->
-                        localX >= 0 && localX <= keyboardContainer.width &&
-                            localY >= 0 && localY <= keyboardContainer.height
-                    } ?: false
-
                     anchoredGestureActive = false
 
-                    if (wasTracking || withinBounds) {
-                        if (withinBounds) {
-                            val (localX, localY) = localCoords!!
-                            Log.d(
-                                "TouchDebug",
-                                "Dispatching anchored tap to keyboard at ($localX, $localY)"
-                            )
-                            customKeyboard?.handleAnchoredTap(localX, localY)
-                        } else {
-                            Log.d(
-                                "TouchDebug",
-                                "Anchored tap ended outside keyboard bounds"
-                            )
+                    // Calculate cursor position for dispatch
+                    val (cursorX, cursorY) = getCursorInContainerCoords()
+                    var dispatched = false
+
+                    // Check Keyboard
+                    if (keyboardContainer.visibility == View.VISIBLE) {
+                        val localCoords = computeAnchoredKeyboardCoordinates()
+                        if (localCoords != null) {
+                            val (lx, ly) = localCoords
+                            if (lx >= 0 && lx <= keyboardContainer.width &&
+                                ly >= 0 && ly <= keyboardContainer.height) {
+                                Log.d("TouchDebug", "Dispatching anchored tap to keyboard at ($lx, $ly)")
+                                customKeyboard?.handleAnchoredTap(lx, ly)
+                                dispatched = true
+                            }
+                        }
+                    }
+
+                    // Check Bookmarks
+                    if (!dispatched && ::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
+                        if (cursorX >= leftBookmarksView.left && cursorX <= leftBookmarksView.right &&
+                            cursorY >= leftBookmarksView.top && cursorY <= leftBookmarksView.bottom) {
+                            Log.d("TouchDebug", "Dispatching anchored tap to bookmarks")
+                            leftBookmarksView.handleAnchoredTap(cursorX - leftBookmarksView.left, cursorY - leftBookmarksView.top)
+                            dispatched = true
+                        }
+                    }
+
+                    // Check TripleClickMenu
+                    tripleClickMenu?.let { menu ->
+                        if (!dispatched && menu.visibility == View.VISIBLE) {
+                            if (cursorX >= menu.left && cursorX <= menu.right &&
+                                cursorY >= menu.top && cursorY <= menu.bottom) {
+                                Log.d("TouchDebug", "Dispatching anchored tap to menu")
+                                menu.handleAnchoredTap(cursorX - menu.left, cursorY - menu.top)
+                                dispatched = true
+                            }
+                        }
+                    }
+
+                    if (wasTracking || dispatched) {
+                        if (!dispatched) {
+                            Log.d("TouchDebug", "Anchored tap ended outside bounds")
                         }
                         return true
                     }
@@ -1792,31 +1837,6 @@ class DualWebViewGroup @JvmOverloads constructor(
                         anchoredGestureActive = false
                         return true
                     }
-                }
-            }
-        }
-
-        // Handle anchored taps for menus
-        if (isAnchored && event.action == MotionEvent.ACTION_UP) {
-            val (localX, localY) = computeAnchoredCoordinates(event.rawX, event.rawY)
-
-            // Check TripleClickMenu
-            tripleClickMenu?.let { menu ->
-                if (menu.visibility == View.VISIBLE) {
-                    if (localX >= menu.left && localX <= menu.right && 
-                        localY >= menu.top && localY <= menu.bottom) {
-                        menu.handleAnchoredTap(localX - menu.left, localY - menu.top)
-                        return true
-                    }
-                }
-            }
-
-            // Check Bookmarks
-            if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
-                if (localX >= leftBookmarksView.left && localX <= leftBookmarksView.right && 
-                    localY >= leftBookmarksView.top && localY <= leftBookmarksView.bottom) {
-                    leftBookmarksView.handleAnchoredTap(localX - leftBookmarksView.left, localY - leftBookmarksView.top)
-                    return true
                 }
             }
         }
