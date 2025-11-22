@@ -1,5 +1,3 @@
-![TapLink X3 app icon](app/src/main/ic_launcher-playstore.png)
-
 # TapLink X3
 
 TapLink X3 is an Android-based browser shell designed for XR headsets that mirrors a dual-eye viewport, overlays a precision cursor, and exposes a custom radial keyboard that can be anchored to the viewport or controlled via spatial gestures. The application focuses on keeping input predictable when the user is navigating web content from a wearable controller. It was originally created by u/glxblt76.
@@ -19,3 +17,5 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
 - [Architecture Overview](docs/ARCHITECTURE.md) - Details on the app structure, data flow, and bookmark management.
 - [Input Systems](docs/INPUT_SYSTEM.md) - Explanation of anchored and focus-driven keyboard modes.
 - [Project History](docs/HISTORY.md) - Release notes and credit history.
+
+![TapLink X3 app icon](app/src/main/ic_launcher-playstore.png)
