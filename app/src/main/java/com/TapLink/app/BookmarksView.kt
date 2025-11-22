@@ -454,16 +454,7 @@ class BookmarksView @JvmOverloads constructor(
 
                     currentSelection = i
                     updateAllSelections()
-                    
-                    // Navigate to the bookmark
-                    val bookmarks = bookmarkManager.getBookmarks()
-                    if (i in bookmarks.indices) {
-                        val selectedUrl = bookmarks[i].url
-                        Log.d(TAG, "Anchored tap: Loading URL from bookmark: $selectedUrl")
-                        bookmarkListener?.onBookmarkSelected(selectedUrl)
-                        visibility = View.GONE
-                        return true
-                    }
+                    return handleTap()
                 }
             }
         }
