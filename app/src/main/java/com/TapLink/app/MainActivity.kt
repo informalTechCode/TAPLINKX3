@@ -541,9 +541,8 @@ class MainActivity : AppCompatActivity(),
                     val verticalFromDrag = distanceY * Y_INVERT
                     val verticalDelta = horizontalAsVertical + verticalFromDrag
                     
-                    if (kotlin.math.abs(verticalDelta) >= 1f) {
-                        dualWebViewGroup.getBookmarksView().handleAnchoredSwipe(verticalDelta * -2f)
-                    }
+                    // Always pass delta to allow sub-pixel accumulation in BookmarksView
+                    dualWebViewGroup.getBookmarksView().handleAnchoredSwipe(verticalDelta * -2f)
                     return true
                 }
 

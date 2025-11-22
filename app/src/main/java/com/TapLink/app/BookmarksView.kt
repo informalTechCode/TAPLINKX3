@@ -133,6 +133,7 @@ class BookmarksView @JvmOverloads constructor(
     private val bookmarksList = LinearLayout(context)
     private var currentSelection = -1
     private var isAnchoredMode = false
+    private var scrollResidue = 0f
 
     fun setAnchoredMode(anchored: Boolean) {
         isAnchoredMode = anchored
@@ -466,10 +467,15 @@ class BookmarksView @JvmOverloads constructor(
         if (!isAnchoredMode) return
         
         // Scroll the container based on swipe velocity
-        val scrollAmount = (velocityY * 0.5f).toInt()
-        scrollContainer.smoothScrollBy(0, -scrollAmount)
+        val effectiveScroll = velocityY * 0.5f + scrollResidue
+        val scrollInt = effectiveScroll.toInt()
+        scrollResidue = effectiveScroll - scrollInt
+
+        if (scrollInt != 0) {
+            scrollContainer.scrollBy(0, -scrollInt)
+        }
         
-        Log.d(TAG, "Anchored swipe: velocityY=$velocityY, scrollAmount=$scrollAmount")
+        Log.d(TAG, "Anchored swipe: velocityY=$velocityY, scrollAmount=$scrollInt, residue=$scrollResidue")
     }
 
     // Non-anchored mode: drag handling (similar to CustomKeyboardView)
