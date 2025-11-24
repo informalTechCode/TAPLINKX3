@@ -1530,7 +1530,6 @@ class DualWebViewGroup @JvmOverloads constructor(
     override fun dispatchDraw(canvas: Canvas) {
         super.dispatchDraw(canvas)
         // Force redraw of toggle buttons
-        leftToggleBar.findViewById<ImageButton>(R.id.btnScrollToggle)?.invalidate()
         leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle)?.invalidate()
     }
 
