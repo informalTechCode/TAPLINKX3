@@ -75,6 +75,21 @@ class BookmarkManager(private val context: Context) {
         saveBookmarks()
     }
 
+    fun setAsHome(id: String) {
+        val index = bookmarks.indexOfFirst { it.id == id }
+        if (index != -1) {
+            // Update flags
+            bookmarks.forEach { it.isHome = false }
+
+            // Move to top
+            val entry = bookmarks.removeAt(index)
+            entry.isHome = true
+            bookmarks.add(0, entry)
+
+            saveBookmarks()
+        }
+    }
+
     private fun loadBookmarks() {
         val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val bookmarksJson = prefs.getString(keyBookmarks, null)
@@ -128,6 +143,9 @@ class BookmarksView @JvmOverloads constructor(
     companion object {
         private const val TAG = "BookmarksView"
     }
+
+    private enum class ActionType { OPEN, DELETE, SET_HOME, NEW, CLOSE }
+    private data class ViewAction(val type: ActionType, val id: String? = null, val url: String? = null)
 
     private val bookmarkManager = BookmarkManager(context)
     private val bookmarksList = LinearLayout(context)
@@ -269,6 +287,21 @@ class BookmarksView @JvmOverloads constructor(
             }
         }
 
+        // Home/Set Home Button
+        val homeButton = TextView(context).apply {
+            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_home, 0, 0, 0)
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(48, LayoutParams.MATCH_PARENT)
+            tag = ViewAction(ActionType.SET_HOME, entry.id, entry.url)
+
+            // Visual indication if it is already home
+            alpha = if (entry.isHome) 1.0f else 0.5f
+
+            setOnClickListener {
+                handleSetAsHome(entry.id)
+            }
+        }
+
         val urlView = TextView(context).apply {
             text = entry.url
             textSize = 16f
@@ -276,35 +309,48 @@ class BookmarksView @JvmOverloads constructor(
             gravity = Gravity.CENTER_VERTICAL
             setPadding(16, 0, 0, 0)
             layoutParams = LinearLayout.LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
-
-            if (entry.isHome) {
-                setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_home, 0, 0, 0)
-                compoundDrawablePadding = 16
-            }
+            tag = ViewAction(ActionType.OPEN, entry.id, entry.url)
         }
 
-        val deleteButton = TextView(context).apply {
-            text = "X"
-            textSize = 16f
-            setTextColor(Color.RED)
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(48, LayoutParams.MATCH_PARENT)
-
-            setOnClickListener {
-                handleDeleteBookmark(entry.id)
-            }
-        }
-
+        rowLayout.addView(homeButton)
         rowLayout.addView(urlView)
-        rowLayout.addView(deleteButton)
+        bookmarkViews.add(homeButton)
+        bookmarkViews.add(urlView)
+
+        // Only add delete button if not home
+        if (!entry.isHome) {
+            val deleteButton = TextView(context).apply {
+                text = "X"
+                textSize = 16f
+                setTextColor(Color.RED)
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(48, LayoutParams.MATCH_PARENT)
+                tag = ViewAction(ActionType.DELETE, entry.id)
+
+                setOnClickListener {
+                    handleDeleteBookmark(entry.id)
+                }
+            }
+            rowLayout.addView(deleteButton)
+            bookmarkViews.add(deleteButton)
+        }
 
         bookmarksList.addView(rowLayout)
-
-        // Add both views to bookmarkViews for separate selection
-        bookmarkViews.add(urlView)
-        bookmarkViews.add(deleteButton)
-
         Log.d(TAG, "Added bookmark view: ${entry.url}, isHome: ${entry.isHome}")
+    }
+
+    private fun handleSetAsHome(bookmarkId: String) {
+        bookmarkManager.setAsHome(bookmarkId)
+
+        var currentParent = parent
+        while (currentParent != null) {
+            if (currentParent is DualWebViewGroup) {
+                currentParent.refreshBothBookmarks()
+                return
+            }
+            currentParent = currentParent.parent
+        }
+        refreshBookmarks()
     }
 
     private fun handleDeleteBookmark(bookmarkId: String) {
@@ -405,6 +451,12 @@ class BookmarksView @JvmOverloads constructor(
                 setMargins(4, 4, 4, 4)
             }
 
+            tag = if (text == "+") {
+                ViewAction(ActionType.NEW)
+            } else {
+                ViewAction(ActionType.CLOSE)
+            }
+
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#303030"))
                 cornerRadius = 4f
@@ -475,40 +527,42 @@ class BookmarksView @JvmOverloads constructor(
             val scrollX = localX - scrollContainer.left
             val scrollY = localY - scrollContainer.top + scrollContainer.scrollY
 
-            var bookmarkViewIndex = 0
-
             for (i in 0 until bookmarksList.childCount) {
                 val child = bookmarksList.getChildAt(i)
-
-                // Determine how many items this child represents in bookmarkViews
-                val itemsInThisChild = if (child is LinearLayout) 2 else 1
 
                 if (scrollX >= child.left && scrollX <= child.right &&
                     scrollY >= child.top && scrollY <= child.bottom) {
 
-                    if (child is LinearLayout && child.childCount > 1) {
-                        val deleteBtn = child.getChildAt(1)
+                    // Found the row. Now find which specific view inside was clicked.
+                    if (child is LinearLayout) {
                         val childRelX = scrollX - child.left
                         val childRelY = scrollY - child.top
 
-                        if (childRelX >= deleteBtn.left && childRelX <= deleteBtn.right &&
-                            childRelY >= deleteBtn.top && childRelY <= deleteBtn.bottom) {
-                             // Hit delete button
-                             currentSelection = bookmarkViewIndex + 1
-                        } else {
-                             // Hit URL part (or anywhere else in row)
-                             currentSelection = bookmarkViewIndex
+                        // Check each child of the row
+                        for (j in 0 until child.childCount) {
+                            val innerView = child.getChildAt(j)
+                            if (childRelX >= innerView.left && childRelX <= innerView.right &&
+                                childRelY >= innerView.top && childRelY <= innerView.bottom) {
+
+                                // Found the exact view. Find it in bookmarkViews list.
+                                val index = bookmarkViews.indexOf(innerView)
+                                if (index != -1) {
+                                    currentSelection = index
+                                    updateAllSelections()
+                                    return handleTap()
+                                }
+                            }
                         }
                     } else {
-                        // Special button or other view
-                        currentSelection = bookmarkViewIndex
+                        // Special button
+                        val index = bookmarkViews.indexOf(child)
+                        if (index != -1) {
+                            currentSelection = index
+                            updateAllSelections()
+                            return handleTap()
+                        }
                     }
-
-                    updateAllSelections()
-                    return handleTap()
                 }
-
-                bookmarkViewIndex += itemsInThisChild
             }
         }
         return false
@@ -600,51 +654,45 @@ class BookmarksView @JvmOverloads constructor(
     }
 
     fun handleTap(): Boolean {
-        val bookmarks = bookmarkManager.getBookmarks()
-        val totalBookmarksItems = bookmarks.size * 2
-
-        Log.d(TAG, """
-        Tap Debug:
-        Current Selection: $currentSelection
-        Total Bookmarks: ${bookmarks.size}
-        Total Bookmark Items: $totalBookmarksItems
-        Bookmark Views Size: ${bookmarkViews.size}
-        """)
-
-        if (currentSelection < totalBookmarksItems) {
-            val bookmarkIndex = currentSelection / 2
-            val isDelete = (currentSelection % 2) == 1
-
-            if (bookmarkIndex in bookmarks.indices) {
-                val bookmark = bookmarks[bookmarkIndex]
-                if (isDelete) {
-                    Log.d(TAG, "Deleting bookmark: ${bookmark.url}")
-                    handleDeleteBookmark(bookmark.id)
-                    return true
-                } else {
-                    Log.d(TAG, "Loading URL from bookmark: ${bookmark.url}")
-                    bookmarkListener?.onBookmarkSelected(bookmark.url)
-                    visibility = View.GONE
-                    return true
-                }
-            }
-        } else {
-            // Special buttons
-            val specialIndex = currentSelection - totalBookmarksItems
-            if (specialIndex == 0) {
-                Log.d(TAG, "New bookmark")
-                startEditWithId("NEW_BOOKMARK", bookmarkListener?.getCurrentUrl() ?: "")
-                keyboardListener?.onShowKeyboardForNew()
-                return true
-            } else if (specialIndex == 1) {
-                Log.d(TAG, "Close")
-                visibility = View.GONE
-                return true
-            }
+        if (currentSelection !in bookmarkViews.indices) {
+            Log.e(TAG, "Invalid selection index: $currentSelection")
+            return false
         }
 
-        Log.e(TAG, "Invalid selection index: $currentSelection")
-        return false
+        val view = bookmarkViews[currentSelection]
+        val action = view.tag as? ViewAction
+
+        if (action == null) {
+            Log.e(TAG, "No action tag found for view at $currentSelection")
+            return false
+        }
+
+        Log.d(TAG, "Handling tap for action: $action")
+
+        return when (action.type) {
+            ActionType.SET_HOME -> {
+                action.id?.let { handleSetAsHome(it) }
+                true
+            }
+            ActionType.OPEN -> {
+                action.url?.let { bookmarkListener?.onBookmarkSelected(it) }
+                visibility = View.GONE
+                true
+            }
+            ActionType.DELETE -> {
+                action.id?.let { handleDeleteBookmark(it) }
+                true
+            }
+            ActionType.NEW -> {
+                startEditWithId("NEW_BOOKMARK", bookmarkListener?.getCurrentUrl() ?: "")
+                keyboardListener?.onShowKeyboardForNew()
+                true
+            }
+            ActionType.CLOSE -> {
+                visibility = View.GONE
+                true
+            }
+        }
     }
 
     fun toggle() {
