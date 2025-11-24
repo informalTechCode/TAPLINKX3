@@ -100,7 +100,6 @@ class MainActivity : AppCompatActivity(),
     DualWebViewGroup.DualWebViewGroupListener,
     NavigationListener,
     CustomKeyboardView.OnKeyboardActionListener,
-    DualWebViewGroup.ScrollDirectionListener,
     BookmarkListener,
     BookmarkKeyboardListener,
     LinkEditingListener,
@@ -1176,10 +1175,8 @@ class MainActivity : AppCompatActivity(),
 
         webView.setBackgroundColor(Color.BLACK)
 
-        dualWebViewGroup.scrollDirectionListener = this
         isHorizontalScroll = false
         dualWebViewGroup.updateBrowsingMode(false)
-        dualWebViewGroup.updateScrollToggleButtons(false)  // Start with vertical scroll
 
 
 
@@ -1671,12 +1668,6 @@ class MainActivity : AppCompatActivity(),
 
         // Delegate animation to DualWebViewGroup
         dualWebViewGroup.animateViewportAdjustment()
-    }
-
-    override fun onScrollDirectionToggled(isHorizontal: Boolean) {
-        isHorizontalScroll = isHorizontal
-        Log.d("MainActivity", "Scroll direction changed to: ${if (isHorizontal) "horizontal" else "vertical"}")
-
     }
 
     override fun onShowLinkEditing() {
