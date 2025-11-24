@@ -151,7 +151,7 @@ class BookmarksView @JvmOverloads constructor(
     private var bookmarkListener: BookmarkListener? = null
     private var keyboardListener: BookmarkKeyboardListener? = null
 
-    private val bookmarkViews = mutableListOf<TextView>()
+    private val bookmarkViews = mutableListOf<View>()
 
     private val scrollContainer = ScrollView(context)
 
@@ -254,41 +254,68 @@ class BookmarksView @JvmOverloads constructor(
 
 
     private fun addBookmarkView(entry: BookmarkEntry) {
-        val bookmarkView = TextView(context).apply {
-            // Set explicit text appearance
-            text = entry.url
-            textSize = 16f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(16, 12, 16, 12)
-
-            // Set fixed height and margins
-            layoutParams = LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                48
-            ).apply {
+        val rowLayout = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 48).apply {
                 setMargins(4, 4, 4, 4)
             }
+            gravity = Gravity.CENTER_VERTICAL
+            tag = entry.id
 
             // Set initial background
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#303030"))
                 cornerRadius = 4f
             }
+        }
 
-            // Set home icon if needed
+        val urlView = TextView(context).apply {
+            text = entry.url
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(16, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
+
             if (entry.isHome) {
-                setCompoundDrawablesWithIntrinsicBounds(
-                    R.drawable.ic_home, 0, 0, 0
-                )
+                setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_home, 0, 0, 0)
                 compoundDrawablePadding = 16
             }
         }
 
-        // Add to lists and update
-        bookmarksList.addView(bookmarkView)
-        bookmarkViews.add(bookmarkView)
+        val deleteButton = TextView(context).apply {
+            text = "X"
+            textSize = 16f
+            setTextColor(Color.RED)
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(48, LayoutParams.MATCH_PARENT)
+
+            setOnClickListener {
+                handleDeleteBookmark(entry.id)
+            }
+        }
+
+        rowLayout.addView(urlView)
+        rowLayout.addView(deleteButton)
+
+        bookmarksList.addView(rowLayout)
+        bookmarkViews.add(rowLayout)
         Log.d(TAG, "Added bookmark view: ${entry.url}, isHome: ${entry.isHome}")
+    }
+
+    private fun handleDeleteBookmark(bookmarkId: String) {
+        bookmarkManager.deleteBookmark(bookmarkId)
+
+        var currentParent = parent
+        while (currentParent != null) {
+            if (currentParent is DualWebViewGroup) {
+                currentParent.refreshBothBookmarks()
+                return
+            }
+            currentParent = currentParent.parent
+        }
+
+        refreshBookmarks()
     }
 
 
@@ -451,6 +478,21 @@ class BookmarksView @JvmOverloads constructor(
                 val child = bookmarksList.getChildAt(i)
                 if (scrollX >= child.left && scrollX <= child.right &&
                     scrollY >= child.top && scrollY <= child.bottom) {
+
+                    if (child is LinearLayout && child.childCount > 1) {
+                        val deleteBtn = child.getChildAt(1)
+                        val childRelX = scrollX - child.left
+                        val childRelY = scrollY - child.top
+
+                        if (childRelX >= deleteBtn.left && childRelX <= deleteBtn.right &&
+                            childRelY >= deleteBtn.top && childRelY <= deleteBtn.bottom) {
+                            val bookmarkId = child.tag as? String
+                            if (bookmarkId != null) {
+                                handleDeleteBookmark(bookmarkId)
+                                return true
+                            }
+                        }
+                    }
 
                     currentSelection = i
                     updateAllSelections()
