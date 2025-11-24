@@ -759,7 +759,7 @@ class MainActivity : AppCompatActivity(),
                     handler.postDelayed({
                         synchronized(doubleTapLock) {
                             try {
-                                if (pendingDoubleTapAction && tapCount < 3) {
+                                if (pendingDoubleTapAction) {
                                     performDoubleTapBackNavigation()
                                 }
                             } finally {
