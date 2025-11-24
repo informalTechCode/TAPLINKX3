@@ -491,7 +491,9 @@ class MainActivity : AppCompatActivity(),
                 if (tapCount == 3 && (currentTime - firstTapTime) <= TRIPLE_TAP_TIMEOUT) {
                     Log.d("TripleClickMenuDebug", "Triple tap detected! Time from first tap: ${currentTime - firstTapTime}ms")
                     handler.removeCallbacksAndMessages(null)
-                    pendingDoubleTapAction = false
+                    synchronized(doubleTapLock) {
+                        pendingDoubleTapAction = false
+                    }
                     isTripleTapInProgress = true
 
                     // Reset translations to center the view
@@ -759,7 +761,7 @@ class MainActivity : AppCompatActivity(),
                     handler.postDelayed({
                         synchronized(doubleTapLock) {
                             try {
-                                if (pendingDoubleTapAction && tapCount < 3) {
+                                if (pendingDoubleTapAction) {
                                     performDoubleTapBackNavigation()
                                 }
                             } finally {
@@ -4093,15 +4095,6 @@ class MainActivity : AppCompatActivity(),
 
         // Keep JavaScript enabled and go back
         webView.goBack()
-
-        // After a short delay, verify we're at the right page
-        previousUrl?.let {
-            Handler(Looper.getMainLooper()).postDelayed({
-                if (webView.url != it) {
-                    webView.loadUrl(it)
-                }
-            }, 100)
-        }
 
         webView.invalidate()
         dualWebViewGroup.invalidate()
