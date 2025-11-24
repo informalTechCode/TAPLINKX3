@@ -299,7 +299,11 @@ class BookmarksView @JvmOverloads constructor(
         rowLayout.addView(deleteButton)
 
         bookmarksList.addView(rowLayout)
-        bookmarkViews.add(rowLayout)
+
+        // Add both views to bookmarkViews for separate selection
+        bookmarkViews.add(urlView)
+        bookmarkViews.add(deleteButton)
+
         Log.d(TAG, "Added bookmark view: ${entry.url}, isHome: ${entry.isHome}")
     }
 
@@ -413,24 +417,21 @@ class BookmarksView @JvmOverloads constructor(
     }
 
     private fun updateSelectionBackground(view: View, isSelected: Boolean) {
-        view.apply {
-            layoutParams = LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                48  // Fixed height for each item
-            ).apply {
-                setMargins(4, 4, 4, 4)
-            }
+        val paddingLeft = view.paddingLeft
+        val paddingTop = view.paddingTop
+        val paddingRight = view.paddingRight
+        val paddingBottom = view.paddingBottom
 
-            background = GradientDrawable().apply {
-                setColor(if (isSelected) {
-                    Color.parseColor("#0066cc")
-                } else {
-                    Color.parseColor("#303030")
-                })
-                cornerRadius = 4f
-            }
-            setPadding(16, 12, 16, 12)
+        view.background = GradientDrawable().apply {
+            setColor(if (isSelected) {
+                Color.parseColor("#0066cc")
+            } else {
+                Color.parseColor("#303030")
+            })
+            cornerRadius = 4f
         }
+
+        view.setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom)
     }
 
 
@@ -474,8 +475,14 @@ class BookmarksView @JvmOverloads constructor(
             val scrollX = localX - scrollContainer.left
             val scrollY = localY - scrollContainer.top + scrollContainer.scrollY
 
+            var bookmarkViewIndex = 0
+
             for (i in 0 until bookmarksList.childCount) {
                 val child = bookmarksList.getChildAt(i)
+
+                // Determine how many items this child represents in bookmarkViews
+                val itemsInThisChild = if (child is LinearLayout) 2 else 1
+
                 if (scrollX >= child.left && scrollX <= child.right &&
                     scrollY >= child.top && scrollY <= child.bottom) {
 
@@ -486,18 +493,22 @@ class BookmarksView @JvmOverloads constructor(
 
                         if (childRelX >= deleteBtn.left && childRelX <= deleteBtn.right &&
                             childRelY >= deleteBtn.top && childRelY <= deleteBtn.bottom) {
-                            val bookmarkId = child.tag as? String
-                            if (bookmarkId != null) {
-                                handleDeleteBookmark(bookmarkId)
-                                return true
-                            }
+                             // Hit delete button
+                             currentSelection = bookmarkViewIndex + 1
+                        } else {
+                             // Hit URL part (or anywhere else in row)
+                             currentSelection = bookmarkViewIndex
                         }
+                    } else {
+                        // Special button or other view
+                        currentSelection = bookmarkViewIndex
                     }
 
-                    currentSelection = i
                     updateAllSelections()
                     return handleTap()
                 }
+
+                bookmarkViewIndex += itemsInThisChild
             }
         }
         return false
@@ -590,49 +601,50 @@ class BookmarksView @JvmOverloads constructor(
 
     fun handleTap(): Boolean {
         val bookmarks = bookmarkManager.getBookmarks()
+        val totalBookmarksItems = bookmarks.size * 2
+
         Log.d(TAG, """
         Tap Debug:
         Current Selection: $currentSelection
         Total Bookmarks: ${bookmarks.size}
-        Bookmark List: ${bookmarks.map { it.url }}
+        Total Bookmark Items: $totalBookmarksItems
         Bookmark Views Size: ${bookmarkViews.size}
-        ---
-        Visual Layout:
-        0: Home
-        ${bookmarks.drop(1).mapIndexed { i, b -> "${i+1}: ${b.url}" }.joinToString("\n")}
-        ${bookmarks.size}: +
-        ${bookmarks.size + 1}: Close
-        ---
-        Attempting action for selection: $currentSelection
-    """.trimIndent())
+        """)
 
-        return when (currentSelection) {
-            in bookmarks.indices -> {
-                val selectedUrl = bookmarks[currentSelection].url
-                Log.d(TAG, "Loading URL from bookmark: $selectedUrl")
-                bookmarkListener?.let { listener ->
-                    listener.onBookmarkSelected(selectedUrl)
-                    Log.d(TAG, "Bookmark listener called successfully")
-                } ?: Log.e(TAG, "Bookmark listener is null!")
-                visibility = View.GONE
-                true
+        if (currentSelection < totalBookmarksItems) {
+            val bookmarkIndex = currentSelection / 2
+            val isDelete = (currentSelection % 2) == 1
+
+            if (bookmarkIndex in bookmarks.indices) {
+                val bookmark = bookmarks[bookmarkIndex]
+                if (isDelete) {
+                    Log.d(TAG, "Deleting bookmark: ${bookmark.url}")
+                    handleDeleteBookmark(bookmark.id)
+                    return true
+                } else {
+                    Log.d(TAG, "Loading URL from bookmark: ${bookmark.url}")
+                    bookmarkListener?.onBookmarkSelected(bookmark.url)
+                    visibility = View.GONE
+                    return true
+                }
             }
-            bookmarks.size -> {
-                Log.d(TAG, "New bookmark at index $currentSelection")
+        } else {
+            // Special buttons
+            val specialIndex = currentSelection - totalBookmarksItems
+            if (specialIndex == 0) {
+                Log.d(TAG, "New bookmark")
                 startEditWithId("NEW_BOOKMARK", bookmarkListener?.getCurrentUrl() ?: "")
                 keyboardListener?.onShowKeyboardForNew()
-                true
-            }
-            bookmarks.size + 1 -> {
-                Log.d(TAG, "Close at index $currentSelection")
+                return true
+            } else if (specialIndex == 1) {
+                Log.d(TAG, "Close")
                 visibility = View.GONE
-                true
-            }
-            else -> {
-                Log.e(TAG, "Invalid selection index: $currentSelection")
-                false
+                return true
             }
         }
+
+        Log.e(TAG, "Invalid selection index: $currentSelection")
+        return false
     }
 
     fun toggle() {
