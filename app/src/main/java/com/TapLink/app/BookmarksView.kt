@@ -75,6 +75,21 @@ class BookmarkManager(private val context: Context) {
         saveBookmarks()
     }
 
+    fun setAsHome(id: String) {
+        val index = bookmarks.indexOfFirst { it.id == id }
+        if (index != -1) {
+            // Update flags
+            bookmarks.forEach { it.isHome = false }
+
+            // Move to top
+            val entry = bookmarks.removeAt(index)
+            entry.isHome = true
+            bookmarks.add(0, entry)
+
+            saveBookmarks()
+        }
+    }
+
     private fun loadBookmarks() {
         val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val bookmarksJson = prefs.getString(keyBookmarks, null)
@@ -129,6 +144,9 @@ class BookmarksView @JvmOverloads constructor(
         private const val TAG = "BookmarksView"
     }
 
+    private enum class ActionType { OPEN, DELETE, SET_HOME, NEW, CLOSE }
+    private data class ViewAction(val type: ActionType, val id: String? = null, val url: String? = null)
+
     private val bookmarkManager = BookmarkManager(context)
     private val bookmarksList = LinearLayout(context)
     private var currentSelection = -1
@@ -151,7 +169,7 @@ class BookmarksView @JvmOverloads constructor(
     private var bookmarkListener: BookmarkListener? = null
     private var keyboardListener: BookmarkKeyboardListener? = null
 
-    private val bookmarkViews = mutableListOf<TextView>()
+    private val bookmarkViews = mutableListOf<View>()
 
     private val scrollContainer = ScrollView(context)
 
@@ -254,41 +272,100 @@ class BookmarksView @JvmOverloads constructor(
 
 
     private fun addBookmarkView(entry: BookmarkEntry) {
-        val bookmarkView = TextView(context).apply {
-            // Set explicit text appearance
-            text = entry.url
-            textSize = 16f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(16, 12, 16, 12)
-
-            // Set fixed height and margins
-            layoutParams = LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                48
-            ).apply {
+        val rowLayout = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 48).apply {
                 setMargins(4, 4, 4, 4)
             }
+            gravity = Gravity.CENTER_VERTICAL
+            tag = entry.id
 
             // Set initial background
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#303030"))
                 cornerRadius = 4f
             }
+        }
 
-            // Set home icon if needed
-            if (entry.isHome) {
-                setCompoundDrawablesWithIntrinsicBounds(
-                    R.drawable.ic_home, 0, 0, 0
-                )
-                compoundDrawablePadding = 16
+        // Home/Set Home Button
+        val homeButton = TextView(context).apply {
+            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_home, 0, 0, 0)
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(48, LayoutParams.MATCH_PARENT)
+            tag = ViewAction(ActionType.SET_HOME, entry.id, entry.url)
+
+            // Visual indication if it is already home
+            alpha = if (entry.isHome) 1.0f else 0.5f
+
+            setOnClickListener {
+                handleSetAsHome(entry.id)
             }
         }
 
-        // Add to lists and update
-        bookmarksList.addView(bookmarkView)
-        bookmarkViews.add(bookmarkView)
+        val urlView = TextView(context).apply {
+            text = entry.url
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(16, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
+            tag = ViewAction(ActionType.OPEN, entry.id, entry.url)
+        }
+
+        rowLayout.addView(homeButton)
+        rowLayout.addView(urlView)
+        bookmarkViews.add(homeButton)
+        bookmarkViews.add(urlView)
+
+        // Only add delete button if not home
+        if (!entry.isHome) {
+            val deleteButton = TextView(context).apply {
+                text = "X"
+                textSize = 16f
+                setTextColor(Color.RED)
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(48, LayoutParams.MATCH_PARENT)
+                tag = ViewAction(ActionType.DELETE, entry.id)
+
+                setOnClickListener {
+                    handleDeleteBookmark(entry.id)
+                }
+            }
+            rowLayout.addView(deleteButton)
+            bookmarkViews.add(deleteButton)
+        }
+
+        bookmarksList.addView(rowLayout)
         Log.d(TAG, "Added bookmark view: ${entry.url}, isHome: ${entry.isHome}")
+    }
+
+    private fun handleSetAsHome(bookmarkId: String) {
+        bookmarkManager.setAsHome(bookmarkId)
+
+        var currentParent = parent
+        while (currentParent != null) {
+            if (currentParent is DualWebViewGroup) {
+                currentParent.refreshBothBookmarks()
+                return
+            }
+            currentParent = currentParent.parent
+        }
+        refreshBookmarks()
+    }
+
+    private fun handleDeleteBookmark(bookmarkId: String) {
+        bookmarkManager.deleteBookmark(bookmarkId)
+
+        var currentParent = parent
+        while (currentParent != null) {
+            if (currentParent is DualWebViewGroup) {
+                currentParent.refreshBothBookmarks()
+                return
+            }
+            currentParent = currentParent.parent
+        }
+
+        refreshBookmarks()
     }
 
 
@@ -374,6 +451,12 @@ class BookmarksView @JvmOverloads constructor(
                 setMargins(4, 4, 4, 4)
             }
 
+            tag = if (text == "+") {
+                ViewAction(ActionType.NEW)
+            } else {
+                ViewAction(ActionType.CLOSE)
+            }
+
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#303030"))
                 cornerRadius = 4f
@@ -386,24 +469,21 @@ class BookmarksView @JvmOverloads constructor(
     }
 
     private fun updateSelectionBackground(view: View, isSelected: Boolean) {
-        view.apply {
-            layoutParams = LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                48  // Fixed height for each item
-            ).apply {
-                setMargins(4, 4, 4, 4)
-            }
+        val paddingLeft = view.paddingLeft
+        val paddingTop = view.paddingTop
+        val paddingRight = view.paddingRight
+        val paddingBottom = view.paddingBottom
 
-            background = GradientDrawable().apply {
-                setColor(if (isSelected) {
-                    Color.parseColor("#0066cc")
-                } else {
-                    Color.parseColor("#303030")
-                })
-                cornerRadius = 4f
-            }
-            setPadding(16, 12, 16, 12)
+        view.background = GradientDrawable().apply {
+            setColor(if (isSelected) {
+                Color.parseColor("#0066cc")
+            } else {
+                Color.parseColor("#303030")
+            })
+            cornerRadius = 4f
         }
+
+        view.setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom)
     }
 
 
@@ -449,12 +529,39 @@ class BookmarksView @JvmOverloads constructor(
 
             for (i in 0 until bookmarksList.childCount) {
                 val child = bookmarksList.getChildAt(i)
+
                 if (scrollX >= child.left && scrollX <= child.right &&
                     scrollY >= child.top && scrollY <= child.bottom) {
 
-                    currentSelection = i
-                    updateAllSelections()
-                    return handleTap()
+                    // Found the row. Now find which specific view inside was clicked.
+                    if (child is LinearLayout) {
+                        val childRelX = scrollX - child.left
+                        val childRelY = scrollY - child.top
+
+                        // Check each child of the row
+                        for (j in 0 until child.childCount) {
+                            val innerView = child.getChildAt(j)
+                            if (childRelX >= innerView.left && childRelX <= innerView.right &&
+                                childRelY >= innerView.top && childRelY <= innerView.bottom) {
+
+                                // Found the exact view. Find it in bookmarkViews list.
+                                val index = bookmarkViews.indexOf(innerView)
+                                if (index != -1) {
+                                    currentSelection = index
+                                    updateAllSelections()
+                                    return handleTap()
+                                }
+                            }
+                        }
+                    } else {
+                        // Special button
+                        val index = bookmarkViews.indexOf(child)
+                        if (index != -1) {
+                            currentSelection = index
+                            updateAllSelections()
+                            return handleTap()
+                        }
+                    }
                 }
             }
         }
@@ -547,48 +654,43 @@ class BookmarksView @JvmOverloads constructor(
     }
 
     fun handleTap(): Boolean {
-        val bookmarks = bookmarkManager.getBookmarks()
-        Log.d(TAG, """
-        Tap Debug:
-        Current Selection: $currentSelection
-        Total Bookmarks: ${bookmarks.size}
-        Bookmark List: ${bookmarks.map { it.url }}
-        Bookmark Views Size: ${bookmarkViews.size}
-        ---
-        Visual Layout:
-        0: Home
-        ${bookmarks.drop(1).mapIndexed { i, b -> "${i+1}: ${b.url}" }.joinToString("\n")}
-        ${bookmarks.size}: +
-        ${bookmarks.size + 1}: Close
-        ---
-        Attempting action for selection: $currentSelection
-    """.trimIndent())
+        if (currentSelection !in bookmarkViews.indices) {
+            Log.e(TAG, "Invalid selection index: $currentSelection")
+            return false
+        }
 
-        return when (currentSelection) {
-            in bookmarks.indices -> {
-                val selectedUrl = bookmarks[currentSelection].url
-                Log.d(TAG, "Loading URL from bookmark: $selectedUrl")
-                bookmarkListener?.let { listener ->
-                    listener.onBookmarkSelected(selectedUrl)
-                    Log.d(TAG, "Bookmark listener called successfully")
-                } ?: Log.e(TAG, "Bookmark listener is null!")
+        val view = bookmarkViews[currentSelection]
+        val action = view.tag as? ViewAction
+
+        if (action == null) {
+            Log.e(TAG, "No action tag found for view at $currentSelection")
+            return false
+        }
+
+        Log.d(TAG, "Handling tap for action: $action")
+
+        return when (action.type) {
+            ActionType.SET_HOME -> {
+                action.id?.let { handleSetAsHome(it) }
+                true
+            }
+            ActionType.OPEN -> {
+                action.url?.let { bookmarkListener?.onBookmarkSelected(it) }
                 visibility = View.GONE
                 true
             }
-            bookmarks.size -> {
-                Log.d(TAG, "New bookmark at index $currentSelection")
+            ActionType.DELETE -> {
+                action.id?.let { handleDeleteBookmark(it) }
+                true
+            }
+            ActionType.NEW -> {
                 startEditWithId("NEW_BOOKMARK", bookmarkListener?.getCurrentUrl() ?: "")
                 keyboardListener?.onShowKeyboardForNew()
                 true
             }
-            bookmarks.size + 1 -> {
-                Log.d(TAG, "Close at index $currentSelection")
+            ActionType.CLOSE -> {
                 visibility = View.GONE
                 true
-            }
-            else -> {
-                Log.e(TAG, "Invalid selection index: $currentSelection")
-                false
             }
         }
     }
