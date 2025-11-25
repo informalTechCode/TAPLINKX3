@@ -11,6 +11,15 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
 - **Navigation and triple-click overlays** supplying quick actions, bookmarking, and anchor toggles.
 - **Persistent bookmarks** managed through `BookmarksView` with storage handled by `BookmarkManager`.
 
+## Useful Features
+
+- **Anchored Mode (3DoF)**: Clicking the anchor icon toggles anchored mode on and off. Anchored mode provides 3 degrees of freedom.
+- **Temple Gestures (Anchored Mode)**:
+  - **Double Tap (Right Temple)**: Go back.
+  - **Triple Tap (Right Temple)**: Re-center the display.
+- **Screen Drift**: If you run into a screen drift issue, reboot the glasses.
+- **Brightness Limitation**: Due to a RayNeo limitation, we do not recommend running the glasses at max brightness while using TapLink X3.
+
 ## Documentation
 
 - [Setup and Build](docs/SETUP.md) - Instructions for environment setup, building, and installing.
