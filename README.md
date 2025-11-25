@@ -8,7 +8,6 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
 
 - **Dual-eye rendering** that mirrors a single `WebView` into a left-eye clip with a cursor and a right-eye `SurfaceView` preview.
 - **Custom keyboard** with anchored and focus-driven modes, supporting casing toggles, symbol layouts, and dynamic buttons.
-- **Navigation and triple-click overlays** supplying quick actions, bookmarking, and anchor toggles.
 - **Persistent bookmarks** managed through `BookmarksView` with storage handled by `BookmarkManager`.
 
 ## Useful Features
