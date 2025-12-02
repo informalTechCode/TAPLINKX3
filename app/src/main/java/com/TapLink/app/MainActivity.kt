@@ -69,7 +69,6 @@ import kotlin.math.atan2
 import com.ffalconxr.mercury.ipc.Launcher
 import com.ffalconxr.mercury.ipc.helpers.RingIPCHelper
 import com.ffalcon.mercury.android.sdk.util.DeviceUtil
-import com.ffalcon.mercury.android.sdk.touch.FilterMode // ok if unused when not on X3
 import androidx.core.content.edit
 
 
@@ -136,8 +135,6 @@ class MainActivity : AppCompatActivity(),
     private var lastCursorX = 320f
     private var lastCursorY = 240f
 
-    private val PERMISSION_REQUEST_CODE = 123  // Any number can be used here
-    private val AUDIO_PERMISSION_CODE = 123
     private val CAMERA_REQUEST_CODE = 1001
     private val CAMERA_PERMISSION_CODE = 100
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
@@ -175,9 +172,6 @@ class MainActivity : AppCompatActivity(),
     private var originalWebViewHeight = 0
 
 
-    private var isHorizontalScroll = false
-
-    private var isProcessingTap = false
 
     private val prefsName = "BrowserPrefs"
     private val keyLastUrl = "last_url"
@@ -792,51 +786,6 @@ class MainActivity : AppCompatActivity(),
 
                 onNavigationBackPressed()
             }
-            private var continuousScrollRunnable: Runnable? = null
-
-            private fun stopContinuousScroll() {
-                continuousScrollRunnable?.let { handler.removeCallbacks(it) }
-                continuousScrollRunnable = null
-            }
-
-            private fun startContinuousScroll(initialVelocity: Float, isVertical: Boolean) {
-                // Tune these to taste
-                var velocity = initialVelocity
-                val friction = 0.90f        // lower = longer glide
-                val minVelocity = 18f       // cutoff
-                val gain = 0.020f           // scales velocity to pixels per frame
-
-                continuousScrollRunnable = object : Runnable {
-                    override fun run() {
-                        if (kotlin.math.abs(velocity) < minVelocity) {
-                            continuousScrollRunnable = null
-                            return
-                        }
-
-                        val delta = (velocity * gain)
-                        if (isVertical) {
-                            // positive delta → content moves down; we already sent -velocityY on start for UP
-                            webView.scrollBy(0, delta.toInt())
-                        } else {
-                            webView.scrollBy(delta.toInt(), 0)
-                        }
-
-                        velocity *= friction
-                        handler.postDelayed(this, 16) // ~60fps
-                    }
-                }
-                handler.post(continuousScrollRunnable!!)
-            }
-            private fun nudgeCursor(dx: Float, dy: Float) {
-                // Move the cursor one step with no inertia.
-                // Reuse your existing runnable, but don't spin—just a single tick.
-                currentVelocityX = dx
-                currentVelocityY = dy
-                handler.post(updateCursorRunnable)
-                // Zero out so it stops after the single update
-                currentVelocityX = 0f
-                currentVelocityY = 0f
-            }
 
             override fun onFling(
                 e1: MotionEvent?,
@@ -852,12 +801,23 @@ class MainActivity : AppCompatActivity(),
         ringEnabled=$isRingSwitchEnabled ringConnected=$isRingConnected
     """.trimIndent())
                 val isX3 = com.ffalcon.mercury.android.sdk.util.DeviceUtil.isX3Device()
-                if (!isX3) {
-                    if (e2.device?.name?.contains(
-                            "Virtual",
-                            ignoreCase = true
-                        ) == true && isRingSwitchEnabled && !isAnchored
-                    ) {
+
+                if (isX3) {
+                    if (isAnchored) {
+                        // Combine horizontal and vertical velocities for Temple Gestures / Touchpad
+                        val effectiveVelocity = (velocityX * X_INVERT * H2V_GAIN) + (velocityY * Y_INVERT)
+                        dualWebViewGroup.handleAnchoredFling(effectiveVelocity)
+                        return true
+                    }
+                    return false
+                }
+
+                // Legacy path (!isX3)
+                if (e2.device?.name?.contains(
+                        "Virtual",
+                        ignoreCase = true
+                    ) == true && isRingSwitchEnabled && !isAnchored
+                ) {
                         Log.d("GestureDebug", "Ring fling → handleScroll($velocityX)")
                         handleScroll(velocityX)
                         return true
@@ -942,9 +902,6 @@ class MainActivity : AppCompatActivity(),
                     Log.d("GestureDebug", "Default legacy → handleScroll($velocityX)")
                     handleScroll(velocityX)
                     return true
-                } else {
-                    return false
-                }
             }
 
             // Update for smoother, responsive movement with looping
@@ -1174,8 +1131,6 @@ class MainActivity : AppCompatActivity(),
         }
 
         webView.setBackgroundColor(Color.BLACK)
-
-        isHorizontalScroll = false
         dualWebViewGroup.updateBrowsingMode(false)
 
 
@@ -1769,66 +1724,9 @@ class MainActivity : AppCompatActivity(),
         if (!isCursorVisible || isAnchored || (isRingConnected && isRingSwitchEnabled)) {
             val slowedVelocity = velocityX * 0.15
             Log.d("ScrollDebug", "in handleScroll")
-            // Only check for scrollable elements if we're in horizontal scroll mode
-            if (isHorizontalScroll) {
-                webView.evaluateJavascript("""
-            (function() {
-                // Find element at last cursor position before cursor was hidden
-                var element = document.elementFromPoint(${lastKnownWebViewX}, ${lastKnownWebViewY});
-                var scrollableParent = null;
-                
-                // Look for horizontally scrollable elements at or above the cursor position
-                while (element) {
-                    const style = window.getComputedStyle(element);
-                    const hasHorizontalScroll = (
-                        element.scrollWidth > element.clientWidth &&
-                        (style.overflowX === 'auto' || 
-                         style.overflowX === 'scroll' ||
-                         style.overflowY === 'auto' ||
-                         style.overflowY === 'scroll' ||
-                         element.classList.contains('scrollable') ||
-                         element.getAttribute('role') === 'slider' ||
-                         /carousel|slider|scroll/i.test(element.className))
-                    );
-                    
-                    if (hasHorizontalScroll) {
-                        scrollableParent = element;
-                        break;
-                    }
-                    element = element.parentElement;
-                }
-                
-                const scrollAmount = ${(-slowedVelocity).toInt()};
-                
-                if (scrollableParent) {
-                    // Scroll the scrollable container that was found
-                    scrollableParent.scrollBy({
-                        left: scrollAmount,
-                        behavior: 'smooth'
-                    });
-                    return true;
-                } else {
-                    // No scrollable element found - scroll the whole page horizontally
-                    window.scrollBy({
-                        left: scrollAmount,
-                        behavior: 'smooth'
-                    });
-                    return false;
-                }
-            })();
-            """) { result ->
-                    // If JavaScript returned false (no scrollable element found), use native scroll as backup
-                    if (result == "false") {
-                        try {
-                            webView.scrollBy((-slowedVelocity).toInt(), 0)
-                        } catch (e: Exception) {
-                            Log.e("ScrollDebug", "Native horizontal scroll failed", e)
-                        }
-                    }
-                }
-            } else {
-                // Enhanced vertical scroll handling
-                webView.evaluateJavascript(
+
+            // Enhanced vertical scroll handling
+            webView.evaluateJavascript(
                     """
             (function() {
                 // Force layout recalculation
@@ -1935,7 +1833,6 @@ class MainActivity : AppCompatActivity(),
                         }
                     }
                 }
-            }
         }
     }
 
@@ -3179,54 +3076,6 @@ class MainActivity : AppCompatActivity(),
 
     }
 
-    @Suppress("DEPRECATION")
-    private fun takePictureForSearch(webView: WebView?) {
-        if (checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            isCapturing = false
-            return
-        }
-
-        var camera: Camera? = null
-        var surfaceTexture: SurfaceTexture? = null
-
-        try {
-            camera = Camera.open()
-            Log.d("CameraTest", "Camera opened successfully")
-
-            val parameters = camera.getParameters()
-            parameters.setPictureSize(1280, 720)
-            camera.setParameters(parameters)
-
-            surfaceTexture = SurfaceTexture(0)
-            camera.setPreviewTexture(surfaceTexture)
-            camera.startPreview()
-
-            camera.takePicture(
-                { Log.d("CameraTest", "Shutter triggered") },
-                null,
-                { data, _ ->
-                    Log.d("CameraTest", "Picture taken, data size: ${data.size}")
-
-                    try {
-                        // Store image data and reload the page to trigger onPageFinished
-                        capturedImageData = data
-                        runOnUiThread {
-                            webView?.reload()
-                        }
-                    } finally {
-                        camera?.stopPreview()
-                        camera?.release()
-                        surfaceTexture?.release()
-                    }
-                }
-            )
-        } catch (e: Exception) {
-            Log.e("CameraTest", "Camera test failed", e)
-            camera?.release()
-            surfaceTexture?.release()
-            isCapturing = false
-        }
-    }
 
     private class WebAppInterface(private val activity: MainActivity) {
         @JavascriptInterface
@@ -3495,7 +3344,7 @@ class MainActivity : AppCompatActivity(),
             }
 
             if (permissionsToRequest.isNotEmpty()) {
-                requestPermissions(permissionsToRequest.toTypedArray(), PERMISSION_REQUEST_CODE)
+                requestPermissions(permissionsToRequest.toTypedArray(), PERMISSIONS_REQUEST_CODE)
             }
         }
     }

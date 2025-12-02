@@ -125,11 +125,6 @@ interface BookmarkKeyboardListener {
     fun onShowKeyboardForNew()
 }
 
-interface BookmarkStateListener {
-    fun onSelectionChanged(position: Int)
-    fun onVisibilityChanged(isVisible: Boolean)
-    fun onEditModeChanged(isEditing: Boolean, text: String?)
-}
 
 
 
@@ -163,8 +158,6 @@ class BookmarksView @JvmOverloads constructor(
         }
         updateAllSelections()
     }
-
-    private var stateListener: BookmarkStateListener? = null
 
     private var bookmarkListener: BookmarkListener? = null
     private var keyboardListener: BookmarkKeyboardListener? = null
@@ -430,8 +423,6 @@ class BookmarksView @JvmOverloads constructor(
             calculateAndSetScroll()
         }
 
-        // Notify listeners
-        stateListener?.onSelectionChanged(currentSelection)
     }
 
 
@@ -583,6 +574,12 @@ class BookmarksView @JvmOverloads constructor(
             // Use scrollBy instead of smoothScrollBy for direct tracking
             scrollContainer.scrollBy(0, scrollPixels)
         }
+    }
+
+    // Anchored mode: handle fling
+    fun handleAnchoredFling(velocity: Float) {
+        if (!isAnchoredMode) return
+        scrollContainer.fling(-velocity.toInt())
     }
 
     // Non-anchored mode: drag handling (similar to CustomKeyboardView)
@@ -839,7 +836,6 @@ class BookmarksView @JvmOverloads constructor(
         if (visibility == View.GONE) {
             currentSelection = 0  // Reset to home when hiding
         }
-        stateListener?.onVisibilityChanged(visibility == View.VISIBLE)
     }
 
     fun onEnterPressed() {
