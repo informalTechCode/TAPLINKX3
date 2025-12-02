@@ -2388,6 +2388,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         if (localX < toggleBarWidth) {
             // Special handling for zoom buttons (add this section)
             if (y >= 3*buttonHeight && y < 4*buttonHeight) {  // Y-range for zoom buttons (adjust range as needed)
+                keyboardListener?.onHideKeyboard()
                 if (localX < smallButtonWidth) {
                     // Zoom out button
                     leftToggleBar.findViewById<ImageButton>(R.id.btnZoomOut)?.let { button ->
@@ -2415,6 +2416,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
             // Special handling for left/right scroll buttons
             if (y >= 5*buttonHeight && y < 6*buttonHeight) {  // Y-range for horizontal scroll buttons
+                keyboardListener?.onHideKeyboard()
                 if (localX < smallButtonWidth) {
                     // Left scroll button
                     leftToggleBar.findViewById<ImageButton>(R.id.btnScrollLeft)?.let { button ->
@@ -2496,6 +2498,9 @@ class DualWebViewGroup @JvmOverloads constructor(
             // Handle regular button clicks
             toggleButtons.forEach { (range, buttonInfo) ->
                 if (y in range) {
+                    if (buttonInfo.id != R.id.btnAnchor) {
+                        keyboardListener?.onHideKeyboard()
+                    }
                     leftToggleBar.findViewById<ImageButton>(buttonInfo.id)?.let { button ->
                         buttonInfo.clickHandler(button)
                     }
@@ -2505,6 +2510,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         if (y >= height - 48) {
+            keyboardListener?.onHideKeyboard()
             Log.d("AnchoredTouchDebug","handling navigation click")
                     navButtons.entries.find { it.value.isHovered }?.let { (key, button) ->
                         showButtonClickFeedback(button.left)
