@@ -7,8 +7,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.graphics.SurfaceTexture
-import android.hardware.Camera
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -90,10 +88,6 @@ interface LinkEditingListener {
     fun onSendClearInLink()
     fun isLinkEditing(): Boolean
 }
-
-private enum class MenuAxisLock { H, V }
-private var menuAxisLock: MenuAxisLock? = null
-private val MENU_AXIS_THRESHOLD = 6f  // tweak sensitivity
 
 class MainActivity : AppCompatActivity(),
     DualWebViewGroup.DualWebViewGroupListener,
