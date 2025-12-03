@@ -184,6 +184,7 @@
             android:id="@+id/btn_clear"
             style="@style/KeyboardButton"
             android:text="Clear"
+            android:textSize="12sp"
             android:layout_weight="1"/>
 
         <!-- Caps key -->
