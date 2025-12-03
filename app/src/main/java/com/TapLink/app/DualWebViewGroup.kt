@@ -52,7 +52,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private val webView: WebView = WebView(context)
     private val rightEyeView: SurfaceView = SurfaceView(context)
-    private val cursor: View = View(context)  // Single cursor for left eye that gets mirrored
     val keyboardContainer: FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.TRANSPARENT)
         setBackgroundColor(Color.TRANSPARENT)
@@ -60,6 +59,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var customKeyboard: CustomKeyboardView? = null
     private var bitmap: Bitmap? = null
 
+    private var velocityTracker: android.view.VelocityTracker? = null
     private val refreshHandler = Handler(Looper.getMainLooper())
     private val refreshInterval = 8L // Adjust as needed
     private var lastCaptureTime = 0L
@@ -86,7 +86,6 @@ class DualWebViewGroup @JvmOverloads constructor(
     private val ANCHORED_TOUCH_SLOP = 10f
 
     lateinit var leftToggleBar: View
-    private var isHorizontalScroll = false
 
     @Volatile private var isRefreshing = false
     private val refreshLock = Object()
@@ -374,14 +373,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
 
-        // Configure cursors with initial GONE visibility
-        cursor.apply {
-            isClickable = false
-            layoutParams = LayoutParams(20, 20)
-            setBackgroundColor(Color.RED)
-            visibility = View.GONE
-        }
-
         // Initialize keyboard containers
         keyboardContainer.apply {
             visibility = View.GONE
@@ -469,7 +460,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         //addView(webView)
         //addView(leftToggleBar)
         //addView(leftNavigationBar)
-        addView(cursor)
 
 
 
@@ -710,7 +700,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         maskOverlay.visibility = View.VISIBLE
         maskOverlay.bringToFront()
         // Hide both cursor views
-        cursor.visibility = View.GONE
         leftToggleBar.findViewById<ImageButton>(R.id.btnMask)?.setImageResource(R.drawable.ic_visibility_off)
     }
 
@@ -734,18 +723,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
     }
 
-    private inner class CustomCursorView(context: Context) : View(context) {
-        private val cursorPaint = Paint().apply {
-            color = Color.WHITE
-            strokeWidth = 2f
-            style = Paint.Style.FILL
-        }
-
-        override fun onDraw(canvas: Canvas) {
-            super.onDraw(canvas)
-            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), cursorPaint)
-        }
-    }
 
 
 
@@ -1777,6 +1754,12 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         if (isAnchored) {
+            // Track velocity for anchored interactions (bookmarks scroll, etc.)
+            if (velocityTracker == null) {
+                velocityTracker = android.view.VelocityTracker.obtain()
+            }
+            velocityTracker?.addMovement(event)
+
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     if (anchoredGestureActive) return true
@@ -1809,39 +1792,51 @@ class DualWebViewGroup @JvmOverloads constructor(
                     val wasTracking = anchoredGestureActive
                     anchoredGestureActive = false
 
-                    if (wasTracking && !isAnchoredDrag) {
-                        val (cursorX, cursorY) = getCursorInContainerCoords()
+                    if (wasTracking) {
+                        if (!isAnchoredDrag) {
+                            val (cursorX, cursorY) = getCursorInContainerCoords()
 
-                        // Dispatch tap based on target determined at ACTION_DOWN
-                        when (anchoredTarget) {
-                            1 -> { // Keyboard
-                                val localCoords = computeAnchoredKeyboardCoordinates()
-                                localCoords?.let { (lx, ly) ->
-                                    Log.d("TouchDebug", "Dispatching anchored tap to keyboard at ($lx, $ly)")
-                                    customKeyboard?.handleAnchoredTap(lx, ly)
+                            // Dispatch tap based on target determined at ACTION_DOWN
+                            when (anchoredTarget) {
+                                1 -> { // Keyboard
+                                    val localCoords = computeAnchoredKeyboardCoordinates()
+                                    localCoords?.let { (lx, ly) ->
+                                        Log.d("TouchDebug", "Dispatching anchored tap to keyboard at ($lx, $ly)")
+                                        customKeyboard?.handleAnchoredTap(lx, ly)
+                                    }
                                 }
-                            }
-                            2 -> { // Bookmarks
-                                if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
-                                    Log.d("TouchDebug", "Dispatching anchored tap to bookmarks")
-                                    leftBookmarksView.handleAnchoredTap(cursorX - leftBookmarksView.left, cursorY - leftBookmarksView.top)
+                                2 -> { // Bookmarks
+                                    if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
+                                        Log.d("TouchDebug", "Dispatching anchored tap to bookmarks")
+                                        leftBookmarksView.handleAnchoredTap(cursorX - leftBookmarksView.left, cursorY - leftBookmarksView.top)
+                                    }
                                 }
-                            }
-                            3 -> { // Menu
-                                tripleClickMenu?.let { menu ->
-                                    if (menu.visibility == View.VISIBLE) {
-                                        Log.d("TouchDebug", "Dispatching anchored tap to menu")
-                                        menu.handleAnchoredTap(cursorX - menu.left, cursorY - menu.top)
+                                3 -> { // Menu
+                                    tripleClickMenu?.let { menu ->
+                                        if (menu.visibility == View.VISIBLE) {
+                                            Log.d("TouchDebug", "Dispatching anchored tap to menu")
+                                            menu.handleAnchoredTap(cursorX - menu.left, cursorY - menu.top)
+                                        }
                                     }
                                 }
                             }
+                        } else if (anchoredTarget == 2) {
+                            // Anchored Fling for Bookmarks
+                            velocityTracker?.computeCurrentVelocity(1000)
+                            val velocityY = velocityTracker?.yVelocity ?: 0f
+                            // Pass raw velocityY.
+                            handleAnchoredFling(velocityY)
                         }
                     }
 
                     anchoredTarget = 0
+                    velocityTracker?.recycle()
+                    velocityTracker = null
                     if (wasTracking) return true
                 }
                 MotionEvent.ACTION_CANCEL -> {
+                    velocityTracker?.recycle()
+                    velocityTracker = null
                     if (anchoredGestureActive) {
                         anchoredGestureActive = false
                         anchoredTarget = 0
@@ -2393,6 +2388,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         if (localX < toggleBarWidth) {
             // Special handling for zoom buttons (add this section)
             if (y >= 3*buttonHeight && y < 4*buttonHeight) {  // Y-range for zoom buttons (adjust range as needed)
+                keyboardListener?.onHideKeyboard()
                 if (localX < smallButtonWidth) {
                     // Zoom out button
                     leftToggleBar.findViewById<ImageButton>(R.id.btnZoomOut)?.let { button ->
@@ -2420,6 +2416,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
             // Special handling for left/right scroll buttons
             if (y >= 5*buttonHeight && y < 6*buttonHeight) {  // Y-range for horizontal scroll buttons
+                keyboardListener?.onHideKeyboard()
                 if (localX < smallButtonWidth) {
                     // Left scroll button
                     leftToggleBar.findViewById<ImageButton>(R.id.btnScrollLeft)?.let { button ->
@@ -2501,6 +2498,9 @@ class DualWebViewGroup @JvmOverloads constructor(
             // Handle regular button clicks
             toggleButtons.forEach { (range, buttonInfo) ->
                 if (y in range) {
+                    if (buttonInfo.id != R.id.btnAnchor) {
+                        keyboardListener?.onHideKeyboard()
+                    }
                     leftToggleBar.findViewById<ImageButton>(buttonInfo.id)?.let { button ->
                         buttonInfo.clickHandler(button)
                     }
@@ -2510,6 +2510,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         if (y >= height - 48) {
+            keyboardListener?.onHideKeyboard()
             Log.d("AnchoredTouchDebug","handling navigation click")
                     navButtons.entries.find { it.value.isHovered }?.let { (key, button) ->
                         showButtonClickFeedback(button.left)
@@ -2711,11 +2712,20 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
 
+    fun handleAnchoredFling(velocity: Float) {
+        if (isBookmarksExpanded()) {
+            leftBookmarksView.handleAnchoredFling(velocity)
+        } else {
+            // Forward to general handleFling which handles WebView scroll
+            handleFling(velocity)
+        }
+    }
+
     fun handleFling(velocityX: Float) {
         //Log.d("Fling Debug", "Fling handled by DualWebViewGroup")
 
-        // First check if bookmarks are visible
-        if (leftBookmarksView.visibility == View.VISIBLE) {
+        // First check if bookmarks are visible (Non-Anchored Mode legacy behavior)
+        if (leftBookmarksView.visibility == View.VISIBLE && !isAnchored) {
             //Log.d("DualWebViewGroup", "Delegating fling to bookmarks: velocity=$velocityX")
 
             // Determine direction based on velocity and delegate to both views
@@ -2736,46 +2746,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Slow down the velocity for smoother scrolling
         val slowedVelocity = velocityX * 0.15f
 
-        // Choose scroll behavior based on current mode
-        if (isHorizontalScroll) {
-            // Handle horizontal scrolling
-            webView.evaluateJavascript("""
-            (function() {
-                // First try to find any horizontally scrollable element at the current position
-                const elements = document.elementsFromPoint(window.innerWidth / 2, window.innerHeight / 2);
-                let scrolled = false;
-                
-                // Try to scroll each element that might be scrollable
-                for (const element of elements) {
-                    if (element.scrollWidth > element.clientWidth) {
-                        element.scrollBy({
-                            left: ${(-slowedVelocity).toInt()},
-                            behavior: 'smooth'
-                        });
-                        scrolled = true;
-                        break;
-                    }
-                }
-                
-                // If no scrollable element was found, scroll the whole page
-                if (!scrolled) {
-                    window.scrollBy({
-                        left: ${(-slowedVelocity).toInt()},
-                        behavior: 'smooth'
-                    });
-                }
-            })();
-        """, null)
-
-            // Provide a native scroll backup in case JavaScript fails
-            try {
-                webView.scrollBy((-slowedVelocity).toInt(), 0)
-            } catch (e: Exception) {
-                Log.e("ScrollDebug", "Native horizontal scroll failed", e)
-            }
-        } else {
-            // Handle vertical scrolling
-            webView.evaluateJavascript("""
+        // Handle vertical scrolling
+        webView.evaluateJavascript("""
             (function() {
                 window.scrollBy({
                     top: ${(-slowedVelocity).toInt()},
@@ -2784,12 +2756,11 @@ class DualWebViewGroup @JvmOverloads constructor(
             })();
         """, null)
 
-            // Provide a native scroll backup
-            try {
-                webView.scrollBy(0, (-slowedVelocity).toInt())
-            } catch (e: Exception) {
-                Log.e("ScrollDebug", "Native vertical scroll failed", e)
-            }
+        // Provide a native scroll backup
+        try {
+            webView.scrollBy(0, (-slowedVelocity).toInt())
+        } catch (e: Exception) {
+            Log.e("ScrollDebug", "Native vertical scroll failed", e)
         }
     }
 
