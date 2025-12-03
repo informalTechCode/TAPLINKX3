@@ -2084,6 +2084,86 @@ class DualWebViewGroup @JvmOverloads constructor(
         }, buttonFeedbackDuration)
     }
 
+    private fun handleLeftMenuAction(buttonId: Int) {
+        if (buttonId != R.id.btnAnchor) {
+            keyboardListener?.onHideKeyboard()
+        }
+
+        val button = leftToggleBar.findViewById<ImageButton>(buttonId)
+
+        when (buttonId) {
+            R.id.btnModeToggle -> {
+                button?.let { showButtonClickFeedback(it) }
+                isDesktopMode = !isDesktopMode
+                updateBrowsingMode(isDesktopMode)
+            }
+
+            R.id.btnYouTube -> {
+                button?.let { showButtonClickFeedback(it) }
+                loadARDashboard()
+            }
+
+            R.id.btnBookmarks -> {
+                button?.let { showButtonClickFeedback(it) }
+                toggleBookmarks()
+            }
+
+            R.id.btnZoomOut -> {
+                button?.let { showButtonClickFeedback(it) }
+                webView.evaluateJavascript(
+                    """
+                        (function() {
+                            document.body.style.zoom = (parseFloat(document.body.style.zoom || 1) * 0.9).toString();
+                        })();
+                    """,
+                    null
+                )
+            }
+
+            R.id.btnZoomIn -> {
+                button?.let { showButtonClickFeedback(it) }
+                webView.evaluateJavascript(
+                    """
+                        (function() {
+                            document.body.style.zoom = (parseFloat(document.body.style.zoom || 1) * 1.1).toString();
+                        })();
+                    """,
+                    null
+                )
+            }
+
+            R.id.btnScrollUp -> {
+                button?.let { showButtonClickFeedback(it) }
+                scrollViewportByFraction(-1)
+            }
+
+            R.id.btnScrollLeft -> {
+                button?.let { showButtonClickFeedback(it) }
+                webView.evaluateJavascript("window.scrollBy(-50, 0);", null)
+            }
+
+            R.id.btnScrollRight -> {
+                button?.let { showButtonClickFeedback(it) }
+                webView.evaluateJavascript("window.scrollBy(50, 0);", null)
+            }
+
+            R.id.btnScrollDown -> {
+                button?.let { showButtonClickFeedback(it) }
+                scrollViewportByFraction(1)
+            }
+
+            R.id.btnMask -> {
+                button?.let { showButtonClickFeedback(it) }
+                maskToggleListener?.onMaskTogglePressed()
+            }
+
+            R.id.btnAnchor -> {
+                button?.let { showButtonClickFeedback(it) }
+                anchorToggleListener?.onAnchorTogglePressed()
+            }
+        }
+    }
+
     fun hideBookmarkEditing() {
         isBookmarkEditing = false
         urlEditText.apply {
@@ -2388,48 +2468,25 @@ class DualWebViewGroup @JvmOverloads constructor(
         if (localX < toggleBarWidth) {
             // Special handling for zoom buttons (add this section)
             if (y >= 3*buttonHeight && y < 4*buttonHeight) {  // Y-range for zoom buttons (adjust range as needed)
-                keyboardListener?.onHideKeyboard()
                 if (localX < smallButtonWidth) {
                     // Zoom out button
-                    leftToggleBar.findViewById<ImageButton>(R.id.btnZoomOut)?.let { button ->
-                        showButtonClickFeedback(button)
-                        webView.evaluateJavascript("""
-                        (function() {
-                            document.body.style.zoom = (parseFloat(document.body.style.zoom || 1) * 0.9).toString();
-                        })();
-                    """, null)
-                    }
+                    handleLeftMenuAction(R.id.btnZoomOut)
                     return
                 } else if (localX < 2 * smallButtonWidth) {
                     // Zoom in button
-                    leftToggleBar.findViewById<ImageButton>(R.id.btnZoomIn)?.let { button ->
-
-                        showButtonClickFeedback(button)
-                        webView.evaluateJavascript("""
-                        (function() {
-                            document.body.style.zoom = (parseFloat(document.body.style.zoom || 1) * 1.1).toString();
-                        })();
-                    """, null)
-                    }
+                    handleLeftMenuAction(R.id.btnZoomIn)
                     return
                 }
             }
             // Special handling for left/right scroll buttons
             if (y >= 5*buttonHeight && y < 6*buttonHeight) {  // Y-range for horizontal scroll buttons
-                keyboardListener?.onHideKeyboard()
                 if (localX < smallButtonWidth) {
                     // Left scroll button
-                    leftToggleBar.findViewById<ImageButton>(R.id.btnScrollLeft)?.let { button ->
-                        showButtonClickFeedback(button)
-                        webView.evaluateJavascript("window.scrollBy(-50, 0);", null)
-                    }
+                    handleLeftMenuAction(R.id.btnScrollLeft)
                     return
                 } else if (localX < 2 * smallButtonWidth) {
                     // Right scroll button
-                    leftToggleBar.findViewById<ImageButton>(R.id.btnScrollRight)?.let { button ->
-                        showButtonClickFeedback(button)
-                        webView.evaluateJavascript("window.scrollBy(50, 0);", null)
-                    }
+                    handleLeftMenuAction(R.id.btnScrollRight)
                     return
                 }
             }
@@ -2445,62 +2502,36 @@ class DualWebViewGroup @JvmOverloads constructor(
                 0f..buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnModeToggle,
                     "ModeToggle"
-                ) { button ->
-                    showButtonClickFeedback(button)
-                    isDesktopMode = !isDesktopMode
-                    updateBrowsingMode(isDesktopMode)
-                },
+                ) { button -> handleLeftMenuAction(button.id) },
                 buttonHeight.toFloat()..2*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnYouTube,
                     "Dashboard"
-                ) { button ->
-                    showButtonClickFeedback(button)
-                    loadARDashboard()
-                },
+                ) { button -> handleLeftMenuAction(button.id) },
                 2*buttonHeight.toFloat()..3*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnBookmarks,
                     "Bookmarks"
-                ) { button ->
-                    showButtonClickFeedback(button)
-                    toggleBookmarks()
-                },
+                ) { button -> handleLeftMenuAction(button.id) },
                 4*buttonHeight.toFloat()..5*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnScrollUp,
                     "ScrollUp"
-                ) { button ->
-                    showButtonClickFeedback(button)
-                    scrollViewportByFraction(-1)
-                },
+                ) { button -> handleLeftMenuAction(button.id) },
                 6*buttonHeight.toFloat()..7*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnScrollDown,
                     "ScrollDown"
-                ) { button ->
-                    showButtonClickFeedback(button)
-                    Log.d("ScrollDebug", "Executing scroll down")
-                    scrollViewportByFraction(1)
-                },
+                ) { button -> handleLeftMenuAction(button.id) },
                 7*buttonHeight.toFloat()..8*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnMask,
                     "Mask"
-                ) { button ->
-                    showButtonClickFeedback(button)
-                    maskToggleListener?.onMaskTogglePressed()
-                },
+                ) { button -> handleLeftMenuAction(button.id) },
                 8*buttonHeight.toFloat()..9*buttonHeight.toFloat() to ToggleButtonInfo(
                     R.id.btnAnchor,
                     "Anchor"
-                ) { button ->
-                    showButtonClickFeedback(button)
-                    anchorToggleListener?.onAnchorTogglePressed()
-                }
+                ) { button -> handleLeftMenuAction(button.id) }
             )
 
             // Handle regular button clicks
             toggleButtons.forEach { (range, buttonInfo) ->
                 if (y in range) {
-                    if (buttonInfo.id != R.id.btnAnchor) {
-                        keyboardListener?.onHideKeyboard()
-                    }
                     leftToggleBar.findViewById<ImageButton>(buttonInfo.id)?.let { button ->
                         buttonInfo.clickHandler(button)
                     }
@@ -2950,6 +2981,22 @@ class DualWebViewGroup @JvmOverloads constructor(
             elevation = 4f
             alpha = 1f
             layout(left, anchorY, left + buttonWidth, anchorY + buttonHeight)
+        }
+
+        mapOf(
+            leftModeToggleButton to R.id.btnModeToggle,
+            leftDashboardButton to R.id.btnYouTube,
+            leftBookmarksButton to R.id.btnBookmarks,
+            leftZoomOutButton to R.id.btnZoomOut,
+            leftZoomInButton to R.id.btnZoomIn,
+            leftScrollUpButton to R.id.btnScrollUp,
+            leftScrollLeftButton to R.id.btnScrollLeft,
+            leftScrollRightButton to R.id.btnScrollRight,
+            leftScrollDownButton to R.id.btnScrollDown,
+            leftMaskButton to R.id.btnMask,
+            leftAnchorButton to R.id.btnAnchor
+        ).forEach { (button, id) ->
+            button?.setOnClickListener { handleLeftMenuAction(id) }
         }
 
 
