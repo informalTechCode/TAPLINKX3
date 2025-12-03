@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.TapLink.app"
+    namespace = "com.TapLinkX3.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.TapLink.app"
+        applicationId = "com.TapLinkX3.app"
         minSdk = 29
         targetSdk = 34
         versionCode = 2
@@ -27,7 +27,7 @@ android {
         }
 
         release {
-            resValue("string", "app_name", "TapLink")
+            resValue("string", "app_name", "TapLink X3")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

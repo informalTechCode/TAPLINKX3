@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TapLink"
+rootProject.name = "TapLinkX3"
 include(":app")
  

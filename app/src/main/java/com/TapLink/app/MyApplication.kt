@@ -1,4 +1,4 @@
-package com.TapLink.app
+package com.TapLinkX3.app
 
 import android.app.Application
 import com.ffalcon.mercury.android.sdk.MercurySDK

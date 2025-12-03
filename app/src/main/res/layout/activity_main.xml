@@ -6,7 +6,7 @@
     android:background="#000000"
     >
 
-    <com.TapLink.app.DualWebViewGroup
+    <com.TapLinkX3.app.DualWebViewGroup
         android:id="@+id/dualWebViewGroup"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
