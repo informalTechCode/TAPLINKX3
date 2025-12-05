@@ -160,6 +160,8 @@ class SystemInfoView @JvmOverloads constructor(
                     R.drawable.wifi_on
                 }
                 networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) == true ||
+                        networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true ||
+                        networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true ||
                         (hasVpnTransport && hasTunInterface) -> {
                     R.drawable.wifi_bluetooth
                 }
