@@ -47,6 +47,7 @@ import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceError
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -2816,7 +2817,7 @@ class MainActivity : AppCompatActivity(),
             isFocusableInTouchMode = true
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
             setBackgroundColor(Color.BLACK)
-            visibility = View.INVISIBLE
+            visibility = View.VISIBLE
 
             // Ensure WebView can receive input methods
 //          setOnTouchListener { v, event ->
@@ -2903,12 +2904,18 @@ class MainActivity : AppCompatActivity(),
 
                     if (url != null && !url.startsWith("about:blank")) {
                         lastValidUrl = url
-                        view?.visibility = View.INVISIBLE
                     } else if (url?.startsWith("about:blank") == true && lastValidUrl != null) {
                         // Cancel about:blank load immediately
                         view?.stopLoading()
                         view?.loadUrl(lastValidUrl!!)
                     }
+                }
+
+                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                    super.onReceivedError(view, request, error)
+                    Log.e("WebViewDebug", "Error loading ${request?.url}: ${error?.description}")
+                    // Ensure view is visible even on error
+                    view?.visibility = View.VISIBLE
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
