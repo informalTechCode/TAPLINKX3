@@ -70,7 +70,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private lateinit var leftSystemInfoView: SystemInfoView
 
     lateinit var leftNavigationBar: View
-    private val verticalBarSize = 480 - 48
+    private val verticalBarSize = 480 - 32
     private val nButtons    = 9
     private val buttonHeight = verticalBarSize / nButtons
     private val buttonFeedbackDuration = 200L
@@ -443,7 +443,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Initialize left toggle bar
         leftToggleBar = LayoutInflater.from(context).inflate(R.layout.toggle_bar, this, false).apply {
-            layoutParams = LayoutParams(48, 592)
+            layoutParams = LayoutParams(32, 592)
             setBackgroundColor(Color.parseColor("#202020"))
             visibility = View.VISIBLE
             clipToOutline = true  // Add this
@@ -609,8 +609,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftEyeUIContainer.apply {
             // Add views in the correct z-order
             // Add webView with correct position
-            addView(webView, FrameLayout.LayoutParams(640 - 48, LayoutParams.MATCH_PARENT).apply {
-                leftMargin = 48  // Position after toggle bar
+            addView(webView, FrameLayout.LayoutParams(640 - 32, LayoutParams.MATCH_PARENT).apply {
+                leftMargin = 32  // Position after toggle bar
             })
             addView(leftToggleBar)
             Log.d("ViewDebug", "Toggle bar added to UI container with hash: ${leftToggleBar.hashCode()}")
@@ -926,7 +926,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP
             ).apply {
-                leftMargin = 48  // Single margin for left side
+                leftMargin = 32  // Single margin for left side
             }
             setBackgroundColor(Color.parseColor("#202020"))
             setTextColor(Color.WHITE)
@@ -1182,7 +1182,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Ensure toggle bar visibility
         if (leftToggleBar.measuredWidth == 0 || leftToggleBar.measuredHeight == 0) {
             leftToggleBar.measure(
-                MeasureSpec.makeMeasureSpec(48, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(32, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(596, MeasureSpec.EXACTLY)
             )
             // Instead of directly calling layout, let's request layout
@@ -1198,7 +1198,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val width = r - l
         val height = b - t
         val halfWidth = width / 2
-        val toggleBarWidth = 48
+        val toggleBarWidth = 32
         val navBarHeight = 32
         val keyboardHeight = 220
         val keyboardWidth = halfWidth - toggleBarWidth
@@ -1213,7 +1213,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             )
         } else {
             webView.layout(
-                48,  // Account for toggle bar
+                32,  // Account for toggle bar
                 0,
                 640,  // Standard width + toggle bar offset
                 480
@@ -1281,7 +1281,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
                 val bookmarksHeight = leftBookmarksView.measuredHeight
                 val bookmarksY = if (isUrlEditing) {
-                    48  // Below URL edit field
+                    32  // Below URL edit field, reduced from 48
                 } else {
                     keyboardY - bookmarksHeight
                 }
@@ -1691,7 +1691,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val halfWidth = widthSize / 2
         val navBarHeight = 32
         val keyboardHeight = 240
-        val toggleBarWidth = 48
+        val toggleBarWidth = 32
         val keyboardWidth = halfWidth - toggleBarWidth
 
         val contentHeight = if (keyboardContainer.visibility == View.VISIBLE) {
@@ -1707,15 +1707,16 @@ class DualWebViewGroup @JvmOverloads constructor(
                 MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY)
             )
         } else {
+            // 640 - 32 = 608
             webView.measure(
-                MeasureSpec.makeMeasureSpec(592, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(608, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY)
             )
         }
 
         // Rest of the measuring code remains the same
         rightEyeView.measure(
-            MeasureSpec.makeMeasureSpec(halfWidth - 48, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(halfWidth - 32, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(contentHeight, MeasureSpec.EXACTLY)
         )
 
@@ -1977,7 +1978,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     viewport.name = 'viewport';
                     document.head.appendChild(viewport);
                 }
-                viewport.content = 'width=592, initial-scale=1.0, maximum-scale=1.0';
+                viewport.content = 'width=608, initial-scale=1.0, maximum-scale=1.0';
             })();
             """, null
             )
@@ -2432,7 +2433,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val height = height
         val halfWidth = width / 2
         val localX = x % halfWidth
-        val toggleBarWidth = 48
+        val toggleBarWidth = 32
         val smallButtonWidth = toggleBarWidth / 2
 
         Log.d("TouchDebug", """
@@ -2560,7 +2561,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
 
-        if (localX < 48) {
+        if (localX < 32) {
 
             when {
                 isHoveringZoomOut -> handleZoomButtonClick("out")
@@ -2717,7 +2718,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     fun setBookmarksView(bookmarksView: BookmarksView) {
         this.leftBookmarksView = bookmarksView.apply {
             val params = MarginLayoutParams(320, LayoutParams.WRAP_CONTENT).apply {
-                leftMargin = 48  // After toggle bar
+                leftMargin = 32  // After toggle bar
                 topMargin = 168  // Below toggle buttons
             }
             layoutParams = params
@@ -2826,7 +2827,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Calculate positioning constants
         val buttonHeight = verticalBarSize / (nButtons)
-        val smallButtonWidth = 24 // Size for split buttons (zoom and scroll)
+        val smallButtonWidth = 16 // Size for split buttons (zoom and scroll) - Reduced to match 32 width
         val buttonWidth      = 2 * smallButtonWidth
         //val spacing = 8 // Standard spacing between buttons
 
@@ -3345,8 +3346,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftSystemInfoView.translationY = 0f  // Reset any translation
         } else {
             // First set WebView back to original size
-            webView.layoutParams = FrameLayout.LayoutParams(592, 480).apply {
-                leftMargin = 48
+            webView.layoutParams = FrameLayout.LayoutParams(608, 480).apply {
+                leftMargin = 32
                 topMargin = 0
                 rightMargin = 0
                 bottomMargin = 0
