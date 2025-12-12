@@ -391,7 +391,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftNavigationBar = LayoutInflater.from(context).inflate(R.layout.navigation_bar, this, false).apply {
             layoutParams = LayoutParams(
                 LayoutParams.MATCH_PARENT,
-                48
+                32
             )
             setBackgroundColor(Color.parseColor("#202020"))
             visibility = View.VISIBLE
@@ -1199,7 +1199,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val height = b - t
         val halfWidth = width / 2
         val toggleBarWidth = 48
-        val navBarHeight = 48
+        val navBarHeight = 32
         val keyboardHeight = 220
         val keyboardWidth = halfWidth - toggleBarWidth
 
@@ -1689,7 +1689,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val widthSize = MeasureSpec.getSize(widthMeasureSpec)
         val heightSize = MeasureSpec.getSize(heightMeasureSpec)
         val halfWidth = widthSize / 2
-        val navBarHeight = 48
+        val navBarHeight = 32
         val keyboardHeight = 240
         val toggleBarWidth = 48
         val keyboardWidth = halfWidth - toggleBarWidth
@@ -1697,7 +1697,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val contentHeight = if (keyboardContainer.visibility == View.VISIBLE) {
             heightSize - 220  // keyboard height
         } else {
-            heightSize - 48  // nav bar height
+            heightSize - 32  // nav bar height
         }
 
         // Measure WebView with different dimensions based on scroll mode
@@ -2191,7 +2191,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         val height = height
         val halfWidth = width / 2
-        val navBarHeight = 48
+        val navBarHeight = 32
         val localX = x % halfWidth
 
         val smallButtonSize = 24
@@ -2200,7 +2200,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         clearAllHoverStates()
 
         if (y >= height - navBarHeight) {
-            val buttonWidth = 48
+            val buttonWidth = 32
             // Adjust the padding to account for all buttons
             val usableWidth = halfWidth - 16  // Total width minus padding (8dp on each side)
             val remainingSpace = usableWidth - (6 * buttonWidth)
@@ -2540,7 +2540,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
         }
 
-        if (y >= height - 48) {
+        if (y >= height - 32) {
             keyboardListener?.onHideKeyboard()
             Log.d("AnchoredTouchDebug","handling navigation click")
                     navButtons.entries.find { it.value.isHovered }?.let { (key, button) ->
