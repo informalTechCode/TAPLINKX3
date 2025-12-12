@@ -167,6 +167,10 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     // Properties for link editing
     lateinit var urlEditText: EditText
+    private lateinit var toastView: TextView
+    private val toastHandler = Handler(Looper.getMainLooper())
+    private var hideToastRunnable: Runnable? = null
+
     private val urlFieldMinHeight = 56.dp()
 
     private var leftEditField: EditText
@@ -507,6 +511,30 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Disable text handles for both EditTexts
         disableTextHandles(urlEditText)
 
+        // Initialize Toast View
+        toastView = TextView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                bottomMargin = 80 // Position above navigation bar
+            }
+            maxWidth = 500
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            setPadding(32, 16, 32, 16)
+            visibility = View.GONE
+            gravity = Gravity.CENTER
+
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#CC202020"))
+                cornerRadius = 24f
+                setStroke(2, Color.parseColor("#606060"))
+            }
+            elevation = 2000f
+        }
+
 
 //
 
@@ -621,6 +649,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             addView(keyboardContainer)
             addView(leftSystemInfoView)
             addView(urlEditText)
+            addView(toastView)
             postDelayed({
 
 
@@ -866,6 +895,35 @@ class DualWebViewGroup @JvmOverloads constructor(
             requestLayout()
             invalidate()
         }
+    }
+
+    fun showToast(message: String, duration: Long = 3000L) {
+        // Cancel any pending hide operation
+        hideToastRunnable?.let { toastHandler.removeCallbacks(it) }
+
+        toastView.apply {
+            text = message
+            visibility = View.VISIBLE
+            bringToFront()
+        }
+
+        // Force refresh to update mirrors
+        post {
+            requestLayout()
+            invalidate()
+            startRefreshing()
+        }
+
+        // Schedule hiding
+        hideToastRunnable = Runnable {
+            toastView.visibility = View.GONE
+            post {
+                requestLayout()
+                invalidate()
+                startRefreshing()
+            }
+        }
+        toastHandler.postDelayed(hideToastRunnable!!, duration)
     }
 
 
@@ -3291,6 +3349,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         stopRefreshing()
+        hideToastRunnable?.let { toastHandler.removeCallbacks(it) }
     }
 
     override fun onWindowVisibilityChanged(visibility: Int) {

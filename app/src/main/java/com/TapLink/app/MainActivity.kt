@@ -2963,6 +2963,17 @@ class MainActivity : AppCompatActivity(),
 
 
             webChromeClient = object : WebChromeClient() {
+                override fun onJsAlert(
+                    view: WebView?,
+                    url: String?,
+                    message: String?,
+                    result: android.webkit.JsResult?
+                ): Boolean {
+                    message?.let { dualWebViewGroup.showToast(it) }
+                    result?.confirm()
+                    return true
+                }
+
                 override fun onPermissionRequest(request: PermissionRequest) {
                     runOnUiThread {
                         if (request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
