@@ -171,6 +171,16 @@ class DualWebViewGroup @JvmOverloads constructor(
     private val toastHandler = Handler(Looper.getMainLooper())
     private var hideToastRunnable: Runnable? = null
 
+    // Dialog components
+    private lateinit var dialogView: LinearLayout
+    private lateinit var dialogMessageView: TextView
+    private lateinit var dialogInputView: EditText
+    private lateinit var dialogOkButton: Button
+    private lateinit var dialogCancelButton: Button
+    private var currentJsResult: android.webkit.JsResult? = null
+    private var currentJsPromptResult: android.webkit.JsPromptResult? = null
+    private var isPromptDialog = false
+
     private val urlFieldMinHeight = 56.dp()
 
     private var leftEditField: EditText
@@ -535,6 +545,67 @@ class DualWebViewGroup @JvmOverloads constructor(
             elevation = 2000f
         }
 
+        // Initialize Dialog View
+        dialogView = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(400, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.CENTER
+            }
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#E6202020"))
+                cornerRadius = 16f
+                setStroke(2, Color.WHITE)
+            }
+            setPadding(24, 24, 24, 24)
+            visibility = View.GONE
+            elevation = 3000f
+        }
+
+        dialogMessageView = TextView(context).apply {
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = 16
+            }
+        }
+
+        dialogInputView = EditText(context).apply {
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#404040"))
+            setPadding(8, 8, 8, 8)
+            layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = 16
+            }
+            visibility = View.GONE
+            // Disable native keyboard/focus behaviors as we handle them manually
+            isFocusable = false
+            isFocusableInTouchMode = false
+        }
+
+        val buttonLayout = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+        }
+
+        dialogCancelButton = Button(context).apply {
+            text = "Cancel"
+            setTextColor(Color.WHITE)
+            background = null
+        }
+
+        dialogOkButton = Button(context).apply {
+            text = "OK"
+            setTextColor(Color.WHITE)
+            background = null
+        }
+
+        buttonLayout.addView(dialogCancelButton)
+        buttonLayout.addView(dialogOkButton)
+
+        dialogView.addView(dialogMessageView)
+        dialogView.addView(dialogInputView)
+        dialogView.addView(buttonLayout)
 
 //
 
@@ -650,6 +721,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             addView(leftSystemInfoView)
             addView(urlEditText)
             addView(toastView)
+            addView(dialogView)
             postDelayed({
 
 
@@ -924,6 +996,144 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
         }
         toastHandler.postDelayed(hideToastRunnable!!, duration)
+    }
+
+    fun showConfirm(message: String, result: android.webkit.JsResult) {
+        currentJsResult = result
+        isPromptDialog = false
+
+        dialogMessageView.text = message
+        dialogInputView.visibility = View.GONE
+        dialogView.visibility = View.VISIBLE
+        dialogView.bringToFront()
+
+        post {
+            requestLayout()
+            invalidate()
+            startRefreshing()
+        }
+    }
+
+    fun showPrompt(message: String, defaultValue: String?, result: android.webkit.JsPromptResult) {
+        currentJsPromptResult = result
+        isPromptDialog = true
+
+        dialogMessageView.text = message
+        dialogInputView.setText(defaultValue ?: "")
+        dialogInputView.visibility = View.VISIBLE
+        dialogView.visibility = View.VISIBLE
+        dialogView.bringToFront()
+
+        keyboardListener?.onShowKeyboard()
+
+        post {
+            requestLayout()
+            invalidate()
+            startRefreshing()
+        }
+    }
+
+    fun dismissDialog(confirmed: Boolean) {
+        if (!isDialogVisible()) return
+
+        if (isPromptDialog) {
+            val text = dialogInputView.text.toString()
+            if (confirmed) {
+                currentJsPromptResult?.confirm(text)
+            } else {
+                currentJsPromptResult?.cancel()
+            }
+            currentJsPromptResult = null
+            keyboardListener?.onHideKeyboard()
+        } else {
+            if (confirmed) {
+                currentJsResult?.confirm()
+            } else {
+                currentJsResult?.cancel()
+            }
+            currentJsResult = null
+        }
+
+        dialogView.visibility = View.GONE
+        post {
+            requestLayout()
+            invalidate()
+            startRefreshing()
+        }
+    }
+
+    fun isDialogVisible(): Boolean = dialogView.visibility == View.VISIBLE
+
+    fun handleDialogInput(text: String) {
+        if (isDialogVisible() && isPromptDialog) {
+            val currentText = dialogInputView.text.toString()
+            val start = dialogInputView.selectionStart
+            val end = dialogInputView.selectionEnd
+
+            if (text == "backspace") {
+                if (start > 0 && start == end) {
+                    val newText = currentText.substring(0, start - 1) + currentText.substring(end)
+                    dialogInputView.setText(newText)
+                    dialogInputView.setSelection(start - 1)
+                } else if (start != end) {
+                    val newText = currentText.substring(0, start) + currentText.substring(end)
+                    dialogInputView.setText(newText)
+                    dialogInputView.setSelection(start)
+                }
+            } else if (text == "enter") {
+                dismissDialog(true)
+            } else {
+                val newText = currentText.substring(0, start) + text + currentText.substring(end)
+                dialogInputView.setText(newText)
+                dialogInputView.setSelection(start + text.length)
+            }
+        }
+    }
+
+    private fun handleDialogTap(x: Float, y: Float) {
+        if (dialogView.childCount < 3) return
+        val buttonLayout = dialogView.getChildAt(2) as ViewGroup
+        val cancelBtn = dialogCancelButton
+        val okBtn = dialogOkButton
+
+        val dialogLeft = dialogView.left
+        val dialogTop = dialogView.top
+
+        val blLeft = buttonLayout.left
+        val blTop = buttonLayout.top
+
+        // Cancel Button
+        val cancelLeft = dialogLeft + blLeft + cancelBtn.left
+        val cancelRight = dialogLeft + blLeft + cancelBtn.right
+        val cancelTop = dialogTop + blTop + cancelBtn.top
+        val cancelBottom = dialogTop + blTop + cancelBtn.bottom
+
+        if (x >= cancelLeft && x <= cancelRight && y >= cancelTop && y <= cancelBottom) {
+            dismissDialog(false)
+            return
+        }
+
+        // OK Button
+        val okLeft = dialogLeft + blLeft + okBtn.left
+        val okRight = dialogLeft + blLeft + okBtn.right
+        val okTop = dialogTop + blTop + okBtn.top
+        val okBottom = dialogTop + blTop + okBtn.bottom
+
+        if (x >= okLeft && x <= okRight && y >= okTop && y <= okBottom) {
+            dismissDialog(true)
+            return
+        }
+
+        if (isPromptDialog) {
+            val inputLeft = dialogView.left + dialogInputView.left
+            val inputRight = dialogView.left + dialogInputView.right
+            val inputTop = dialogView.top + dialogInputView.top
+            val inputBottom = dialogView.top + dialogInputView.bottom
+
+            if (x >= inputLeft && x <= inputRight && y >= inputTop && y <= inputBottom) {
+                keyboardListener?.onShowKeyboard()
+            }
+        }
     }
 
 
@@ -1692,6 +1902,14 @@ class DualWebViewGroup @JvmOverloads constructor(
                 }
             }
 
+            // Check Dialog
+            if (!isOverTarget && dialogView.visibility == View.VISIBLE) {
+                // If dialog is visible, we always intercept (modal)
+                isOverTarget = true
+                anchoredTarget = 4
+                Log.d("TouchDebug", "Intercepting anchored tap for dialog")
+            }
+
             when (ev.action) {
                 MotionEvent.ACTION_DOWN -> {
                     anchoredGestureActive = isOverTarget
@@ -1876,6 +2094,9 @@ class DualWebViewGroup @JvmOverloads constructor(
                                             menu.handleAnchoredTap(cursorX - menu.left, cursorY - menu.top)
                                         }
                                     }
+                                }
+                                4 -> { // Dialog
+                                    handleDialogTap(cursorX, cursorY)
                                 }
                             }
                         } else if (anchoredTarget == 2) {

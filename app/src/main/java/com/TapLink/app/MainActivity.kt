@@ -2974,6 +2974,33 @@ class MainActivity : AppCompatActivity(),
                     return true
                 }
 
+                override fun onJsConfirm(
+                    view: WebView?,
+                    url: String?,
+                    message: String?,
+                    result: android.webkit.JsResult?
+                ): Boolean {
+                    if (message != null && result != null) {
+                        dualWebViewGroup.showConfirm(message, result)
+                        return true
+                    }
+                    return super.onJsConfirm(view, url, message, result)
+                }
+
+                override fun onJsPrompt(
+                    view: WebView?,
+                    url: String?,
+                    message: String?,
+                    defaultValue: String?,
+                    result: android.webkit.JsPromptResult?
+                ): Boolean {
+                    if (message != null && result != null) {
+                        dualWebViewGroup.showPrompt(message, defaultValue, result)
+                        return true
+                    }
+                    return super.onJsPrompt(view, url, message, defaultValue, result)
+                }
+
                 override fun onPermissionRequest(request: PermissionRequest) {
                     runOnUiThread {
                         if (request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
@@ -3721,6 +3748,9 @@ class MainActivity : AppCompatActivity(),
         val editFieldVisible = dualWebViewGroup.urlEditText.visibility == View.VISIBLE
 
         when {
+            dualWebViewGroup.isDialogVisible() -> {
+                dualWebViewGroup.handleDialogInput(key)
+            }
             dualWebViewGroup.isBookmarksExpanded() && !editFieldVisible -> {
                 // Handle bookmark menu navigation
                 dualWebViewGroup.getBookmarksView().handleKeyboardInput(key)
@@ -3755,6 +3785,9 @@ class MainActivity : AppCompatActivity(),
         val editFieldVisible = dualWebViewGroup.urlEditText.visibility == View.VISIBLE
 
         when {
+            dualWebViewGroup.isDialogVisible() -> {
+                dualWebViewGroup.handleDialogInput("backspace")
+            }
             dualWebViewGroup.isBookmarksExpanded() && !editFieldVisible -> {
                 dualWebViewGroup.getBookmarksView().handleKeyboardInput("backspace")
             }
@@ -3789,6 +3822,9 @@ class MainActivity : AppCompatActivity(),
 
         wasKeyboardDismissedByEnter = true
         when {
+            dualWebViewGroup.isDialogVisible() -> {
+                dualWebViewGroup.handleDialogInput("enter")
+            }
 
             // If bookmarks are visible and being edited, handle bookmark updates
             dualWebViewGroup.isBookmarksExpanded() -> {
