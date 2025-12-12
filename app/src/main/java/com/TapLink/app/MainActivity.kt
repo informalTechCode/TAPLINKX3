@@ -2800,6 +2800,9 @@ class MainActivity : AppCompatActivity(),
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
+        // Initialize AudioManager
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
         // First check if speech recognition is available
         val speechRecognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
         val speechRecognitionAvailable = packageManager.resolveActivity(speechRecognizerIntent, 0) != null
@@ -2858,7 +2861,7 @@ class MainActivity : AppCompatActivity(),
                 displayZoomControls = false
 
                 // Multi-window Support
-                setSupportMultipleWindows(false)
+                setSupportMultipleWindows(true)
 
                 // Handle Mixed Content
                 mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
@@ -3002,22 +3005,60 @@ class MainActivity : AppCompatActivity(),
                 }
 
                 override fun onPermissionRequest(request: PermissionRequest) {
-                    runOnUiThread {
-                        if (request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
-                            // If we have CAMERA granted
-                            if (ContextCompat.checkSelfPermission(
-                                    this@MainActivity,
-                                    Manifest.permission.CAMERA
-                                ) == PackageManager.PERMISSION_GRANTED
-                            ) {
-                                request.grant(request.resources)
-                            } else {
-                                request.deny()
+                    Log.d("WebView", "Permission request: ${request.resources.joinToString()}")
+
+                    val permissions = mutableListOf<String>()
+                    val requiredAndroidPermissions = mutableListOf<String>()
+
+                    request.resources.forEach { resource ->
+                        when (resource) {
+                            PermissionRequest.RESOURCE_AUDIO_CAPTURE -> {
+                                permissions.add(resource)
+                                requiredAndroidPermissions.add(android.Manifest.permission.RECORD_AUDIO)
+                                // Configure AR glasses microphone for voice assistant mode
+                                audioManager?.setParameters("audio_source_record=voiceassistant")
                             }
-                        } else {
-                            request.deny()
+                            PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
+                                permissions.add(resource)
+                                requiredAndroidPermissions.add(android.Manifest.permission.CAMERA)
+                            }
                         }
                     }
+
+                    runOnUiThread {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            val notGrantedPermissions = requiredAndroidPermissions.filter {
+                                checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+                            }
+
+                            if (notGrantedPermissions.isNotEmpty()) {
+                                pendingPermissionRequest = request
+                                requestPermissions(notGrantedPermissions.toTypedArray(), PERMISSIONS_REQUEST_CODE)
+                            } else {
+                                request.grant(permissions.toTypedArray())
+                            }
+                        } else {
+                            request.grant(permissions.toTypedArray())
+                        }
+                    }
+                }
+
+                override fun onPermissionRequestCanceled(request: PermissionRequest) {
+                    pendingPermissionRequest = null
+                    // Reset audio source when permissions are cancelled
+                    audioManager?.setParameters("audio_source_record=off")
+                }
+
+                override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                    if (view == null) {
+                        callback?.onCustomViewHidden()
+                        return
+                    }
+                    showFullScreenCustomView(view, callback)
+                }
+
+                override fun onHideCustomView() {
+                    hideFullScreenCustomView()
                 }
 
                 override fun onReceivedTouchIconUrl(view: WebView?, url: String?, precomposed: Boolean) {
@@ -3093,7 +3134,22 @@ class MainActivity : AppCompatActivity(),
             webView.loadUrl("file:///android_asset/AR_Dashboard_Landscape_Sidebar.html")
         }
 
-        setupMediaWebView()
+        // Add JavaScript interface for custom media handling if needed
+        webView.addJavascriptInterface(object {
+            @JavascriptInterface
+            fun onMediaStart(type: String) {
+                when (type) {
+                    "audio" -> audioManager?.setParameters("audio_source_record=voiceassistant")
+                    "video" -> { /* Handle camera initialization if needed */ }
+                }
+            }
+
+            @JavascriptInterface
+            fun onMediaStop() {
+                audioManager?.setParameters("audio_source_record=off")
+            }
+        }, "AndroidMediaInterface")
+
         logPermissionState()  // Log initial permission state
 
         webView.addJavascriptInterface(AndroidInterface(this), "AndroidInterface")
@@ -3173,96 +3229,6 @@ class MainActivity : AppCompatActivity(),
     }
 
 
-    private fun setupMediaWebView() {
-        // Initialize AudioManager
-        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
-        webView.webChromeClient = object : WebChromeClient() {
-            override fun onPermissionRequest(request: PermissionRequest) {
-                Log.d("WebView", "Permission request: ${request.resources.joinToString()}")
-
-                val permissions = mutableListOf<String>()
-                val requiredAndroidPermissions = mutableListOf<String>()
-
-                request.resources.forEach { resource ->
-                    when (resource) {
-                        PermissionRequest.RESOURCE_AUDIO_CAPTURE -> {
-                            permissions.add(resource)
-                            requiredAndroidPermissions.add(android.Manifest.permission.RECORD_AUDIO)
-                            // Configure AR glasses microphone for voice assistant mode
-                            audioManager?.setParameters("audio_source_record=voiceassistant")
-                        }
-                        PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
-                            permissions.add(resource)
-                            requiredAndroidPermissions.add(android.Manifest.permission.CAMERA)
-                        }
-                    }
-                }
-
-                runOnUiThread {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        val notGrantedPermissions = requiredAndroidPermissions.filter {
-                            checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
-                        }
-
-                        if (notGrantedPermissions.isNotEmpty()) {
-                            pendingPermissionRequest = request
-                            requestPermissions(notGrantedPermissions.toTypedArray(), PERMISSIONS_REQUEST_CODE)
-                        } else {
-                            request.grant(permissions.toTypedArray())
-                        }
-                    } else {
-                        request.grant(permissions.toTypedArray())
-                    }
-                }
-            }
-
-            override fun onPermissionRequestCanceled(request: PermissionRequest) {
-                pendingPermissionRequest = null
-                // Reset audio source when permissions are cancelled
-                audioManager?.setParameters("audio_source_record=off")
-            }
-
-            override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
-                if (view == null) {
-                    callback?.onCustomViewHidden()
-                    return
-                }
-                showFullScreenCustomView(view, callback)
-            }
-
-            override fun onHideCustomView() {
-                hideFullScreenCustomView()
-            }
-        }
-
-        // Additional WebView settings for media support
-        webView.settings.apply {
-            mediaPlaybackRequiresUserGesture = false
-            domStorageEnabled = true
-            javaScriptEnabled = true
-            databaseEnabled = true
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            setSupportMultipleWindows(true)
-        }
-
-        // Add JavaScript interface for custom media handling if needed
-        webView.addJavascriptInterface(object {
-            @JavascriptInterface
-            fun onMediaStart(type: String) {
-                when (type) {
-                    "audio" -> audioManager?.setParameters("audio_source_record=voiceassistant")
-                    "video" -> { /* Handle camera initialization if needed */ }
-                }
-            }
-
-            @JavascriptInterface
-            fun onMediaStop() {
-                audioManager?.setParameters("audio_source_record=off")
-            }
-        }, "AndroidMediaInterface")
-    }
 
     private fun showFullScreenCustomView(view: View, callback: WebChromeClient.CustomViewCallback?) {
         if (fullScreenCustomView != null) {
