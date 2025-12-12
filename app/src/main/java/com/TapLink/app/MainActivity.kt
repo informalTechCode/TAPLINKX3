@@ -2,6 +2,7 @@ package com.TapLinkX3.app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -2962,26 +2963,9 @@ class MainActivity : AppCompatActivity(),
     """, null)
 
 
+            // Consolidate WebChromeClient to handle permissions, file choosing, and custom views
             webChromeClient = object : WebChromeClient() {
-                override fun onPermissionRequest(request: PermissionRequest) {
-                    runOnUiThread {
-                        if (request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
-                            // If we have CAMERA granted
-                            if (ContextCompat.checkSelfPermission(
-                                    this@MainActivity,
-                                    Manifest.permission.CAMERA
-                                ) == PackageManager.PERMISSION_GRANTED
-                            ) {
-                                request.grant(request.resources)
-                            } else {
-                                request.deny()
-                            }
-                        } else {
-                            request.deny()
-                        }
-                    }
-                }
-
+                // From first client
                 override fun onReceivedTouchIconUrl(view: WebView?, url: String?, precomposed: Boolean) {
                     Log.d("WebViewDebug", "Received touch icon URL: $url")
                     super.onReceivedTouchIconUrl(view, url, precomposed)
@@ -2992,6 +2976,66 @@ class MainActivity : AppCompatActivity(),
                     return true
                 }
 
+                // Combined onPermissionRequest
+                override fun onPermissionRequest(request: PermissionRequest) {
+                    Log.d("WebView", "Permission request: ${request.resources.joinToString()}")
+
+                    val permissions = mutableListOf<String>()
+                    val requiredAndroidPermissions = mutableListOf<String>()
+
+                    request.resources.forEach { resource ->
+                        when (resource) {
+                            PermissionRequest.RESOURCE_AUDIO_CAPTURE -> {
+                                permissions.add(resource)
+                                requiredAndroidPermissions.add(android.Manifest.permission.RECORD_AUDIO)
+                                // Configure AR glasses microphone for voice assistant mode
+                                audioManager?.setParameters("audio_source_record=voiceassistant")
+                            }
+                            PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
+                                permissions.add(resource)
+                                requiredAndroidPermissions.add(android.Manifest.permission.CAMERA)
+                            }
+                        }
+                    }
+
+                    runOnUiThread {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            val notGrantedPermissions = requiredAndroidPermissions.filter {
+                                checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+                            }
+
+                            if (notGrantedPermissions.isNotEmpty()) {
+                                pendingPermissionRequest = request
+                                requestPermissions(notGrantedPermissions.toTypedArray(), PERMISSIONS_REQUEST_CODE)
+                            } else {
+                                request.grant(permissions.toTypedArray())
+                            }
+                        } else {
+                            request.grant(permissions.toTypedArray())
+                        }
+                    }
+                }
+
+                override fun onPermissionRequestCanceled(request: PermissionRequest) {
+                    pendingPermissionRequest = null
+                    // Reset audio source when permissions are cancelled
+                    audioManager?.setParameters("audio_source_record=off")
+                }
+
+                // From second client
+                override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                    if (view == null) {
+                        callback?.onCustomViewHidden()
+                        return
+                    }
+                    showFullScreenCustomView(view, callback)
+                }
+
+                override fun onHideCustomView() {
+                    hideFullScreenCustomView()
+                }
+
+                // From first client
                 override fun onShowFileChooser(
                     webView: WebView?,
                     filePathCallback: ValueCallback<Array<Uri>>?,
@@ -3017,15 +3061,15 @@ class MainActivity : AppCompatActivity(),
                         putExtra(Intent.EXTRA_INITIAL_INTENTS, intentArray.filterNotNull().toTypedArray())
                     }
 
-                    startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
+                    try {
+                        startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
+                    } catch (e: ActivityNotFoundException) {
+                        this@MainActivity.filePathCallback = null
+                        return false
+                    }
                     return true
                 }
             }
-
-
-
-
-
         }
 
 
@@ -3055,10 +3099,38 @@ class MainActivity : AppCompatActivity(),
             webView.loadUrl("file:///android_asset/AR_Dashboard_Landscape_Sidebar.html")
         }
 
-        setupMediaWebView()
+        // Initialize AudioManager
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        // Additional WebView settings for media support
+        webView.settings.apply {
+            mediaPlaybackRequiresUserGesture = false
+            domStorageEnabled = true
+            javaScriptEnabled = true
+            databaseEnabled = true
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            setSupportMultipleWindows(true)
+        }
+
         logPermissionState()  // Log initial permission state
 
         webView.addJavascriptInterface(AndroidInterface(this), "AndroidInterface")
+        // Add JavaScript interface for custom media handling if needed
+        webView.addJavascriptInterface(object {
+            @JavascriptInterface
+            fun onMediaStart(type: String) {
+                when (type) {
+                    "audio" -> audioManager?.setParameters("audio_source_record=voiceassistant")
+                    "video" -> { /* Handle camera initialization if needed */ }
+                }
+            }
+
+            @JavascriptInterface
+            fun onMediaStop() {
+                audioManager?.setParameters("audio_source_record=off")
+            }
+        }, "AndroidMediaInterface")
 
     }
 
@@ -3135,97 +3207,6 @@ class MainActivity : AppCompatActivity(),
     }
 
 
-    private fun setupMediaWebView() {
-        // Initialize AudioManager
-        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
-        webView.webChromeClient = object : WebChromeClient() {
-            override fun onPermissionRequest(request: PermissionRequest) {
-                Log.d("WebView", "Permission request: ${request.resources.joinToString()}")
-
-                val permissions = mutableListOf<String>()
-                val requiredAndroidPermissions = mutableListOf<String>()
-
-                request.resources.forEach { resource ->
-                    when (resource) {
-                        PermissionRequest.RESOURCE_AUDIO_CAPTURE -> {
-                            permissions.add(resource)
-                            requiredAndroidPermissions.add(android.Manifest.permission.RECORD_AUDIO)
-                            // Configure AR glasses microphone for voice assistant mode
-                            audioManager?.setParameters("audio_source_record=voiceassistant")
-                        }
-                        PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
-                            permissions.add(resource)
-                            requiredAndroidPermissions.add(android.Manifest.permission.CAMERA)
-                        }
-                    }
-                }
-
-                runOnUiThread {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        val notGrantedPermissions = requiredAndroidPermissions.filter {
-                            checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
-                        }
-
-                        if (notGrantedPermissions.isNotEmpty()) {
-                            pendingPermissionRequest = request
-                            requestPermissions(notGrantedPermissions.toTypedArray(), PERMISSIONS_REQUEST_CODE)
-                        } else {
-                            request.grant(permissions.toTypedArray())
-                        }
-                    } else {
-                        request.grant(permissions.toTypedArray())
-                    }
-                }
-            }
-
-            override fun onPermissionRequestCanceled(request: PermissionRequest) {
-                pendingPermissionRequest = null
-                // Reset audio source when permissions are cancelled
-                audioManager?.setParameters("audio_source_record=off")
-            }
-
-            override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
-                if (view == null) {
-                    callback?.onCustomViewHidden()
-                    return
-                }
-                showFullScreenCustomView(view, callback)
-            }
-
-            override fun onHideCustomView() {
-                hideFullScreenCustomView()
-            }
-        }
-
-        // Additional WebView settings for media support
-        webView.settings.apply {
-            mediaPlaybackRequiresUserGesture = false
-            domStorageEnabled = true
-            javaScriptEnabled = true
-            databaseEnabled = true
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            setSupportMultipleWindows(true)
-        }
-
-        // Add JavaScript interface for custom media handling if needed
-        webView.addJavascriptInterface(object {
-            @JavascriptInterface
-            fun onMediaStart(type: String) {
-                when (type) {
-                    "audio" -> audioManager?.setParameters("audio_source_record=voiceassistant")
-                    "video" -> { /* Handle camera initialization if needed */ }
-                }
-            }
-
-            @JavascriptInterface
-            fun onMediaStop() {
-                audioManager?.setParameters("audio_source_record=off")
-            }
-        }, "AndroidMediaInterface")
-    }
-
     private fun showFullScreenCustomView(view: View, callback: WebChromeClient.CustomViewCallback?) {
         if (fullScreenCustomView != null) {
             callback?.onCustomViewHidden()
@@ -3272,6 +3253,34 @@ class MainActivity : AppCompatActivity(),
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
+            if (resultCode == RESULT_OK) {
+                if (filePathCallback != null) {
+                    var results: Array<Uri>? = null
+
+                    // Check if response is from Camera (data is null/empty but cameraImageUri is set)
+                    // or from File Picker (data has URI)
+                    if (data == null || data.data == null) {
+                        // If cameraImageUri is populated, use it
+                        if (cameraImageUri != null) {
+                            results = arrayOf(cameraImageUri!!)
+                        }
+                    } else {
+                        // File picker result
+                        data.dataString?.let {
+                            results = arrayOf(Uri.parse(it))
+                        }
+                    }
+
+                    filePathCallback?.onReceiveValue(results)
+                    filePathCallback = null
+                }
+            } else {
+                filePathCallback?.onReceiveValue(null)
+                filePathCallback = null
+            }
+        }
 
         if (requestCode == CAMERA_REQUEST_CODE && resultCode == RESULT_OK) {
             data?.extras?.get("data")?.let { imageBitmap ->
