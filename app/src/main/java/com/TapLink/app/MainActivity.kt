@@ -2915,6 +2915,9 @@ class MainActivity : AppCompatActivity(),
                     super.onPageFinished(view, url)
                     Log.d("WebViewDebug", "Page finished loading: $url")
 
+                    // Ensure loading bar is hidden when finished
+                    dualWebViewGroup.updateLoadingProgress(100)
+
                     if (url != null && !url.startsWith("about:blank")) {
                         view?.visibility = View.VISIBLE
                         injectJavaScriptForInputFocus()
@@ -2946,23 +2949,12 @@ class MainActivity : AppCompatActivity(),
                     return false  // Let WebView handle normal URLs
                 }
             }
-            // Add more detailed logging to track input field interactions
-            webView.evaluateJavascript("""
-        (function() {
-            document.addEventListener('focus', function(e) {
-                console.log('Focus event:', {
-                    target: e.target.tagName,
-                    type: e.target.type,
-                    isInput: e.target instanceof HTMLInputElement,
-                    isTextArea: e.target instanceof HTMLTextAreaElement,
-                    isContentEditable: e.target.isContentEditable
-                });
-            }, true);
-        })();
-    """, null)
-
-
             webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    super.onProgressChanged(view, newProgress)
+                    dualWebViewGroup.updateLoadingProgress(newProgress)
+                }
+
                 override fun onPermissionRequest(request: PermissionRequest) {
                     runOnUiThread {
                         if (request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
@@ -3021,6 +3013,23 @@ class MainActivity : AppCompatActivity(),
                     return true
                 }
             }
+
+            // Add more detailed logging to track input field interactions
+            webView.evaluateJavascript("""
+        (function() {
+            document.addEventListener('focus', function(e) {
+                console.log('Focus event:', {
+                    target: e.target.tagName,
+                    type: e.target.type,
+                    isInput: e.target instanceof HTMLInputElement,
+                    isTextArea: e.target instanceof HTMLTextAreaElement,
+                    isContentEditable: e.target.isContentEditable
+                });
+            }, true);
+        })();
+    """, null)
+
+
 
 
 

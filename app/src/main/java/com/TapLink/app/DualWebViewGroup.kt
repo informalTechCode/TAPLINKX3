@@ -70,7 +70,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private lateinit var leftSystemInfoView: SystemInfoView
 
     lateinit var leftNavigationBar: View
-    private val verticalBarSize = 480 - 32
+    private val verticalBarSize = 480 - 40
     private val nButtons    = 9
     private val buttonHeight = verticalBarSize / nButtons
     private val buttonFeedbackDuration = 200L
@@ -86,6 +86,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private val ANCHORED_TOUCH_SLOP = 10f
 
     lateinit var leftToggleBar: View
+    lateinit var progressBar: android.widget.ProgressBar
 
     @Volatile private var isRefreshing = false
     private val refreshLock = Object()
@@ -138,6 +139,24 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     interface AnchorToggleListener {
         fun onAnchorTogglePressed()
+    }
+
+    fun updateLoadingProgress(progress: Int) {
+        if (!::progressBar.isInitialized) return
+
+        post {
+            if (progress < 100) {
+                progressBar.visibility = View.VISIBLE
+                progressBar.progress = progress
+            } else {
+                progressBar.progress = 100
+                progressBar.visibility = View.GONE
+            }
+            // Ensure proper layering
+            if (progressBar.visibility == View.VISIBLE) {
+                progressBar.bringToFront()
+            }
+        }
     }
 
     private data class NavButton(
@@ -391,7 +410,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftNavigationBar = LayoutInflater.from(context).inflate(R.layout.navigation_bar, this, false).apply {
             layoutParams = LayoutParams(
                 LayoutParams.MATCH_PARENT,
-                32
+                40
             )
             setBackgroundColor(Color.parseColor("#202020"))
             visibility = View.VISIBLE
@@ -443,7 +462,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Initialize left toggle bar
         leftToggleBar = LayoutInflater.from(context).inflate(R.layout.toggle_bar, this, false).apply {
-            layoutParams = LayoutParams(32, 592)
+            layoutParams = LayoutParams(40, 592)
             setBackgroundColor(Color.parseColor("#202020"))
             visibility = View.VISIBLE
             clipToOutline = true  // Add this
@@ -498,6 +517,14 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Initialize URL EditTexts
         urlEditText  =  setupUrlEditText(true)
 
+        // Initialize ProgressBar
+        progressBar = android.widget.ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 4)
+            progressDrawable.setTint(Color.BLUE)
+            max = 100
+            visibility = View.GONE
+            elevation = 200f // Ensure it's above other views
+        }
 
         //addView(urlEditText)
 
@@ -609,8 +636,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftEyeUIContainer.apply {
             // Add views in the correct z-order
             // Add webView with correct position
-            addView(webView, FrameLayout.LayoutParams(640 - 32, LayoutParams.MATCH_PARENT).apply {
-                leftMargin = 32  // Position after toggle bar
+            addView(webView, FrameLayout.LayoutParams(640 - 40, LayoutParams.MATCH_PARENT).apply {
+                leftMargin = 40  // Position after toggle bar
             })
             addView(leftToggleBar)
             Log.d("ViewDebug", "Toggle bar added to UI container with hash: ${leftToggleBar.hashCode()}")
@@ -618,6 +645,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             addView(leftNavigationBar.apply{
                 elevation = 101f
             })
+            addView(progressBar) // Add progress bar
             addView(keyboardContainer)
             addView(leftSystemInfoView)
             addView(urlEditText)
@@ -926,7 +954,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP
             ).apply {
-                leftMargin = 32  // Single margin for left side
+                leftMargin = 40  // Single margin for left side
             }
             setBackgroundColor(Color.parseColor("#202020"))
             setTextColor(Color.WHITE)
@@ -1182,7 +1210,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Ensure toggle bar visibility
         if (leftToggleBar.measuredWidth == 0 || leftToggleBar.measuredHeight == 0) {
             leftToggleBar.measure(
-                MeasureSpec.makeMeasureSpec(32, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(40, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(596, MeasureSpec.EXACTLY)
             )
             // Instead of directly calling layout, let's request layout
@@ -1198,8 +1226,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         val width = r - l
         val height = b - t
         val halfWidth = width / 2
-        val toggleBarWidth = 32
-        val navBarHeight = 32
+        val toggleBarWidth = 40
+        val navBarHeight = 40
         val keyboardHeight = 220
         val keyboardWidth = halfWidth - toggleBarWidth
 
@@ -1213,7 +1241,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             )
         } else {
             webView.layout(
-                32,  // Account for toggle bar
+                40,  // Account for toggle bar
                 0,
                 640,  // Standard width + toggle bar offset
                 480
@@ -1266,6 +1294,20 @@ class DualWebViewGroup @JvmOverloads constructor(
         val keyboardY = height - keyboardHeight
         keyboardContainer.layout(toggleBarWidth, keyboardY, toggleBarWidth + keyboardWidth, height)
 
+        // Position ProgressBar above the navigation bar
+        val progressBarHeight = 4
+        progressBar.measure(
+            MeasureSpec.makeMeasureSpec(halfWidth - toggleBarWidth, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(progressBarHeight, MeasureSpec.EXACTLY)
+        )
+        // Only show if loading
+        if (progressBar.visibility == View.VISIBLE) {
+            val pbY = height - navBarHeight - progressBarHeight
+            progressBar.layout(toggleBarWidth, pbY, halfWidth, pbY + progressBarHeight)
+        } else {
+            progressBar.layout(0, 0, 0, 0)
+        }
+
         // Hide navigation bars
         leftNavigationBar.visibility = View.GONE
 
@@ -1281,7 +1323,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
                 val bookmarksHeight = leftBookmarksView.measuredHeight
                 val bookmarksY = if (isUrlEditing) {
-                    32  // Below URL edit field, reduced from 48
+                    40  // Below URL edit field
                 } else {
                     keyboardY - bookmarksHeight
                 }
@@ -1689,15 +1731,15 @@ class DualWebViewGroup @JvmOverloads constructor(
         val widthSize = MeasureSpec.getSize(widthMeasureSpec)
         val heightSize = MeasureSpec.getSize(heightMeasureSpec)
         val halfWidth = widthSize / 2
-        val navBarHeight = 32
+        val navBarHeight = 40
         val keyboardHeight = 240
-        val toggleBarWidth = 32
+        val toggleBarWidth = 40
         val keyboardWidth = halfWidth - toggleBarWidth
 
         val contentHeight = if (keyboardContainer.visibility == View.VISIBLE) {
             heightSize - 220  // keyboard height
         } else {
-            heightSize - 32  // nav bar height
+            heightSize - 40  // nav bar height
         }
 
         // Measure WebView with different dimensions based on scroll mode
@@ -1707,16 +1749,16 @@ class DualWebViewGroup @JvmOverloads constructor(
                 MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY)
             )
         } else {
-            // 640 - 32 = 608
+            // 640 - 40 = 600
             webView.measure(
-                MeasureSpec.makeMeasureSpec(608, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(600, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY)
             )
         }
 
         // Rest of the measuring code remains the same
         rightEyeView.measure(
-            MeasureSpec.makeMeasureSpec(halfWidth - 32, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(halfWidth - 40, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(contentHeight, MeasureSpec.EXACTLY)
         )
 
@@ -1978,7 +2020,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     viewport.name = 'viewport';
                     document.head.appendChild(viewport);
                 }
-                viewport.content = 'width=608, initial-scale=1.0, maximum-scale=1.0';
+                viewport.content = 'width=600, initial-scale=1.0, maximum-scale=1.0';
             })();
             """, null
             )
@@ -2192,7 +2234,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         val height = height
         val halfWidth = width / 2
-        val navBarHeight = 32
+        val navBarHeight = 40
         val localX = x % halfWidth
 
         val smallButtonSize = 24
@@ -2201,7 +2243,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         clearAllHoverStates()
 
         if (y >= height - navBarHeight) {
-            val buttonWidth = 32
+            val buttonWidth = 40
             // Adjust the padding to account for all buttons
             val usableWidth = halfWidth - 16  // Total width minus padding (8dp on each side)
             val remainingSpace = usableWidth - (6 * buttonWidth)
@@ -2433,7 +2475,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val height = height
         val halfWidth = width / 2
         val localX = x % halfWidth
-        val toggleBarWidth = 32
+        val toggleBarWidth = 40
         val smallButtonWidth = toggleBarWidth / 2
 
         Log.d("TouchDebug", """
@@ -2541,7 +2583,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
         }
 
-        if (y >= height - 32) {
+        if (y >= height - 40) {
             keyboardListener?.onHideKeyboard()
             Log.d("AnchoredTouchDebug","handling navigation click")
                     navButtons.entries.find { it.value.isHovered }?.let { (key, button) ->
@@ -2561,7 +2603,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
 
-        if (localX < 32) {
+        if (localX < 40) {
 
             when {
                 isHoveringZoomOut -> handleZoomButtonClick("out")
@@ -2718,7 +2760,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     fun setBookmarksView(bookmarksView: BookmarksView) {
         this.leftBookmarksView = bookmarksView.apply {
             val params = MarginLayoutParams(320, LayoutParams.WRAP_CONTENT).apply {
-                leftMargin = 32  // After toggle bar
+                leftMargin = 40  // After toggle bar
                 topMargin = 168  // Below toggle buttons
             }
             layoutParams = params
@@ -2827,7 +2869,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Calculate positioning constants
         val buttonHeight = verticalBarSize / (nButtons)
-        val smallButtonWidth = 16 // Size for split buttons (zoom and scroll) - Reduced to match 32 width
+        val smallButtonWidth = 20 // Size for split buttons (zoom and scroll) - Reduced to match 40 width
         val buttonWidth      = 2 * smallButtonWidth
         //val spacing = 8 // Standard spacing between buttons
 
@@ -3346,8 +3388,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftSystemInfoView.translationY = 0f  // Reset any translation
         } else {
             // First set WebView back to original size
-            webView.layoutParams = FrameLayout.LayoutParams(608, 480).apply {
-                leftMargin = 32
+            webView.layoutParams = FrameLayout.LayoutParams(600, 480).apply {
+                leftMargin = 40
                 topMargin = 0
                 rightMargin = 0
                 bottomMargin = 0
