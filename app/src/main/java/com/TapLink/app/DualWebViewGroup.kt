@@ -2010,6 +2010,12 @@ class DualWebViewGroup @JvmOverloads constructor(
             MeasureSpec.makeMeasureSpec(heightSize, MeasureSpec.EXACTLY)
         )
 
+        // Ensure clip parent (and thus dialogs) are measured
+        leftEyeClipParent.measure(
+            MeasureSpec.makeMeasureSpec(640, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(heightSize, MeasureSpec.EXACTLY)
+        )
+
         setMeasuredDimension(widthSize, heightSize)
     }
 
