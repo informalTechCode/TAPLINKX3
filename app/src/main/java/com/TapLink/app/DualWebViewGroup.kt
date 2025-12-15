@@ -549,7 +549,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         dialogView = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = FrameLayout.LayoutParams(400, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
-                gravity = Gravity.CENTER
+                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                topMargin = 100
             }
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#E6202020"))
@@ -577,9 +578,6 @@ class DualWebViewGroup @JvmOverloads constructor(
                 bottomMargin = 16
             }
             visibility = View.GONE
-            // Disable native keyboard/focus behaviors as we handle them manually
-            isFocusable = false
-            isFocusableInTouchMode = false
         }
 
         val buttonLayout = LinearLayout(context).apply {
@@ -1063,6 +1061,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         dialogView.visibility = View.GONE
+        webView.visibility = View.VISIBLE
         post {
             requestLayout()
             invalidate()
@@ -1139,6 +1138,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val inputBottom = dialogView.top + dialogInputView.bottom
 
             if (x >= inputLeft && x <= inputRight && y >= inputTop && y <= inputBottom) {
+                dialogInputView.requestFocus()
                 keyboardListener?.onShowKeyboard()
             }
         }
