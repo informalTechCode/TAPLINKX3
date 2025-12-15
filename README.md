@@ -27,3 +27,7 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
 - [Project History](docs/HISTORY.md) - Release notes and credit history.
 
 ![TapLink X3 app icon](app/src/main/ic_launcher-playstore.png)
+
+## License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
