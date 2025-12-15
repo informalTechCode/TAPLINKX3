@@ -2818,6 +2818,7 @@ class MainActivity : AppCompatActivity(),
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
             setBackgroundColor(Color.BLACK)
             visibility = View.INVISIBLE
+            overScrollMode = View.OVER_SCROLL_NEVER
 
             // Ensure WebView can receive input methods
 //          setOnTouchListener { v, event ->

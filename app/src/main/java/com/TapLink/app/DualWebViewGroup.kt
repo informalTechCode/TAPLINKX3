@@ -2838,12 +2838,10 @@ class DualWebViewGroup @JvmOverloads constructor(
             })();
         """, null)
 
-        // Provide a native scroll backup
-        try {
-            webView.scrollBy(0, (-slowedVelocity).toInt())
-        } catch (e: Exception) {
-            Log.e("ScrollDebug", "Native vertical scroll failed", e)
-        }
+        // Provide a native scroll backup only if JS execution fails or is slow?
+        // Actually, since we want to avoid double-scroll bouncing, relying on JS scrollBy is safer with 'smooth' behavior.
+        // However, if we remove this, we rely solely on JS.
+        // Let's remove the unconditional native backup to prevent fighting/overshoot.
     }
 
     private fun initializeToggleButtons() {
