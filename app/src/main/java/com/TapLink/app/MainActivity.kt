@@ -2902,6 +2902,9 @@ class MainActivity : AppCompatActivity(),
                     super.onPageStarted(view, url, favicon)
                     Log.d("WebViewDebug", "Page started loading: $url")
 
+                    // Show loading bar immediately
+                    dualWebViewGroup.updateLoadingProgress(0)
+
                     if (url != null && !url.startsWith("about:blank")) {
                         lastValidUrl = url
                         view?.visibility = View.INVISIBLE
@@ -2915,6 +2918,9 @@ class MainActivity : AppCompatActivity(),
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     Log.d("WebViewDebug", "Page finished loading: $url")
+
+                    // Ensure loading bar is hidden when finished
+                    dualWebViewGroup.updateLoadingProgress(100)
 
                     if (url != null && !url.startsWith("about:blank")) {
                         view?.visibility = View.VISIBLE
@@ -2966,6 +2972,10 @@ class MainActivity : AppCompatActivity(),
             // Consolidate WebChromeClient to handle permissions, file choosing, and custom views
             webChromeClient = object : WebChromeClient() {
                 // From first client
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    super.onProgressChanged(view, newProgress)
+                    dualWebViewGroup.updateLoadingProgress(newProgress)
+                }
                 override fun onReceivedTouchIconUrl(view: WebView?, url: String?, precomposed: Boolean) {
                     Log.d("WebViewDebug", "Received touch icon URL: $url")
                     super.onReceivedTouchIconUrl(view, url, precomposed)
@@ -3070,6 +3080,22 @@ class MainActivity : AppCompatActivity(),
                     return true
                 }
             }
+
+            // Add more detailed logging to track input field interactions
+            webView.evaluateJavascript("""
+        (function() {
+            document.addEventListener('focus', function(e) {
+                console.log('Focus event:', {
+                    target: e.target.tagName,
+                    type: e.target.type,
+                    isInput: e.target instanceof HTMLInputElement,
+                    isTextArea: e.target instanceof HTMLTextAreaElement,
+                    isContentEditable: e.target.isContentEditable
+                });
+            }, true);
+        })();
+    """, null)
+
         }
 
 
@@ -3891,6 +3917,8 @@ class MainActivity : AppCompatActivity(),
             Log.d("NavigationDebug", "No history entry available for goBack()")
             return
         }
+
+        dualWebViewGroup.updateLoadingProgress(0)
 
         val previousUrl = if (historyList.size > 1) {
             historyList.getItemAtIndex(historyList.size - 2).url.also {
