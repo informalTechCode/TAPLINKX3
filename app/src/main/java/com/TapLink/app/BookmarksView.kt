@@ -703,7 +703,7 @@ class BookmarksView @JvmOverloads constructor(
 
             // Force layout measurement before making visible
             measure(
-                MeasureSpec.makeMeasureSpec(320, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
             )
             layout(left, top, left + measuredWidth, top + measuredHeight)
@@ -729,7 +729,7 @@ class BookmarksView @JvmOverloads constructor(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(
-            MeasureSpec.makeMeasureSpec(320, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(400, MeasureSpec.AT_MOST)
         )
     }

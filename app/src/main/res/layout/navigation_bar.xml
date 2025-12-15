@@ -25,6 +25,22 @@
         android:layout_weight="1"/>
 
     <ImageButton
+        android:id="@+id/btnForward"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:src="@drawable/ic_arrow_back"
+        android:rotation="180"
+        android:background="@drawable/nav_button_background"
+        android:contentDescription="Go forward"
+        android:padding="8dp"
+        android:scaleType="fitCenter"/>
+
+    <Space
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"/>
+
+    <ImageButton
         android:id="@+id/btnHome"
         android:layout_width="40dp"
         android:layout_height="40dp"
