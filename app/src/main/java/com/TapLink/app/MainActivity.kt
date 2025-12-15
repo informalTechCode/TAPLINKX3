@@ -3918,6 +3918,8 @@ class MainActivity : AppCompatActivity(),
             return
         }
 
+        dualWebViewGroup.updateLoadingProgress(0)
+
         val previousUrl = if (historyList.size > 1) {
             historyList.getItemAtIndex(historyList.size - 2).url.also {
                 Log.d("NavigationDebug", "Attempting to go back to: $it")
