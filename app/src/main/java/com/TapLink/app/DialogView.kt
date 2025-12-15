@@ -73,6 +73,8 @@ class DialogView @JvmOverloads constructor(
             })
             setPadding(16, 16, 16, 16)
             visibility = View.GONE
+            // Disable system keyboard
+            showSoftInputOnFocus = false
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT

@@ -2070,8 +2070,9 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     fun getDialogInputView(): EditText? {
-        return if (dialogView?.visibility == View.VISIBLE) {
-            dialogView?.getInputField()
+        val input = dialogView?.getInputField()
+        return if (dialogView?.visibility == View.VISIBLE && input?.visibility == View.VISIBLE) {
+            input
         } else {
             null
         }
