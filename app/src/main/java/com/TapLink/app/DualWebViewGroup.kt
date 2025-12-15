@@ -70,11 +70,10 @@ class DualWebViewGroup @JvmOverloads constructor(
     private lateinit var leftSystemInfoView: SystemInfoView
 
     lateinit var leftNavigationBar: View
-    private val verticalBarSize = 480 - 48
+    private val verticalBarSize = 480 - 40
     private val nButtons    = 9
     private val buttonHeight = verticalBarSize / nButtons
     private val buttonFeedbackDuration = 200L
-    private val KEYBOARD_HEIGHT = 220
     var lastCursorX = 0f
     var lastCursorY = 0f
 
@@ -87,6 +86,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private val ANCHORED_TOUCH_SLOP = 10f
 
     lateinit var leftToggleBar: View
+    lateinit var progressBar: android.widget.ProgressBar
 
     @Volatile private var isRefreshing = false
     private val refreshLock = Object()
@@ -139,6 +139,31 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     interface AnchorToggleListener {
         fun onAnchorTogglePressed()
+    }
+
+    private var hideProgressBarRunnable: Runnable? = null
+
+    fun updateLoadingProgress(progress: Int) {
+        if (!::progressBar.isInitialized) return
+
+        post {
+            // Cancel any pending hide action whenever we get an update
+            hideProgressBarRunnable?.let { removeCallbacks(it) }
+            hideProgressBarRunnable = null
+
+            if (progress < 100) {
+                progressBar.visibility = View.VISIBLE
+                progressBar.progress = progress
+                progressBar.bringToFront()
+            } else {
+                progressBar.progress = 100
+                // Delay hiding to ensure user sees 100%
+                hideProgressBarRunnable = Runnable {
+                    progressBar.visibility = View.GONE
+                }
+                postDelayed(hideProgressBarRunnable!!, 500)
+            }
+        }
     }
 
     private data class NavButton(
@@ -406,7 +431,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftNavigationBar = LayoutInflater.from(context).inflate(R.layout.navigation_bar, this, false).apply {
             layoutParams = LayoutParams(
                 LayoutParams.MATCH_PARENT,
-                48
+                40
             )
             setBackgroundColor(Color.parseColor("#202020"))
             visibility = View.VISIBLE
@@ -458,7 +483,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Initialize left toggle bar
         leftToggleBar = LayoutInflater.from(context).inflate(R.layout.toggle_bar, this, false).apply {
-            layoutParams = LayoutParams(48, 592)
+            layoutParams = LayoutParams(40, 592)
             setBackgroundColor(Color.parseColor("#202020"))
             visibility = View.VISIBLE
             clipToOutline = true  // Add this
@@ -513,15 +538,24 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Initialize URL EditTexts
         urlEditText  =  setupUrlEditText(true)
 
+        // Initialize ProgressBar
+        progressBar = android.widget.ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 4)
+            progressDrawable.setTint(Color.BLUE)
+            max = 100
+            visibility = View.GONE
+            elevation = 200f // Ensure it's above other views
+        }
 
         //addView(urlEditText)
+            addView(toastView)
+            addView(dialogView)
 
         // Bring urlEditTextLeft to front
         urlEditText.bringToFront()
 
         // Disable text handles for both EditTexts
         disableTextHandles(urlEditText)
-
         // Initialize Toast View
         toastView = TextView(context).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -605,6 +639,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         dialogView.addView(dialogMessageView)
         dialogView.addView(dialogInputView)
         dialogView.addView(buttonLayout)
+
+
 
 //
 
@@ -707,8 +743,9 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftEyeUIContainer.apply {
             // Add views in the correct z-order
             // Add webView with correct position
-            addView(webView, FrameLayout.LayoutParams(640 - 48, LayoutParams.MATCH_PARENT).apply {
-                leftMargin = 48  // Position after toggle bar
+            addView(webView, FrameLayout.LayoutParams(640 - 40, LayoutParams.MATCH_PARENT).apply {
+                leftMargin = 40  // Position after toggle bar
+                bottomMargin = 40 // Account for nav bar
             })
             addView(leftToggleBar)
             Log.d("ViewDebug", "Toggle bar added to UI container with hash: ${leftToggleBar.hashCode()}")
@@ -716,6 +753,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             addView(leftNavigationBar.apply{
                 elevation = 101f
             })
+            addView(progressBar) // Add progress bar
             addView(keyboardContainer)
             addView(leftSystemInfoView)
             addView(urlEditText)
@@ -912,6 +950,8 @@ class DualWebViewGroup @JvmOverloads constructor(
     fun getDialogInputView(): EditText? {
         return if (isDialogVisible() && isPromptDialog) dialogInputView else null
     }
+        return if (isUrlEditing) urlEditText else null
+    }
 
     fun animateViewportAdjustment() {
         webView.animate()
@@ -976,175 +1016,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
     }
 
-    fun showToast(message: String, duration: Long = 3000L) {
-        // Cancel any pending hide operation
-        hideToastRunnable?.let { toastHandler.removeCallbacks(it) }
-
-        toastView.apply {
-            text = message
-            visibility = View.VISIBLE
-            bringToFront()
-        }
-
-        // Force refresh to update mirrors
-        post {
-            requestLayout()
-            invalidate()
-            startRefreshing()
-        }
-
-        // Schedule hiding
-        hideToastRunnable = Runnable {
-            toastView.visibility = View.GONE
-            post {
-                requestLayout()
-                invalidate()
-                startRefreshing()
-            }
-        }
-        toastHandler.postDelayed(hideToastRunnable!!, duration)
-    }
-
-    fun showConfirm(message: String, result: android.webkit.JsResult) {
-        currentJsResult = result
-        isPromptDialog = false
-
-        dialogMessageView.text = message
-        dialogInputView.visibility = View.GONE
-        dialogView.visibility = View.VISIBLE
-        dialogView.bringToFront()
-
-        post {
-            requestLayout()
-            invalidate()
-            startRefreshing()
-        }
-    }
-
-    fun showPrompt(message: String, defaultValue: String?, result: android.webkit.JsPromptResult) {
-        currentJsPromptResult = result
-        isPromptDialog = true
-
-        dialogMessageView.text = message
-        dialogInputView.setText(defaultValue ?: "")
-        dialogInputView.visibility = View.VISIBLE
-        dialogView.visibility = View.VISIBLE
-        dialogView.bringToFront()
-
-        keyboardListener?.onShowKeyboard()
-
-        post {
-            requestLayout()
-            invalidate()
-            startRefreshing()
-        }
-    }
-
-    fun dismissDialog(confirmed: Boolean) {
-        if (!isDialogVisible()) return
-
-        if (isPromptDialog) {
-            val text = dialogInputView.text.toString()
-            if (confirmed) {
-                currentJsPromptResult?.confirm(text)
-            } else {
-                currentJsPromptResult?.cancel()
-            }
-            currentJsPromptResult = null
-            keyboardListener?.onHideKeyboard()
-        } else {
-            if (confirmed) {
-                currentJsResult?.confirm()
-            } else {
-                currentJsResult?.cancel()
-            }
-            currentJsResult = null
-        }
-
-        dialogView.visibility = View.GONE
-        webView.visibility = View.VISIBLE
-        post {
-            requestLayout()
-            invalidate()
-            startRefreshing()
-        }
-    }
-
-    fun isDialogVisible(): Boolean = dialogView.visibility == View.VISIBLE
-
-    fun handleDialogInput(text: String) {
-        if (isDialogVisible() && isPromptDialog) {
-            val currentText = dialogInputView.text.toString()
-            val start = dialogInputView.selectionStart
-            val end = dialogInputView.selectionEnd
-
-            if (text == "backspace") {
-                if (start > 0 && start == end) {
-                    val newText = currentText.substring(0, start - 1) + currentText.substring(end)
-                    dialogInputView.setText(newText)
-                    dialogInputView.setSelection(start - 1)
-                } else if (start != end) {
-                    val newText = currentText.substring(0, start) + currentText.substring(end)
-                    dialogInputView.setText(newText)
-                    dialogInputView.setSelection(start)
-                }
-            } else if (text == "enter") {
-                dismissDialog(true)
-            } else {
-                val newText = currentText.substring(0, start) + text + currentText.substring(end)
-                dialogInputView.setText(newText)
-                dialogInputView.setSelection(start + text.length)
-            }
-        }
-    }
-
-    private fun handleDialogTap(x: Float, y: Float) {
-        if (dialogView.childCount < 3) return
-        val buttonLayout = dialogView.getChildAt(2) as ViewGroup
-        val cancelBtn = dialogCancelButton
-        val okBtn = dialogOkButton
-
-        val dialogLeft = dialogView.left
-        val dialogTop = dialogView.top
-
-        val blLeft = buttonLayout.left
-        val blTop = buttonLayout.top
-
-        // Cancel Button
-        val cancelLeft = dialogLeft + blLeft + cancelBtn.left
-        val cancelRight = dialogLeft + blLeft + cancelBtn.right
-        val cancelTop = dialogTop + blTop + cancelBtn.top
-        val cancelBottom = dialogTop + blTop + cancelBtn.bottom
-
-        if (x >= cancelLeft && x <= cancelRight && y >= cancelTop && y <= cancelBottom) {
-            dismissDialog(false)
-            return
-        }
-
-        // OK Button
-        val okLeft = dialogLeft + blLeft + okBtn.left
-        val okRight = dialogLeft + blLeft + okBtn.right
-        val okTop = dialogTop + blTop + okBtn.top
-        val okBottom = dialogTop + blTop + okBtn.bottom
-
-        if (x >= okLeft && x <= okRight && y >= okTop && y <= okBottom) {
-            dismissDialog(true)
-            return
-        }
-
-        if (isPromptDialog) {
-            val inputLeft = dialogView.left + dialogInputView.left
-            val inputRight = dialogView.left + dialogInputView.right
-            val inputTop = dialogView.top + dialogInputView.top
-            val inputBottom = dialogView.top + dialogInputView.bottom
-
-            if (x >= inputLeft && x <= inputRight && y >= inputTop && y <= inputBottom) {
-                dialogInputView.requestFocus()
-                keyboardListener?.onShowKeyboard()
-            }
-        }
-    }
-
 
 
     fun handleBookmarkTap(): Boolean {
@@ -1203,7 +1074,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP
             ).apply {
-                leftMargin = 48  // Single margin for left side
+                leftMargin = 40  // Single margin for left side
             }
             setBackgroundColor(Color.parseColor("#202020"))
             setTextColor(Color.WHITE)
@@ -1459,7 +1330,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Ensure toggle bar visibility
         if (leftToggleBar.measuredWidth == 0 || leftToggleBar.measuredHeight == 0) {
             leftToggleBar.measure(
-                MeasureSpec.makeMeasureSpec(48, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(40, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(596, MeasureSpec.EXACTLY)
             )
             // Instead of directly calling layout, let's request layout
@@ -1475,9 +1346,9 @@ class DualWebViewGroup @JvmOverloads constructor(
         val width = r - l
         val height = b - t
         val halfWidth = width / 2
-        val toggleBarWidth = 48
-        val navBarHeight = 48
-        val keyboardHeight = KEYBOARD_HEIGHT
+        val toggleBarWidth = 40
+        val navBarHeight = 40
+        val keyboardHeight = 220
         val keyboardWidth = halfWidth - toggleBarWidth
 
         // Position the WebView differently based on scroll mode
@@ -1490,10 +1361,10 @@ class DualWebViewGroup @JvmOverloads constructor(
             )
         } else {
             webView.layout(
-                48,  // Account for toggle bar
+                40,  // Account for toggle bar
                 0,
                 640,  // Standard width + toggle bar offset
-                480
+                440
             )
         }
 
@@ -1543,6 +1414,20 @@ class DualWebViewGroup @JvmOverloads constructor(
         val keyboardY = height - keyboardHeight
         keyboardContainer.layout(toggleBarWidth, keyboardY, toggleBarWidth + keyboardWidth, height)
 
+        // Position ProgressBar above the navigation bar
+        val progressBarHeight = 4
+        progressBar.measure(
+            MeasureSpec.makeMeasureSpec(halfWidth - toggleBarWidth, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(progressBarHeight, MeasureSpec.EXACTLY)
+        )
+        // Only show if loading
+        if (progressBar.visibility == View.VISIBLE) {
+            val pbY = height - navBarHeight - progressBarHeight
+            progressBar.layout(toggleBarWidth, pbY, halfWidth, pbY + progressBarHeight)
+        } else {
+            progressBar.layout(0, 0, 0, 0)
+        }
+
         // Hide navigation bars
         leftNavigationBar.visibility = View.GONE
 
@@ -1558,7 +1443,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
                 val bookmarksHeight = leftBookmarksView.measuredHeight
                 val bookmarksY = if (isUrlEditing) {
-                    48  // Below URL edit field
+                    40  // Below URL edit field
                 } else {
                     keyboardY - bookmarksHeight
                 }
@@ -1908,40 +1793,41 @@ class DualWebViewGroup @JvmOverloads constructor(
             } else {
                 // Normal Interaction Handling (No Dialog)
 
-                // Check Keyboard
-                if (!isOverTarget && keyboardContainer.visibility == View.VISIBLE) {
-                    val localCoords = computeAnchoredKeyboardCoordinates()
-                    if (localCoords != null) {
-                        val (localX, localY) = localCoords
-                        if (localX >= 0 && localX <= keyboardContainer.width &&
-                            localY >= 0 && localY <= keyboardContainer.height) {
-                            isOverTarget = true
-                            anchoredTarget = 1
-                        }
-                    }
-                }
-
-                // Check Bookmarks (if not already over keyboard)
-                if (!isOverTarget && ::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
-                    if (cursorX >= leftBookmarksView.left && cursorX <= leftBookmarksView.right &&
-                        cursorY >= leftBookmarksView.top && cursorY <= leftBookmarksView.bottom) {
+            // Check Keyboard
+            if (keyboardContainer.visibility == View.VISIBLE) {
+                val localCoords = computeAnchoredKeyboardCoordinates()
+                if (localCoords != null) {
+                    val (localX, localY) = localCoords
+                    if (localX >= 0 && localX <= keyboardContainer.width &&
+                        localY >= 0 && localY <= keyboardContainer.height) {
                         isOverTarget = true
-                        anchoredTarget = 2
-                        Log.d("TouchDebug", "Intercepting anchored tap for bookmarks")
+                        anchoredTarget = 1
                     }
                 }
+            }
 
-                // Check TripleClickMenu
-                tripleClickMenu?.let { menu ->
-                    if (!isOverTarget && menu.visibility == View.VISIBLE) {
-                        if (cursorX >= menu.left && cursorX <= menu.right &&
-                            cursorY >= menu.top && cursorY <= menu.bottom) {
-                            isOverTarget = true
-                            anchoredTarget = 3
-                            Log.d("TouchDebug", "Intercepting anchored tap for menu")
-                        }
+            // Check Bookmarks (if not already over keyboard)
+            if (!isOverTarget && ::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
+                if (cursorX >= leftBookmarksView.left && cursorX <= leftBookmarksView.right &&
+                    cursorY >= leftBookmarksView.top && cursorY <= leftBookmarksView.bottom) {
+                    isOverTarget = true
+                    anchoredTarget = 2
+                    Log.d("TouchDebug", "Intercepting anchored tap for bookmarks")
+                }
+            }
+
+            // Check TripleClickMenu
+            tripleClickMenu?.let { menu ->
+                if (!isOverTarget && menu.visibility == View.VISIBLE) {
+                    if (cursorX >= menu.left && cursorX <= menu.right &&
+                        cursorY >= menu.top && cursorY <= menu.bottom) {
+                        isOverTarget = true
+                        anchoredTarget = 3
+                        Log.d("TouchDebug", "Intercepting anchored tap for menu")
                     }
                 }
+            }
+
             }
 
             when (ev.action) {
@@ -1999,15 +1885,15 @@ class DualWebViewGroup @JvmOverloads constructor(
         val widthSize = MeasureSpec.getSize(widthMeasureSpec)
         val heightSize = MeasureSpec.getSize(heightMeasureSpec)
         val halfWidth = widthSize / 2
-        val navBarHeight = 48
-        val keyboardHeight = KEYBOARD_HEIGHT
-        val toggleBarWidth = 48
+        val navBarHeight = 40
+        val keyboardHeight = 240
+        val toggleBarWidth = 40
         val keyboardWidth = halfWidth - toggleBarWidth
 
         val contentHeight = if (keyboardContainer.visibility == View.VISIBLE) {
-            heightSize - KEYBOARD_HEIGHT
+            heightSize - 220  // keyboard height
         } else {
-            heightSize - 48  // nav bar height
+            heightSize - 40  // nav bar height
         }
 
         // Measure WebView with different dimensions based on scroll mode
@@ -2017,15 +1903,16 @@ class DualWebViewGroup @JvmOverloads constructor(
                 MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY)
             )
         } else {
+            // 640 - 40 = 600
             webView.measure(
-                MeasureSpec.makeMeasureSpec(592, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY)
+                MeasureSpec.makeMeasureSpec(600, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(440, MeasureSpec.EXACTLY)
             )
         }
 
         // Rest of the measuring code remains the same
         rightEyeView.measure(
-            MeasureSpec.makeMeasureSpec(halfWidth - 48, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(halfWidth - 40, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(contentHeight, MeasureSpec.EXACTLY)
         )
 
@@ -2040,12 +1927,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         )
 
         fullScreenOverlayContainer.measure(
-            MeasureSpec.makeMeasureSpec(640, MeasureSpec.EXACTLY),
-            MeasureSpec.makeMeasureSpec(heightSize, MeasureSpec.EXACTLY)
-        )
-
-        // Ensure clip parent (and thus dialogs) are measured
-        leftEyeClipParent.measure(
             MeasureSpec.makeMeasureSpec(640, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(heightSize, MeasureSpec.EXACTLY)
         )
@@ -2135,9 +2016,11 @@ class DualWebViewGroup @JvmOverloads constructor(
                                         }
                                     }
                                 }
+
                                 4 -> { // Dialog
                                     handleDialogTap(cursorX, cursorY)
                                 }
+
                             }
                         } else if (anchoredTarget == 2) {
                             // Anchored Fling for Bookmarks
@@ -2296,7 +2179,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     viewport.name = 'viewport';
                     document.head.appendChild(viewport);
                 }
-                viewport.content = 'width=592, initial-scale=1.0, maximum-scale=1.0';
+                viewport.content = 'width=600, initial-scale=1.0, maximum-scale=1.0';
             })();
             """, null
             )
@@ -2510,7 +2393,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         val height = height
         val halfWidth = width / 2
-        val navBarHeight = 48
+        val navBarHeight = 40
         val localX = x % halfWidth
 
         val smallButtonSize = 24
@@ -2519,7 +2402,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         clearAllHoverStates()
 
         if (y >= height - navBarHeight) {
-            val buttonWidth = 48
+            val buttonWidth = 40
             // Adjust the padding to account for all buttons
             val usableWidth = halfWidth - 16  // Total width minus padding (8dp on each side)
             val remainingSpace = usableWidth - (6 * buttonWidth)
@@ -2596,7 +2479,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 //        """.trimIndent())
         }
 
-        else if (localX < buttonHeight) {
+        else if (localX < 40) {
             // For left/right scroll buttons, check both X and Y coordinates
 
             val zoomButtonsY = 3*buttonHeight
@@ -2751,7 +2634,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val height = height
         val halfWidth = width / 2
         val localX = x % halfWidth
-        val toggleBarWidth = 48
+        val toggleBarWidth = 40
         val smallButtonWidth = toggleBarWidth / 2
 
         Log.d("TouchDebug", """
@@ -2859,7 +2742,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
         }
 
-        if (y >= height - 48) {
+        if (y >= height - 40) {
             keyboardListener?.onHideKeyboard()
             Log.d("AnchoredTouchDebug","handling navigation click")
                     navButtons.entries.find { it.value.isHovered }?.let { (key, button) ->
@@ -2879,7 +2762,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
 
-        if (localX < 48) {
+        if (localX < 40) {
 
             when {
                 isHoveringZoomOut -> handleZoomButtonClick("out")
@@ -3036,7 +2919,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     fun setBookmarksView(bookmarksView: BookmarksView) {
         this.leftBookmarksView = bookmarksView.apply {
             val params = MarginLayoutParams(320, LayoutParams.WRAP_CONTENT).apply {
-                leftMargin = 48  // After toggle bar
+                leftMargin = 40  // After toggle bar
                 topMargin = 168  // Below toggle buttons
             }
             layoutParams = params
@@ -3106,12 +2989,10 @@ class DualWebViewGroup @JvmOverloads constructor(
             })();
         """, null)
 
-        // Provide a native scroll backup
-        try {
-            webView.scrollBy(0, (-slowedVelocity).toInt())
-        } catch (e: Exception) {
-            Log.e("ScrollDebug", "Native vertical scroll failed", e)
-        }
+        // Provide a native scroll backup only if JS execution fails or is slow?
+        // Actually, since we want to avoid double-scroll bouncing, relying on JS scrollBy is safer with 'smooth' behavior.
+        // However, if we remove this, we rely solely on JS.
+        // Let's remove the unconditional native backup to prevent fighting/overshoot.
     }
 
     private fun initializeToggleButtons() {
@@ -3145,7 +3026,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Calculate positioning constants
         val buttonHeight = verticalBarSize / (nButtons)
-        val smallButtonWidth = 24 // Size for split buttons (zoom and scroll)
+        val smallButtonWidth = 20 // Size for split buttons (zoom and scroll) - Reduced to match 40 width
         val buttonWidth      = 2 * smallButtonWidth
         //val spacing = 8 // Standard spacing between buttons
 
@@ -3610,7 +3491,6 @@ class DualWebViewGroup @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         stopRefreshing()
-        hideToastRunnable?.let { toastHandler.removeCallbacks(it) }
     }
 
     override fun onWindowVisibilityChanged(visibility: Int) {
@@ -3665,11 +3545,11 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftSystemInfoView.translationY = 0f  // Reset any translation
         } else {
             // First set WebView back to original size
-            webView.layoutParams = FrameLayout.LayoutParams(592, 480).apply {
-                leftMargin = 48
+            webView.layoutParams = FrameLayout.LayoutParams(600, LayoutParams.MATCH_PARENT).apply {
+                leftMargin = 40
                 topMargin = 0
                 rightMargin = 0
-                bottomMargin = 0
+                bottomMargin = 40
             }
             webView.requestLayout()
 
@@ -3700,6 +3580,176 @@ class DualWebViewGroup @JvmOverloads constructor(
             requestLayout()
             invalidate()
             startRefreshing()
+        }
+    }
+
+
+    fun showToast(message: String, duration: Long = 3000L) {
+        // Cancel any pending hide operation
+        hideToastRunnable?.let { toastHandler.removeCallbacks(it) }
+
+        toastView.apply {
+            text = message
+            visibility = View.VISIBLE
+            bringToFront()
+        }
+
+        // Force refresh to update mirrors
+        post {
+            requestLayout()
+            invalidate()
+            startRefreshing()
+        }
+
+        // Schedule hiding
+        hideToastRunnable = Runnable {
+            toastView.visibility = View.GONE
+            post {
+                requestLayout()
+                invalidate()
+                startRefreshing()
+            }
+        }
+        toastHandler.postDelayed(hideToastRunnable!!, duration)
+    }
+
+    fun showConfirm(message: String, result: android.webkit.JsResult) {
+        currentJsResult = result
+        isPromptDialog = false
+
+        dialogMessageView.text = message
+        dialogInputView.visibility = View.GONE
+        dialogView.visibility = View.VISIBLE
+        dialogView.bringToFront()
+
+        post {
+            requestLayout()
+            invalidate()
+            startRefreshing()
+        }
+    }
+
+    fun showPrompt(message: String, defaultValue: String?, result: android.webkit.JsPromptResult) {
+        currentJsPromptResult = result
+        isPromptDialog = true
+
+        dialogMessageView.text = message
+        dialogInputView.setText(defaultValue ?: "")
+        dialogInputView.visibility = View.VISIBLE
+        dialogView.visibility = View.VISIBLE
+        dialogView.bringToFront()
+
+        keyboardListener?.onShowKeyboard()
+
+        post {
+            requestLayout()
+            invalidate()
+            startRefreshing()
+        }
+    }
+
+    fun dismissDialog(confirmed: Boolean) {
+        if (!isDialogVisible()) return
+
+        if (isPromptDialog) {
+            val text = dialogInputView.text.toString()
+            if (confirmed) {
+                currentJsPromptResult?.confirm(text)
+            } else {
+                currentJsPromptResult?.cancel()
+            }
+            currentJsPromptResult = null
+            keyboardListener?.onHideKeyboard()
+        } else {
+            if (confirmed) {
+                currentJsResult?.confirm()
+            } else {
+                currentJsResult?.cancel()
+            }
+            currentJsResult = null
+        }
+
+        dialogView.visibility = View.GONE
+        webView.visibility = View.VISIBLE
+        post {
+            requestLayout()
+            invalidate()
+            startRefreshing()
+        }
+    }
+
+    fun isDialogVisible(): Boolean = dialogView.visibility == View.VISIBLE
+
+    fun handleDialogInput(text: String) {
+        if (isDialogVisible() && isPromptDialog) {
+            val currentText = dialogInputView.text.toString()
+            val start = dialogInputView.selectionStart
+            val end = dialogInputView.selectionEnd
+
+            if (text == "backspace") {
+                if (start > 0 && start == end) {
+                    val newText = currentText.substring(0, start - 1) + currentText.substring(end)
+                    dialogInputView.setText(newText)
+                    dialogInputView.setSelection(start - 1)
+                } else if (start != end) {
+                    val newText = currentText.substring(0, start) + currentText.substring(end)
+                    dialogInputView.setText(newText)
+                    dialogInputView.setSelection(start)
+                }
+            } else if (text == "enter") {
+                dismissDialog(true)
+            } else {
+                val newText = currentText.substring(0, start) + text + currentText.substring(end)
+                dialogInputView.setText(newText)
+                dialogInputView.setSelection(start + text.length)
+            }
+        }
+    }
+
+    private fun handleDialogTap(x: Float, y: Float) {
+        if (dialogView.childCount < 3) return
+        val buttonLayout = dialogView.getChildAt(2) as ViewGroup
+        val cancelBtn = dialogCancelButton
+        val okBtn = dialogOkButton
+
+        val dialogLeft = dialogView.left
+        val dialogTop = dialogView.top
+
+        val blLeft = buttonLayout.left
+        val blTop = buttonLayout.top
+
+        // Cancel Button
+        val cancelLeft = dialogLeft + blLeft + cancelBtn.left
+        val cancelRight = dialogLeft + blLeft + cancelBtn.right
+        val cancelTop = dialogTop + blTop + cancelBtn.top
+        val cancelBottom = dialogTop + blTop + cancelBtn.bottom
+
+        if (x >= cancelLeft && x <= cancelRight && y >= cancelTop && y <= cancelBottom) {
+            dismissDialog(false)
+            return
+        }
+
+        // OK Button
+        val okLeft = dialogLeft + blLeft + okBtn.left
+        val okRight = dialogLeft + blLeft + okBtn.right
+        val okTop = dialogTop + blTop + okBtn.top
+        val okBottom = dialogTop + blTop + okBtn.bottom
+
+        if (x >= okLeft && x <= okRight && y >= okTop && y <= okBottom) {
+            dismissDialog(true)
+            return
+        }
+
+        if (isPromptDialog) {
+            val inputLeft = dialogView.left + dialogInputView.left
+            val inputRight = dialogView.left + dialogInputView.right
+            val inputTop = dialogView.top + dialogInputView.top
+            val inputBottom = dialogView.top + dialogInputView.bottom
+
+            if (x >= inputLeft && x <= inputRight && y >= inputTop && y <= inputBottom) {
+                dialogInputView.requestFocus()
+                keyboardListener?.onShowKeyboard()
+            }
         }
     }
 

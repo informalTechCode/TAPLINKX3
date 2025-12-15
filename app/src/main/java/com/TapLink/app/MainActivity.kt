@@ -2,6 +2,7 @@ package com.TapLinkX3.app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -544,7 +545,17 @@ class MainActivity : AppCompatActivity(),
                     val verticalDelta = horizontalAsVertical + verticalFromDrag
 
                     if (kotlin.math.abs(verticalDelta) >= 1f) {
-                        webView.scrollBy(0, verticalDelta.toInt())
+                        val deltaInt = verticalDelta.toInt()
+                        // Check if we can scroll in the requested direction
+                        val canScroll = if (deltaInt < 0) {
+                            webView.canScrollVertically(-1)
+                        } else {
+                            webView.canScrollVertically(1)
+                        }
+
+                        if (canScroll) {
+                            webView.scrollBy(0, deltaInt)
+                        }
                     }
                     return true
                 }
@@ -779,116 +790,6 @@ class MainActivity : AppCompatActivity(),
                 }
 
                 onNavigationBackPressed()
-            }
-
-            override fun onFling(
-                e1: MotionEvent?,
-                e2: MotionEvent,
-                velocityX: Float,
-                velocityY: Float
-            ): Boolean {
-
-                Log.d("GestureDebug", """
-        --- onFling (X3: cursor > continuous) ---
-        vX=$velocityX vY=$velocityY
-        cursor=$isCursorVisible anchored=$isAnchored keyboard=$isKeyboardVisible
-        ringEnabled=$isRingSwitchEnabled ringConnected=$isRingConnected
-    """.trimIndent())
-                val isX3 = com.ffalcon.mercury.android.sdk.util.DeviceUtil.isX3Device()
-
-                if (isX3) {
-                    if (isAnchored) {
-                        // Combine horizontal and vertical velocities for Temple Gestures / Touchpad
-                        val effectiveVelocity = (velocityX * X_INVERT * H2V_GAIN) + (velocityY * Y_INVERT)
-                        dualWebViewGroup.handleAnchoredFling(effectiveVelocity)
-                        return true
-                    }
-                    return false
-                }
-
-                // Legacy path (!isX3)
-                if (e2.device?.name?.contains(
-                        "Virtual",
-                        ignoreCase = true
-                    ) == true && isRingSwitchEnabled && !isAnchored
-                ) {
-                        Log.d("GestureDebug", "Ring fling → handleScroll($velocityX)")
-                        handleScroll(velocityX)
-                        return true
-                    }
-
-                    // Thresholds
-                    val dx = e2.x - (e1?.x ?: 0f)
-                    val dy = e2.y - (e1?.y ?: 0f)
-                    val total = kotlin.math.sqrt(dx * dx + dy * dy)
-                    if (kotlin.math.abs(velocityX) < MINIMUM_FLING_VELOCITY || total < MINIMUM_FLING_DISTANCE) {
-                        Log.d("GestureDebug", "Below fling threshold → tap")
-                        potentialTapEvent?.let { down ->
-                            onSingleTapConfirmed(down); down.recycle()
-                        }
-                        potentialTapEvent = null
-                        return true
-                    }
-
-                    handleUserInteraction()
-
-                    if (tripleClickMenu.isMenuVisible() || dualWebViewGroup.isScreenMasked()) {
-                        Log.d("GestureDebug", "Menu/mask active → consume")
-                        return true
-                    }
-
-                    if (dualWebViewGroup.isBookmarksExpanded()) {
-                        Log.d(
-                            "GestureDebug",
-                            "Bookmarks open → DualWebViewGroup.handleFling($velocityX)"
-                        )
-                        dualWebViewGroup.handleFling(velocityX)
-                        return true
-                    }
-
-                    if (isKeyboardVisible) {
-                        if (isAnchored) {
-                            val slowed = velocityX * 0.15f
-                            Log.d(
-                                "GestureDebug",
-                                "Keyboard+Anchored → JS smooth scroll (slowed=$slowed)"
-                            )
-                            webView.evaluateJavascript(
-                                "window.scrollBy({top:${(-slowed).toInt()},behavior:'smooth'});",
-                                null
-                            )
-                        } else {
-                            Log.d(
-                                "GestureDebug",
-                                "Keyboard visible → keyboardView.handleFlingEvent($velocityX)"
-                            )
-                            keyboardView?.handleFlingEvent(velocityX)
-                        }
-                        return true
-                    }
-
-                    // ======== Non-X3 legacy path ========
-                    if (isAnchored) {
-                        Log.d("GestureDebug", "Anchored (legacy) → handleScroll($velocityX)")
-                        handleScroll(velocityX)
-                        return true
-                    }
-
-                    if (isCursorVisible && !(isRingConnected && isRingSwitchEnabled)) {
-                        val scale = 1f / 100f
-                        currentVelocityX = velocityX * scale
-                        currentVelocityY = 0f
-                        Log.d(
-                            "GestureDebug",
-                            "Cursor inertia (legacy) vX=$velocityX → curVx=$currentVelocityX"
-                        )
-                        handler.post(updateCursorRunnable)
-                        return true
-                    }
-
-                    Log.d("GestureDebug", "Default legacy → handleScroll($velocityX)")
-                    handleScroll(velocityX)
-                    return true
             }
 
             // Update for smoother, responsive movement with looping
@@ -1258,7 +1159,6 @@ class MainActivity : AppCompatActivity(),
         scrollModeHandler.removeCallbacks(scrollModeRunnable)
 
         // Start timer if cursor is visible and keyboard isn't
-        /*
         if (isCursorVisible && !isKeyboardVisible) {
             Log.d("ScrollModeDebug", "Starting scroll mode timer")
             scrollModeHandler.postDelayed(scrollModeRunnable, SCROLL_MODE_TIMEOUT)
@@ -1269,7 +1169,6 @@ class MainActivity : AppCompatActivity(),
             Keyboard visible: $isKeyboardVisible
         """.trimIndent())
         }
-        */
     }
 
     // Handle ring orientation data to move cursor
@@ -2803,9 +2702,6 @@ class MainActivity : AppCompatActivity(),
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
-        // Initialize AudioManager
-        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
         // First check if speech recognition is available
         val speechRecognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
         val speechRecognitionAvailable = packageManager.resolveActivity(speechRecognizerIntent, 0) != null
@@ -2822,7 +2718,8 @@ class MainActivity : AppCompatActivity(),
             isFocusableInTouchMode = true
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
             setBackgroundColor(Color.BLACK)
-            visibility = View.VISIBLE
+            visibility = View.INVISIBLE
+            overScrollMode = View.OVER_SCROLL_NEVER
 
             // Ensure WebView can receive input methods
 //          setOnTouchListener { v, event ->
@@ -2864,7 +2761,7 @@ class MainActivity : AppCompatActivity(),
                 displayZoomControls = false
 
                 // Multi-window Support
-                setSupportMultipleWindows(true)
+                setSupportMultipleWindows(false)
 
                 // Handle Mixed Content
                 mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
@@ -2907,8 +2804,12 @@ class MainActivity : AppCompatActivity(),
                     super.onPageStarted(view, url, favicon)
                     Log.d("WebViewDebug", "Page started loading: $url")
 
+                    // Show loading bar immediately
+                    dualWebViewGroup.updateLoadingProgress(0)
+
                     if (url != null && !url.startsWith("about:blank")) {
                         lastValidUrl = url
+                        view?.visibility = View.INVISIBLE
                     } else if (url?.startsWith("about:blank") == true && lastValidUrl != null) {
                         // Cancel about:blank load immediately
                         view?.stopLoading()
@@ -2919,6 +2820,9 @@ class MainActivity : AppCompatActivity(),
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     Log.d("WebViewDebug", "Page finished loading: $url")
+
+                    // Ensure loading bar is hidden when finished
+                    dualWebViewGroup.updateLoadingProgress(100)
 
                     if (url != null && !url.startsWith("about:blank")) {
                         view?.visibility = View.VISIBLE
@@ -2967,24 +2871,16 @@ class MainActivity : AppCompatActivity(),
     """, null)
 
 
-            webChromeClient = object : WebChromeClient() {
-                override fun onJsAlert(
-                    view: WebView?,
-                    url: String?,
-                    message: String?,
-                    result: android.webkit.JsResult?
-                ): Boolean {
+            // Consolidate WebChromeClient to handle permissions, file choosing, and custom views
+                        webChromeClient = object : WebChromeClient() {
+                // From Branch: JS Dialogs
+                override fun onJsAlert(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
                     message?.let { dualWebViewGroup.showToast(it) }
                     result?.confirm()
                     return true
                 }
 
-                override fun onJsConfirm(
-                    view: WebView?,
-                    url: String?,
-                    message: String?,
-                    result: android.webkit.JsResult?
-                ): Boolean {
+                override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
                     if (message != null && result != null) {
                         dualWebViewGroup.showConfirm(message, result)
                         return true
@@ -2992,13 +2888,7 @@ class MainActivity : AppCompatActivity(),
                     return super.onJsConfirm(view, url, message, result)
                 }
 
-                override fun onJsPrompt(
-                    view: WebView?,
-                    url: String?,
-                    message: String?,
-                    defaultValue: String?,
-                    result: android.webkit.JsPromptResult?
-                ): Boolean {
+                override fun onJsPrompt(view: WebView?, url: String?, message: String?, defaultValue: String?, result: android.webkit.JsPromptResult?): Boolean {
                     if (message != null && result != null) {
                         dualWebViewGroup.showPrompt(message, defaultValue, result)
                         return true
@@ -3006,9 +2896,25 @@ class MainActivity : AppCompatActivity(),
                     return super.onJsPrompt(view, url, message, defaultValue, result)
                 }
 
+                // From HEAD: Progress, TouchIcon, Console
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    super.onProgressChanged(view, newProgress)
+                    dualWebViewGroup.updateLoadingProgress(newProgress)
+                }
+
+                override fun onReceivedTouchIconUrl(view: WebView?, url: String?, precomposed: Boolean) {
+                    Log.d("WebViewDebug", "Received touch icon URL: $url")
+                    super.onReceivedTouchIconUrl(view, url, precomposed)
+                }
+
+                override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+                    Log.d("WebViewInput", "${consoleMessage.messageLevel()} [${consoleMessage.lineNumber()}]: ${consoleMessage.message()}")
+                    return true
+                }
+
+                // From HEAD: Permissions
                 override fun onPermissionRequest(request: PermissionRequest) {
                     Log.d("WebView", "Permission request: ${request.resources.joinToString()}")
-
                     val permissions = mutableListOf<String>()
                     val requiredAndroidPermissions = mutableListOf<String>()
 
@@ -3017,7 +2923,6 @@ class MainActivity : AppCompatActivity(),
                             PermissionRequest.RESOURCE_AUDIO_CAPTURE -> {
                                 permissions.add(resource)
                                 requiredAndroidPermissions.add(android.Manifest.permission.RECORD_AUDIO)
-                                // Configure AR glasses microphone for voice assistant mode
                                 audioManager?.setParameters("audio_source_record=voiceassistant")
                             }
                             PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
@@ -3047,10 +2952,10 @@ class MainActivity : AppCompatActivity(),
 
                 override fun onPermissionRequestCanceled(request: PermissionRequest) {
                     pendingPermissionRequest = null
-                    // Reset audio source when permissions are cancelled
                     audioManager?.setParameters("audio_source_record=off")
                 }
 
+                // From HEAD: Custom View
                 override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
                     if (view == null) {
                         callback?.onCustomViewHidden()
@@ -3063,49 +2968,50 @@ class MainActivity : AppCompatActivity(),
                     hideFullScreenCustomView()
                 }
 
-                override fun onReceivedTouchIconUrl(view: WebView?, url: String?, precomposed: Boolean) {
-                    Log.d("WebViewDebug", "Received touch icon URL: $url")
-                    super.onReceivedTouchIconUrl(view, url, precomposed)
-                }
-
-                override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
-                    Log.d("WebViewInput", "${consoleMessage.messageLevel()} [${consoleMessage.lineNumber()}]: ${consoleMessage.message()}")
-                    return true
-                }
-
+                // From HEAD: File Chooser
                 override fun onShowFileChooser(
                     webView: WebView?,
                     filePathCallback: ValueCallback<Array<Uri>>?,
                     fileChooserParams: FileChooserParams?
                 ): Boolean {
-                    // Cancel any ongoing request
                     this@MainActivity.filePathCallback?.onReceiveValue(null)
                     this@MainActivity.filePathCallback = null
-
                     this@MainActivity.filePathCallback = filePathCallback
 
-                    // Build an Intent array to include camera capture + file choose
                     val takePictureIntent = createCameraIntent()
                     val contentSelectionIntent = createContentSelectionIntent(fileChooserParams?.acceptTypes)
-
-                    // Let user pick from either camera or existing files
                     val intentArray = if (takePictureIntent != null) arrayOf(takePictureIntent) else arrayOfNulls<Intent>(0)
 
-                    // Create a chooser
                     val chooserIntent = Intent(Intent.ACTION_CHOOSER).apply {
                         putExtra(Intent.EXTRA_INTENT, contentSelectionIntent)
                         putExtra(Intent.EXTRA_TITLE, "Image Chooser")
                         putExtra(Intent.EXTRA_INITIAL_INTENTS, intentArray.filterNotNull().toTypedArray())
                     }
 
-                    startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
+                    try {
+                        startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
+                    } catch (e: ActivityNotFoundException) {
+                        this@MainActivity.filePathCallback = null
+                        return false
+                    }
                     return true
                 }
             }
 
-
-
-
+            // Add more detailed logging to track input field interactions
+            webView.evaluateJavascript("""
+        (function() {
+            document.addEventListener('focus', function(e) {
+                console.log('Focus event:', {
+                    target: e.target.tagName,
+                    type: e.target.type,
+                    isInput: e.target instanceof HTMLInputElement,
+                    isTextArea: e.target instanceof HTMLTextAreaElement,
+                    isContentEditable: e.target.isContentEditable
+                });
+            }, true);
+        })();
+    """, null)
 
         }
 
@@ -3136,6 +3042,23 @@ class MainActivity : AppCompatActivity(),
             webView.loadUrl("file:///android_asset/AR_Dashboard_Landscape_Sidebar.html")
         }
 
+        // Initialize AudioManager
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        // Additional WebView settings for media support
+        webView.settings.apply {
+            mediaPlaybackRequiresUserGesture = false
+            domStorageEnabled = true
+            javaScriptEnabled = true
+            databaseEnabled = true
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            setSupportMultipleWindows(true)
+        }
+
+        logPermissionState()  // Log initial permission state
+
+        webView.addJavascriptInterface(AndroidInterface(this), "AndroidInterface")
         // Add JavaScript interface for custom media handling if needed
         webView.addJavascriptInterface(object {
             @JavascriptInterface
@@ -3151,10 +3074,6 @@ class MainActivity : AppCompatActivity(),
                 audioManager?.setParameters("audio_source_record=off")
             }
         }, "AndroidMediaInterface")
-
-        logPermissionState()  // Log initial permission state
-
-        webView.addJavascriptInterface(AndroidInterface(this), "AndroidInterface")
 
     }
 
@@ -3231,7 +3150,6 @@ class MainActivity : AppCompatActivity(),
     }
 
 
-
     private fun showFullScreenCustomView(view: View, callback: WebChromeClient.CustomViewCallback?) {
         if (fullScreenCustomView != null) {
             callback?.onCustomViewHidden()
@@ -3278,6 +3196,34 @@ class MainActivity : AppCompatActivity(),
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
+            if (resultCode == RESULT_OK) {
+                if (filePathCallback != null) {
+                    var results: Array<Uri>? = null
+
+                    // Check if response is from Camera (data is null/empty but cameraImageUri is set)
+                    // or from File Picker (data has URI)
+                    if (data == null || data.data == null) {
+                        // If cameraImageUri is populated, use it
+                        if (cameraImageUri != null) {
+                            results = arrayOf(cameraImageUri!!)
+                        }
+                    } else {
+                        // File picker result
+                        data.dataString?.let {
+                            results = arrayOf(Uri.parse(it))
+                        }
+                    }
+
+                    filePathCallback?.onReceiveValue(results)
+                    filePathCallback = null
+                }
+            } else {
+                filePathCallback?.onReceiveValue(null)
+                filePathCallback = null
+            }
+        }
 
         if (requestCode == CAMERA_REQUEST_CODE && resultCode == RESULT_OK) {
             data?.extras?.get("data")?.let { imageBitmap ->
@@ -3897,6 +3843,8 @@ class MainActivity : AppCompatActivity(),
             Log.d("NavigationDebug", "No history entry available for goBack()")
             return
         }
+
+        dualWebViewGroup.updateLoadingProgress(0)
 
         val previousUrl = if (historyList.size > 1) {
             historyList.getItemAtIndex(historyList.size - 2).url.also {
