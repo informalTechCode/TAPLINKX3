@@ -16,10 +16,6 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal">
         <Button
-            android:id="@+id/btn_hide"
-            style="@style/KeyboardButton"
-            android:text="Hide" />
-        <Button
             android:id="@+id/button_q"
             style="@style/KeyboardButton"
             android:text="Q"
@@ -71,6 +67,11 @@
             android:layout_marginStart="6dp"
             android:layout_marginEnd="6dp"
             android:textAllCaps="false"/>
+        <Button
+            android:id="@+id/btn_backspace"
+            style="@style/KeyboardButton"
+            android:text="⌫"
+            android:layout_weight="1"/>
     </LinearLayout>
 
     <!-- Second row -->
@@ -167,6 +168,16 @@
             style="@style/KeyboardButton"
             android:text="M"
             android:textAllCaps="false"/>
+        <Button
+            android:id="@+id/button_period"
+            style="@style/KeyboardButton"
+            android:text="."
+            android:textAllCaps="false"/>
+        <Button
+            android:id="@+id/button_slash"
+            style="@style/KeyboardButton"
+            android:text="/"
+            android:textAllCaps="false"/>
     </LinearLayout>
 
     <!-- Fourth row -->
@@ -175,6 +186,13 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal">
+
+        <!-- Hide key -->
+        <Button
+            android:id="@+id/btn_hide"
+            style="@style/KeyboardButton"
+            android:text="Hide"
+            android:layout_weight="1"/>
 
         <!-- Clear key -->
         <Button
@@ -205,31 +223,12 @@
             android:text="\@"
             android:layout_weight="1"/>
 
-        <Button
-            android:id="@+id/button_middle_dynamic"
-            style="@style/KeyboardButton"
-            android:text="."
-            android:layout_weight="1"/>
-
-        <Button
-            android:id="@+id/button_right_dynamic"
-            style="@style/KeyboardButton"
-            android:text="/"
-            android:layout_weight="1"/>
-
         <!-- Space key -->
         <Button
             android:id="@+id/btn_space"
             style="@style/KeyboardButton"
             android:text="Space"
-            android:layout_weight="2"/>
-
-        <!-- Backspace key -->
-        <Button
-            android:id="@+id/btn_backspace"
-            style="@style/KeyboardButton"
-            android:text="⌫"
-            android:layout_weight="1.5"/>
+            android:layout_weight="4"/>
 
         <!-- Enter key -->
         <Button

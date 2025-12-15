@@ -1740,12 +1740,12 @@ class DualWebViewGroup @JvmOverloads constructor(
         val heightSize = MeasureSpec.getSize(heightMeasureSpec)
         val halfWidth = widthSize / 2
         val navBarHeight = 40
-        val keyboardHeight = 240
+        val keyboardHeight = 160
         val toggleBarWidth = 40
         val keyboardWidth = halfWidth - toggleBarWidth
 
         val contentHeight = if (keyboardContainer.visibility == View.VISIBLE) {
-            heightSize - 220  // keyboard height
+            heightSize - 160  // keyboard height
         } else {
             heightSize - 40  // nav bar height
         }
