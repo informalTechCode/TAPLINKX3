@@ -1845,6 +1845,9 @@ class MainActivity : AppCompatActivity(),
                 // Clear edit field for both URL and bookmark editing
                 dualWebViewGroup.setLinkText("")
             }
+            dualWebViewGroup.getDialogInput() != null -> {
+                dualWebViewGroup.getDialogInput()?.setText("")
+            }
             else -> {
                 // Preserve existing JavaScript functionality for web content
                 runOnUiThread {
@@ -2259,6 +2262,42 @@ class MainActivity : AppCompatActivity(),
 
         if (isSimulatingTouchEvent || cursorJustAppeared || isToggling) {
             return
+        }
+        
+        // Intercept touches for dialogs
+        if (dualWebViewGroup.isDialogAction(lastCursorX, lastCursorY)) {
+             // We need to calculate local coordinates for the dialog container
+             val dialogContainer = dualWebViewGroup.dialogContainer
+             val location = IntArray(2)
+             dialogContainer.getLocationOnScreen(location)
+             
+             val localX = lastCursorX - location[0]
+             val localY = lastCursorY - location[1]
+             
+             // Dispatch DOWN
+             val downEvent = MotionEvent.obtain(
+                 SystemClock.uptimeMillis(),
+                 SystemClock.uptimeMillis(),
+                 MotionEvent.ACTION_DOWN,
+                 localX,
+                 localY,
+                 0
+             )
+             dialogContainer.dispatchTouchEvent(downEvent)
+             downEvent.recycle()
+             
+             // Dispatch UP
+             val upEvent = MotionEvent.obtain(
+                 SystemClock.uptimeMillis(),
+                 SystemClock.uptimeMillis(),
+                 MotionEvent.ACTION_UP,
+                 localX,
+                 localY,
+                 0
+             )
+             dialogContainer.dispatchTouchEvent(upEvent)
+             upEvent.recycle()
+             return
         }
 
         // Check if settings menu is visible first
@@ -2980,6 +3019,35 @@ class MainActivity : AppCompatActivity(),
                     }
                     return true
                 }
+                
+                // Custom Dialog Handling
+                override fun onJsAlert(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
+                    // Log.d("DialogDebug", "onJsAlert: $message")
+                    dualWebViewGroup.showAlertDialog(message ?: "") {
+                        result?.confirm()
+                    }
+                    return true
+                }
+
+                override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
+                    // Log.d("DialogDebug", "onJsConfirm: $message")
+                    dualWebViewGroup.showConfirmDialog(message ?: "", {
+                        result?.confirm()
+                    }, {
+                        result?.cancel()
+                    })
+                    return true
+                }
+
+                override fun onJsPrompt(view: WebView?, url: String?, message: String?, defaultValue: String?, result: android.webkit.JsPromptResult?): Boolean {
+                    // Log.d("DialogDebug", "onJsPrompt: $message")
+                    dualWebViewGroup.showPromptDialog(message ?: "", defaultValue, { text ->
+                        result?.confirm(text)
+                    }, {
+                        result?.cancel()
+                    })
+                    return true
+                }
             }
 
             // Add more detailed logging to track input field interactions
@@ -3402,6 +3470,11 @@ class MainActivity : AppCompatActivity(),
             Container visibility: ${dualWebViewGroup.keyboardContainer.visibility}
             isKeyboardVisible: $isKeyboardVisible
         """.trimIndent())
+            isKeyboardVisible = true
+            
+            // Ensure keyboard is on top of dialogs
+            dualWebViewGroup.keyboardContainer.elevation = 3000f
+            dualWebViewGroup.keyboardContainer.bringToFront()
         }
 
         isKeyboardVisible = true
@@ -3663,6 +3736,14 @@ class MainActivity : AppCompatActivity(),
                 // Set text and move cursor after inserted character
                 dualWebViewGroup.setLinkText(newText, cursorPosition + 1)
             }
+            dualWebViewGroup.getDialogInput() != null -> {
+                val input = dualWebViewGroup.getDialogInput()!!
+                val currentText = input.text.toString()
+                val cursorPosition = input.selectionStart
+                val newText = StringBuilder(currentText).insert(cursorPosition, key).toString()
+                input.setText(newText)
+                input.setSelection(cursorPosition + 1)
+            }
             else -> {
                 sendCharacterToWebView(key)
             }
@@ -3697,6 +3778,16 @@ class MainActivity : AppCompatActivity(),
                     dualWebViewGroup.setLinkText(newText, cursorPosition - 1)
                 }
             }
+            dualWebViewGroup.getDialogInput() != null -> {
+                val input = dualWebViewGroup.getDialogInput()!!
+                val currentText = input.text.toString()
+                val cursorPosition = input.selectionStart
+                if (cursorPosition > 0) {
+                    val newText = StringBuilder(currentText).deleteCharAt(cursorPosition - 1).toString()
+                    input.setText(newText)
+                    input.setSelection(cursorPosition - 1)
+                }
+            }
             else -> {
                 sendBackspaceToWebView()
             }
@@ -3718,6 +3809,12 @@ class MainActivity : AppCompatActivity(),
             // If bookmarks are visible and being edited, handle bookmark updates
             dualWebViewGroup.isBookmarksExpanded() -> {
                 dualWebViewGroup.getBookmarksView().onEnterPressed()
+                hideCustomKeyboard()
+            }
+            dualWebViewGroup.getDialogInput() != null -> {
+                // If in dialog input, enter might mean confirm, or just hide keyboard?
+                // Usually OK button handles the confirm. 
+                // Let's just hide keyboard for now or do nothing.
                 hideCustomKeyboard()
             }
             // Otherwise handle regular keyboard input

@@ -54,7 +54,14 @@ class DualWebViewGroup @JvmOverloads constructor(
     private val rightEyeView: SurfaceView = SurfaceView(context)
     val keyboardContainer: FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.TRANSPARENT)
-        setBackgroundColor(Color.TRANSPARENT)
+    }
+    
+    val dialogContainer: FrameLayout = FrameLayout(context).apply {
+        setBackgroundColor(Color.parseColor("#CC000000")) // Semi-transparent black
+        visibility = View.GONE
+        isClickable = true
+        isFocusable = true
+        elevation = 2000f
     }
     private var customKeyboard: CustomKeyboardView? = null
     private var bitmap: Bitmap? = null
@@ -655,6 +662,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             })
             addView(progressBar) // Add progress bar
             addView(keyboardContainer)
+            addView(dialogContainer)
             addView(leftSystemInfoView)
             addView(urlEditText)
             postDelayed({
@@ -821,10 +829,11 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     fun adjustViewportAndFields(adjustment: Float) {
         // Apply adjustment to all elements
-        translationY = adjustment
+        // translationY = adjustment // Don't move the entire group, just children
         webView.translationY = adjustment
         urlEditText.translationY = adjustment
-
+        dialogContainer.translationY = adjustment
+        
         if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
             // Ensure bookmarks view stays above keyboard
             leftBookmarksView.translationY = adjustment
@@ -1419,6 +1428,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val infoBarWidth = leftSystemInfoView.measuredWidth
         val leftX = (halfWidth - infoBarWidth) / 2  // Center in left half
 
+
         // Position the info bars
         leftSystemInfoView.layout(
             leftX + toggleBarWidth,  // Account for toggle bar width
@@ -1426,6 +1436,40 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftX + toggleBarWidth + infoBarWidth,
             infoBarY + infoBarHeight
         )
+
+         // Position Dialog Container (Center it in the left view)
+        if (dialogContainer.visibility != View.GONE) {
+            val dialogWidth = 500
+            val dialogHeight = dialogContainer.measuredHeight.takeIf { it > 0 } ?: 300 // estimating
+            
+            // Measure the dialog container first if needed
+            dialogContainer.measure(
+                MeasureSpec.makeMeasureSpec(dialogWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST)
+            )
+            
+            val measuredH = dialogContainer.measuredHeight
+            
+            val dialogLeft = toggleBarWidth + (keyboardWidth - dialogWidth) / 2
+            
+            // Calculate available vertical space, respecting the keyboard if it is visible
+            val availableHeight = if (keyboardContainer.visibility == View.VISIBLE) {
+                height - keyboardHeight
+            } else {
+                height
+            }
+            // Center the dialog within the available space
+            val dialogTop = (availableHeight - measuredH) / 2
+            
+            dialogContainer.layout(
+                dialogLeft,
+                dialogTop,
+                dialogLeft + dialogWidth,
+                dialogTop + measuredH
+            )
+            dialogContainer.elevation = 2000f
+            dialogContainer.bringToFront()
+        }
 
         // Add after other layout code but before super call
         maskOverlay.layout(0, 0, width, height)
@@ -3436,6 +3480,197 @@ class DualWebViewGroup @JvmOverloads constructor(
             invalidate()
             startRefreshing()
         }
+    }
+
+
+    // Custom Dialog Logic
+    fun showAlertDialog(message: String, onConfirm: () -> Unit) {
+        showDialog("Alert", message, false, null, { _ -> onConfirm() }, null)
+    }
+
+    fun showConfirmDialog(message: String, onConfirm: () -> Unit, onCancel: () -> Unit) {
+        showDialog("Confirm", message, false, null, { _ -> onConfirm() }, onCancel)
+    }
+
+    fun showPromptDialog(message: String, defaultValue: String?, onConfirm: (String) -> Unit, onCancel: () -> Unit) {
+        showDialog("Prompt", message, true, defaultValue, { text -> onConfirm(text ?: "") }, onCancel)
+    }
+
+    private fun showDialog(
+        title: String,
+        message: String,
+        hasInput: Boolean,
+        defaultValue: String? = null,
+        onConfirm: ((String?) -> Unit)? = null,
+        onCancel: (() -> Unit)? = null
+    ) {
+        dialogContainer.removeAllViews()
+        
+        // Hide keyboard container initially to avoid overlapping, though we might show it again if input is focused
+        keyboardContainer.visibility = View.GONE
+        
+        val padding = 16.dp()
+        val dialogView = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                500, // Fixed width for consistent look
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER
+            }
+            setPadding(padding, padding, padding, padding)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#202020"))
+                setStroke(2, Color.parseColor("#404040"))
+                cornerRadius = 16f
+            }
+            elevation = 100f
+            isClickable = true
+            isFocusable = true
+        }
+
+        // Title
+        val titleView = TextView(context).apply {
+            text = title
+            textSize = 20f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = 16.dp()
+            }
+        }
+        dialogView.addView(titleView)
+
+        // Message
+        val messageView = TextView(context).apply {
+            text = message
+            textSize = 16f
+            setTextColor(Color.parseColor("#DDDDDD"))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = 24.dp()
+            }
+        }
+        dialogView.addView(messageView)
+
+        var inputField: EditText? = null
+        if (hasInput) {
+            inputField = EditText(context).apply {
+                setText(defaultValue ?: "")
+                setTextColor(Color.WHITE)
+                textSize = 16f
+                setPadding(16, 16, 16, 16)
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#303030"))
+                    cornerRadius = 8f
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = 24.dp()
+                }
+                
+                // Important: Show custom keyboard on focus
+                setOnFocusChangeListener { _, hasFocus ->
+                    if (hasFocus) {
+                        keyboardListener?.onShowKeyboard()
+                    }
+                }
+                
+                // Allow our custom keyboard to input text here
+                isFocusable = true
+                isFocusableInTouchMode = true
+                setSingleLine()
+            }
+            dialogView.addView(inputField)
+        }
+
+        // Buttons
+        val buttonContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        if (onCancel != null) {
+            val cancelButton = Button(context).apply {
+                text = "Cancel"
+                setTextColor(Color.parseColor("#AAAAAA"))
+                setBackgroundColor(Color.TRANSPARENT)
+                setOnClickListener {
+                    onCancel()
+                    hideDialog()
+                }
+            }
+            buttonContainer.addView(cancelButton)
+        }
+
+        val confirmButton = Button(context).apply {
+            text = "OK"
+            setTextColor(Color.parseColor("#4488FF"))
+            setBackgroundColor(Color.TRANSPARENT)
+            setOnClickListener {
+                onConfirm?.invoke(inputField?.text?.toString())
+                hideDialog()
+            }
+        }
+        buttonContainer.addView(confirmButton)
+
+        dialogView.addView(buttonContainer)
+        dialogContainer.addView(dialogView)
+        dialogContainer.visibility = View.VISIBLE
+        dialogContainer.bringToFront()
+        
+        // Ensure rendering updates
+        post {
+            requestLayout()
+            invalidate()
+            startRefreshing()
+        }
+    }
+    
+    fun hideDialog() {
+        dialogContainer.visibility = View.GONE
+        dialogContainer.removeAllViews()
+        // Determine whether to show keyboard container again
+        if (customKeyboard?.visibility == View.VISIBLE) {
+            keyboardContainer.visibility = View.VISIBLE
+        }
+        
+        post {
+            requestLayout()
+            invalidate()
+            startRefreshing()
+        }
+    }
+
+    // Helper method to get the current dialog input if any
+    fun getDialogInput(): EditText? {
+         if (dialogContainer.visibility != View.VISIBLE) return null
+         val dialogView = dialogContainer.getChildAt(0) as? ViewGroup ?: return null
+         // Scan for EditText
+         for (i in 0 until dialogView.childCount) {
+             val child = dialogView.getChildAt(i)
+             if (child is EditText) return child
+         }
+         return null
+    }
+
+    fun isDialogAction(x: Float, y: Float): Boolean {
+        if (dialogContainer.visibility != View.VISIBLE) return false
+        val loc = IntArray(2)
+        dialogContainer.getLocationOnScreen(loc)
+        return x >= loc[0] && x <= loc[0] + dialogContainer.width &&
+               y >= loc[1] && y <= loc[1] + dialogContainer.height
     }
 
 }
