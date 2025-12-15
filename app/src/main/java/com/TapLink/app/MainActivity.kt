@@ -1258,6 +1258,7 @@ class MainActivity : AppCompatActivity(),
         scrollModeHandler.removeCallbacks(scrollModeRunnable)
 
         // Start timer if cursor is visible and keyboard isn't
+        /*
         if (isCursorVisible && !isKeyboardVisible) {
             Log.d("ScrollModeDebug", "Starting scroll mode timer")
             scrollModeHandler.postDelayed(scrollModeRunnable, SCROLL_MODE_TIMEOUT)
@@ -1268,6 +1269,7 @@ class MainActivity : AppCompatActivity(),
             Keyboard visible: $isKeyboardVisible
         """.trimIndent())
         }
+        */
     }
 
     // Handle ring orientation data to move cursor
@@ -1571,6 +1573,7 @@ class MainActivity : AppCompatActivity(),
         // Get the current input field location
         val currentField = when {
             dualWebViewGroup.isUrlEditing() -> dualWebViewGroup.getCurrentUrlEditField()
+            dualWebViewGroup.isDialogVisible() -> dualWebViewGroup.getDialogInputView()
             dualWebViewGroup.isBookmarksExpanded() -> dualWebViewGroup.getBookmarksView().getCurrentEditField()
             else -> {
                 // WebView input fields code remains the same
