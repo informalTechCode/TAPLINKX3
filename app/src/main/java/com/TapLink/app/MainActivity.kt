@@ -800,7 +800,7 @@ class MainActivity : AppCompatActivity(),
                 if (isX3) {
                     if (isAnchored) {
                         // Combine horizontal and vertical velocities for Temple Gestures / Touchpad
-                        val effectiveVelocity = (velocityX * X_INVERT * H2V_GAIN) + (velocityY * Y_INVERT)
+                        val effectiveVelocity = (-velocityX * X_INVERT * H2V_GAIN) + (velocityY * Y_INVERT)
                         dualWebViewGroup.handleAnchoredFling(effectiveVelocity)
                         return true
                     }
