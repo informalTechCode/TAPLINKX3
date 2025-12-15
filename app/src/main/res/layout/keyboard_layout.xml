@@ -20,9 +20,10 @@
         <Button
             android:id="@+id/btn_hide"
             style="@style/KeyboardButton"
-            android:drawableTop="@drawable/ic_visibility_off"
+            android:drawableStart="@drawable/ic_visibility_off_small"
             android:drawableTint="@android:color/white"
-            android:padding="12dp"
+            android:gravity="center"
+            android:padding="0dp"
             android:layout_weight="1"/>
         <Button
             android:id="@+id/button_q"
@@ -144,11 +145,12 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical">
-        <!-- Switch key -->
+        <!-- Caps key -->
         <Button
-            android:id="@+id/btn_switch"
+            android:id="@+id/btn_caps"
             style="@style/KeyboardButton"
-            android:text="123"
+            android:text="ABC"
+            android:textAllCaps="false"
             android:layout_weight="1"/>
         <Button
             android:id="@+id/button_z"
@@ -213,12 +215,11 @@
             android:textSize="12sp"
             android:layout_weight="1"/>
 
-        <!-- Caps key -->
+        <!-- Switch key -->
         <Button
-            android:id="@+id/btn_caps"
+            android:id="@+id/btn_switch"
             style="@style/KeyboardButton"
-            android:text="ABC"
-            android:textAllCaps="false"
+            android:text="123"
             android:layout_weight="1"/>
 
         <!-- Space key -->
