@@ -129,6 +129,9 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var settingsMenu: View? = null
     private var isSettingsVisible = false
 
+    var dialogView: DialogView? = null
+    private var toastView: ToastView? = null
+
     interface DualWebViewGroupListener {
         fun onCursorPositionChanged(x: Float, y: Float, isVisible: Boolean)
     }
@@ -162,6 +165,14 @@ class DualWebViewGroup @JvmOverloads constructor(
                     progressBar.visibility = View.GONE
                 }
                 postDelayed(hideProgressBarRunnable!!, 500)
+            }
+        }
+    }
+
+    fun submitDialog() {
+        post {
+            if (isDialogVisible()) {
+                dialogView?.submit()
             }
         }
     }
@@ -689,6 +700,20 @@ class DualWebViewGroup @JvmOverloads constructor(
             visibility = View.GONE
             elevation = 1000f  // Put it above everything except cursors
         }
+
+        // Initialize custom views with the correct context
+        dialogView = DialogView(context).apply {
+            visibility = View.GONE
+            elevation = 2000f
+        }
+
+        toastView = ToastView(context).apply {
+            visibility = View.GONE
+            elevation = 2000f
+        }
+
+        leftEyeUIContainer.addView(dialogView)
+        leftEyeUIContainer.addView(toastView)
 
         // Add the clip parent to the main view
         addView(leftEyeClipParent)
@@ -1998,6 +2023,90 @@ class DualWebViewGroup @JvmOverloads constructor(
     """.trimIndent())
 
         customKeyboard?.handleAnchoredTap(localX, localY)
+    }
+
+    fun showDialog(message: String, type: String, defaultValue: String? = null, callback: (Any?) -> Unit) {
+        post {
+            dialogView?.apply {
+                when (type) {
+                    "alert" -> showAlert(message) {
+                        visibility = View.GONE
+                        startRefreshing()
+                        callback(null)
+                    }
+                    "confirm" -> showConfirm(message) { result ->
+                        visibility = View.GONE
+                        startRefreshing()
+                        callback(result)
+                    }
+                    "prompt" -> showPrompt(message, defaultValue) { result ->
+                        visibility = View.GONE
+                        // Hide keyboard if it was shown for prompt
+                        keyboardListener?.onHideKeyboard()
+                        startRefreshing()
+                        callback(result)
+                    }
+                }
+                bringToFront()
+
+                // Show keyboard for prompt
+                if (type == "prompt") {
+                    keyboardListener?.onShowKeyboard()
+                }
+            }
+            startRefreshing()
+        }
+    }
+
+    fun showToast(message: String) {
+        post {
+            toastView?.show(message)
+            startRefreshing()
+        }
+    }
+
+    fun isDialogVisible(): Boolean {
+        return dialogView?.visibility == View.VISIBLE
+    }
+
+    fun getDialogInputView(): EditText? {
+        return if (dialogView?.visibility == View.VISIBLE) {
+            dialogView?.getInputField()
+        } else {
+            null
+        }
+    }
+
+    fun handleDialogInput(text: String) {
+        dialogView?.getInputField()?.let { input ->
+            val start = input.selectionStart.coerceAtLeast(0)
+            val end = input.selectionEnd.coerceAtLeast(0)
+            val currentText = input.text ?: ""
+            val newText = StringBuilder(currentText).replace(start, end, text).toString()
+            input.setText(newText)
+            input.setSelection((start + text.length).coerceAtMost(newText.length))
+        }
+    }
+
+    fun handleDialogBackspace() {
+        dialogView?.getInputField()?.let { input ->
+            val start = input.selectionStart.coerceAtLeast(0)
+            val end = input.selectionEnd.coerceAtLeast(0)
+
+            if (start == end && start > 0) {
+                // Delete character before cursor
+                val currentText = input.text ?: ""
+                val newText = StringBuilder(currentText).deleteCharAt(start - 1).toString()
+                input.setText(newText)
+                input.setSelection(start - 1)
+            } else if (start != end) {
+                // Delete selection
+                val currentText = input.text ?: ""
+                val newText = StringBuilder(currentText).delete(start, end).toString()
+                input.setText(newText)
+                input.setSelection(start)
+            }
+        }
     }
 
     fun updateBrowsingMode(isDesktop: Boolean) {

@@ -2971,6 +2971,57 @@ class MainActivity : AppCompatActivity(),
 
             // Consolidate WebChromeClient to handle permissions, file choosing, and custom views
             webChromeClient = object : WebChromeClient() {
+                // Override standard JS alerts to use our custom UI
+                override fun onJsAlert(
+                    view: WebView?,
+                    url: String?,
+                    message: String?,
+                    result: android.webkit.JsResult?
+                ): Boolean {
+                    message?.let {
+                        dualWebViewGroup.showDialog(it, "alert", null) {
+                            result?.confirm()
+                        }
+                        return true
+                    }
+                    return super.onJsAlert(view, url, message, result)
+                }
+
+                override fun onJsConfirm(
+                    view: WebView?,
+                    url: String?,
+                    message: String?,
+                    result: android.webkit.JsResult?
+                ): Boolean {
+                    message?.let {
+                        dualWebViewGroup.showDialog(it, "confirm") { confirmed ->
+                            if (confirmed == true) result?.confirm() else result?.cancel()
+                        }
+                        return true
+                    }
+                    return super.onJsConfirm(view, url, message, result)
+                }
+
+                override fun onJsPrompt(
+                    view: WebView?,
+                    url: String?,
+                    message: String?,
+                    defaultValue: String?,
+                    result: android.webkit.JsPromptResult?
+                ): Boolean {
+                    message?.let {
+                        dualWebViewGroup.showDialog(it, "prompt", defaultValue) { input ->
+                            if (input != null) {
+                                result?.confirm(input.toString())
+                            } else {
+                                result?.cancel()
+                            }
+                        }
+                        return true
+                    }
+                    return super.onJsPrompt(view, url, message, defaultValue, result)
+                }
+
                 // From first client
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
                     super.onProgressChanged(view, newProgress)
@@ -3743,8 +3794,12 @@ class MainActivity : AppCompatActivity(),
     override fun onKeyPressed(key: String) {
         Log.d("LinkEditing", "onKeyPressed called with: $key")
         val editFieldVisible = dualWebViewGroup.urlEditText.visibility == View.VISIBLE
+        val dialogInputVisible = dualWebViewGroup.isDialogVisible() && dualWebViewGroup.getDialogInputView() != null
 
         when {
+            dialogInputVisible -> {
+                dualWebViewGroup.handleDialogInput(key)
+            }
             dualWebViewGroup.isBookmarksExpanded() && !editFieldVisible -> {
                 // Handle bookmark menu navigation
                 dualWebViewGroup.getBookmarksView().handleKeyboardInput(key)
@@ -3777,8 +3832,12 @@ class MainActivity : AppCompatActivity(),
     override fun onBackspacePressed() {
         Log.d("LinkEditing", "onBackspacePressed called")
         val editFieldVisible = dualWebViewGroup.urlEditText.visibility == View.VISIBLE
+        val dialogInputVisible = dualWebViewGroup.isDialogVisible() && dualWebViewGroup.getDialogInputView() != null
 
         when {
+            dialogInputVisible -> {
+                dualWebViewGroup.handleDialogBackspace()
+            }
             dualWebViewGroup.isBookmarksExpanded() && !editFieldVisible -> {
                 dualWebViewGroup.getBookmarksView().handleKeyboardInput("backspace")
             }
@@ -3803,6 +3862,12 @@ class MainActivity : AppCompatActivity(),
     }
 
     override fun onEnterPressed() {
+        // If a dialog is open (e.g. prompt), submit it
+        if (dualWebViewGroup.isDialogVisible()) {
+            dualWebViewGroup.submitDialog()
+            return
+        }
+
         isKeyboardVisible = false //if enter is pressed keyboard is no longer visible
         if(isUrlEditing) {
 
