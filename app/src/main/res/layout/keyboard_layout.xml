@@ -14,8 +14,7 @@
         android:id="@+id/first_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="4dp">
+        android:orientation="horizontal">
         <Button
             android:id="@+id/btn_hide"
             style="@style/KeyboardButton"
@@ -79,8 +78,7 @@
         android:id="@+id/second_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="4dp">
+        android:orientation="horizontal">
         <Button
             android:id="@+id/button_a"
             style="@style/KeyboardButton"
@@ -133,8 +131,7 @@
         android:id="@+id/third_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="4dp">
+        android:orientation="horizontal">
         <Button
             android:id="@+id/button_z"
             style="@style/KeyboardButton"
