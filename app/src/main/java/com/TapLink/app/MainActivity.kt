@@ -545,7 +545,17 @@ class MainActivity : AppCompatActivity(),
                     val verticalDelta = horizontalAsVertical + verticalFromDrag
 
                     if (kotlin.math.abs(verticalDelta) >= 1f) {
-                        webView.scrollBy(0, verticalDelta.toInt())
+                        val deltaInt = verticalDelta.toInt()
+                        // Check if we can scroll in the requested direction
+                        val canScroll = if (deltaInt < 0) {
+                            webView.canScrollVertically(-1)
+                        } else {
+                            webView.canScrollVertically(1)
+                        }
+
+                        if (canScroll) {
+                            webView.scrollBy(0, deltaInt)
+                        }
                     }
                     return true
                 }
