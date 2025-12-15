@@ -20,9 +20,9 @@
         <Button
             android:id="@+id/btn_hide"
             style="@style/KeyboardButton"
-            android:drawableStart="@drawable/ic_visibility_off_small"
-            android:drawableTint="@android:color/white"
-            android:gravity="center"
+            android:foreground="@drawable/ic_visibility_off_small"
+            android:foregroundGravity="center"
+            android:foregroundTint="@android:color/white"
             android:padding="0dp"
             android:layout_weight="1"/>
         <Button
