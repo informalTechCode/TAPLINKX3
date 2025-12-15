@@ -19,16 +19,15 @@
 
     <style name="KeyboardButton">
         <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">48dp</item>  <!-- Fixed height instead of 0dp -->
+        <item name="android:layout_height">35dp</item>  <!-- Reduced from 48dp -->
         <item name="android:layout_weight">1</item>
         <item name="android:background">@android:color/darker_gray</item>
         <item name="android:textColor">@android:color/white</item>
         <item name="android:focusable">true</item>
         <item name="android:focusableInTouchMode">true</item>
         <item name="android:clickable">true</item>
-        <item name="android:padding">4dp</item>
-        <item name="android:layout_margin">2dp</item>  <!-- Added margin for spacing -->
+        <item name="android:padding">2dp</item> <!-- Reduced from 4dp -->
+        <item name="android:layout_margin">1dp</item>  <!-- Reduced from 2dp -->
         <item name="android:textSize">14sp</item>
     </style>
 </resources>
-

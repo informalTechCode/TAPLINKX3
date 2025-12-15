@@ -70,17 +70,17 @@ class CustomKeyboardView @JvmOverloads constructor(
             rows = listOf(
                 listOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"),
                 listOf("A", "S", "D", "F", "G", "H", "J", "K", "L"),
-                listOf("Z", "X", "C", "V", "B", "N", "M")
+                listOf("Z", "X", "C", "V", "B", "N", "M", ".", "/")
             ),
-            dynamicKeys = listOf("@", ".", "/")
+            dynamicKeys = listOf("@")
         ),
         KeyboardMode.SYMBOLS to KeyboardLayout(
             rows = listOf(
                 listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
                 listOf("@", "#", "$", "_", "&", "-", "+", "(", ")"),
-                listOf("/", "*", ".", "'", ":", ";", "!", "?")
+                listOf("*", "'", ":", ";", "!", "?", "<", ">", "")
             ),
-            dynamicKeys = listOf("\u25C0", "\u25B6", "")
+            dynamicKeys = listOf("\u25C0") // Left Arrow (Right Arrow can be > in row 3 or handle separately)
         )
     )
 
@@ -302,12 +302,17 @@ class CustomKeyboardView @JvmOverloads constructor(
                     Log.d("KeyboardDebug", "Handling clear")
                     listener?.onClearPressed()
                 }
-                R.id.button_left_dynamic,
-                R.id.button_middle_dynamic,
-                R.id.button_right_dynamic -> handleDynamicButtonClick(button.id)
+                R.id.button_left_dynamic -> handleDynamicButtonClick(button.id)
                 else -> {
-                    Log.d("KeyboardDebug", "Handling character key: $buttonLabel")
-                    listener?.onKeyPressed(buttonLabel)
+                    // Check for arrow keys mapped to buttons in symbols mode
+                    if (buttonLabel == "<") {
+                        listener?.onMoveCursorLeft()
+                    } else if (buttonLabel == ">") {
+                        listener?.onMoveCursorRight()
+                    } else {
+                        Log.d("KeyboardDebug", "Handling character key: $buttonLabel")
+                        listener?.onKeyPressed(buttonLabel)
+                    }
                 }
             }
 
@@ -329,8 +334,6 @@ class CustomKeyboardView @JvmOverloads constructor(
             KeyboardMode.LETTERS -> {
                 val index = when (buttonId) {
                     R.id.button_left_dynamic -> 0
-                    R.id.button_middle_dynamic -> 1
-                    R.id.button_right_dynamic -> 2
                     else -> return
                 }
                 currentLayout.dynamicKeys.getOrNull(index)
@@ -339,7 +342,6 @@ class CustomKeyboardView @JvmOverloads constructor(
             }
             KeyboardMode.SYMBOLS -> when (buttonId) {
                 R.id.button_left_dynamic -> listener?.onMoveCursorLeft()
-                R.id.button_middle_dynamic -> listener?.onMoveCursorRight()
             }
         }
     }
@@ -375,18 +377,10 @@ class CustomKeyboardView @JvmOverloads constructor(
         val dynamicRow = keyboardLayout.children.elementAtOrNull(layoutConfig.rows.size) as? LinearLayout
         dynamicRow?.let { rowLayout ->
             val leftDynamicButton = rowLayout.findViewById<Button>(R.id.button_left_dynamic)
-            val middleDynamicButton = rowLayout.findViewById<Button>(R.id.button_middle_dynamic)
-            val rightDynamicButton = rowLayout.findViewById<Button>(R.id.button_right_dynamic)
 
             val dynamicKeys = layoutConfig.dynamicKeys
 
             configureDynamicButton(leftDynamicButton, dynamicKeys.getOrNull(0))
-            configureDynamicButton(middleDynamicButton, dynamicKeys.getOrNull(1))
-            configureDynamicButton(
-                rightDynamicButton,
-                dynamicKeys.getOrNull(2),
-                isVisibleOverride = currentMode == KeyboardMode.LETTERS
-            )
         }
 
         adjustCurrentColumn()
@@ -488,11 +482,9 @@ class CustomKeyboardView @JvmOverloads constructor(
         R.id.btn_backspace,
         R.id.btn_enter,
         R.id.btn_switch,
-        //R.id.btn_caps,
+        R.id.btn_caps,
         R.id.btn_clear,
-        R.id.button_left_dynamic,
-        R.id.button_middle_dynamic,
-        R.id.button_right_dynamic
+        R.id.button_left_dynamic
     )
     private val touchSlop by lazy { ViewConfiguration.get(context).scaledTouchSlop }
 

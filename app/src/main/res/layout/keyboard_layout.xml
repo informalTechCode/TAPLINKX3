@@ -15,11 +15,16 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginBottom="4dp">
+        android:gravity="center_vertical">
+        <!-- Hide key -->
         <Button
             android:id="@+id/btn_hide"
             style="@style/KeyboardButton"
-            android:text="Hide" />
+            android:foreground="@drawable/ic_visibility_off_small"
+            android:foregroundGravity="center"
+            android:foregroundTint="@android:color/white"
+            android:padding="0dp"
+            android:layout_weight="1"/>
         <Button
             android:id="@+id/button_q"
             style="@style/KeyboardButton"
@@ -72,6 +77,11 @@
             android:layout_marginStart="6dp"
             android:layout_marginEnd="6dp"
             android:textAllCaps="false"/>
+        <Button
+            android:id="@+id/btn_backspace"
+            style="@style/KeyboardButton"
+            android:text="⌫"
+            android:layout_weight="1"/>
     </LinearLayout>
 
     <!-- Second row -->
@@ -80,7 +90,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginBottom="4dp">
+        android:gravity="center_vertical">
         <Button
             android:id="@+id/button_a"
             style="@style/KeyboardButton"
@@ -134,7 +144,14 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginBottom="4dp">
+        android:gravity="center_vertical">
+        <!-- Caps key -->
+        <Button
+            android:id="@+id/btn_caps"
+            style="@style/KeyboardButton"
+            android:text="ABC"
+            android:textAllCaps="false"
+            android:layout_weight="1"/>
         <Button
             android:id="@+id/button_z"
             style="@style/KeyboardButton"
@@ -170,6 +187,16 @@
             style="@style/KeyboardButton"
             android:text="M"
             android:textAllCaps="false"/>
+        <Button
+            android:id="@+id/button_period"
+            style="@style/KeyboardButton"
+            android:text="."
+            android:textAllCaps="false"/>
+        <Button
+            android:id="@+id/button_slash"
+            style="@style/KeyboardButton"
+            android:text="/"
+            android:textAllCaps="false"/>
     </LinearLayout>
 
     <!-- Fourth row -->
@@ -177,7 +204,8 @@
         android:id="@+id/fourth_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
         <!-- Clear key -->
         <Button
@@ -187,14 +215,6 @@
             android:textSize="12sp"
             android:layout_weight="1"/>
 
-        <!-- Caps key -->
-        <Button
-            android:id="@+id/btn_caps"
-            style="@style/KeyboardButton"
-            android:text="ABC"
-            android:textAllCaps="false"
-            android:layout_weight="1"/>
-
         <!-- Switch key -->
         <Button
             android:id="@+id/btn_switch"
@@ -202,37 +222,19 @@
             android:text="123"
             android:layout_weight="1"/>
 
-        <Button
-            android:id="@+id/button_left_dynamic"
-            style="@style/KeyboardButton"
-            android:text="\@"
-            android:layout_weight="1"/>
-
-        <Button
-            android:id="@+id/button_middle_dynamic"
-            style="@style/KeyboardButton"
-            android:text="."
-            android:layout_weight="1"/>
-
-        <Button
-            android:id="@+id/button_right_dynamic"
-            style="@style/KeyboardButton"
-            android:text="/"
-            android:layout_weight="1"/>
-
         <!-- Space key -->
         <Button
             android:id="@+id/btn_space"
             style="@style/KeyboardButton"
             android:text="Space"
-            android:layout_weight="2"/>
+            android:layout_weight="4"/>
 
-        <!-- Backspace key -->
+        <!-- Left Dynamic (@) key -->
         <Button
-            android:id="@+id/btn_backspace"
+            android:id="@+id/button_left_dynamic"
             style="@style/KeyboardButton"
-            android:text="⌫"
-            android:layout_weight="1.5"/>
+            android:text="\@"
+            android:layout_weight="1"/>
 
         <!-- Enter key -->
         <Button

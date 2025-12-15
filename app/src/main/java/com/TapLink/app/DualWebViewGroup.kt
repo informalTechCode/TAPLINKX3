@@ -1236,7 +1236,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         val halfWidth = width / 2
         val toggleBarWidth = 40
         val navBarHeight = 40
-        val keyboardHeight = 220
+        // Use actual measured height of keyboard if visible, otherwise default
+        val keyboardHeight = if (keyboardContainer.measuredHeight > 0) keyboardContainer.measuredHeight else 160
         val keyboardWidth = halfWidth - toggleBarWidth
 
         // Position the WebView differently based on scroll mode
@@ -1740,14 +1741,21 @@ class DualWebViewGroup @JvmOverloads constructor(
         val heightSize = MeasureSpec.getSize(heightMeasureSpec)
         val halfWidth = widthSize / 2
         val navBarHeight = 40
-        val keyboardHeight = 240
         val toggleBarWidth = 40
         val keyboardWidth = halfWidth - toggleBarWidth
 
+        // Measure keyboard container first to get its actual height
+        keyboardContainer.measure(
+            MeasureSpec.makeMeasureSpec(keyboardWidth, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+        )
+
+        val keyboardHeight = if (keyboardContainer.measuredHeight > 0) keyboardContainer.measuredHeight else 160
+
         val contentHeight = if (keyboardContainer.visibility == View.VISIBLE) {
-            heightSize - 220  // keyboard height
+            heightSize - keyboardHeight
         } else {
-            heightSize - 40  // nav bar height
+            heightSize - navBarHeight
         }
 
         // Measure WebView with different dimensions based on scroll mode
@@ -1775,10 +1783,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             MeasureSpec.makeMeasureSpec(navBarHeight, MeasureSpec.EXACTLY)
         )
 
-        keyboardContainer.measure(
-            MeasureSpec.makeMeasureSpec(keyboardWidth, MeasureSpec.EXACTLY),
-            MeasureSpec.makeMeasureSpec(keyboardHeight, MeasureSpec.EXACTLY)
-        )
+        // keyboardContainer is already measured above, but we can measure it again with EXACTLY if we want to enforce constraints,
+        // but UNSPECIFIED allowed it to size itself. Let's stick to the measurement we did.
 
         fullScreenOverlayContainer.measure(
             MeasureSpec.makeMeasureSpec(640, MeasureSpec.EXACTLY),
