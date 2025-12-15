@@ -22,7 +22,7 @@
             style="@style/KeyboardButton"
             android:drawableTop="@drawable/ic_visibility_off"
             android:drawableTint="@android:color/white"
-            android:padding="8dp"
+            android:padding="12dp"
             android:layout_weight="1"/>
         <Button
             android:id="@+id/button_q"
@@ -80,7 +80,7 @@
             android:id="@+id/btn_backspace"
             style="@style/KeyboardButton"
             android:text="⌫"
-            android:layout_weight="0.5"/>
+            android:layout_weight="1"/>
     </LinearLayout>
 
     <!-- Second row -->
@@ -144,12 +144,11 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical">
-        <!-- Caps key -->
+        <!-- Switch key -->
         <Button
-            android:id="@+id/btn_caps"
+            android:id="@+id/btn_switch"
             style="@style/KeyboardButton"
-            android:text="ABC"
-            android:textAllCaps="false"
+            android:text="123"
             android:layout_weight="1"/>
         <Button
             android:id="@+id/button_z"
@@ -214,11 +213,12 @@
             android:textSize="12sp"
             android:layout_weight="1"/>
 
-        <!-- Switch key -->
+        <!-- Caps key -->
         <Button
-            android:id="@+id/btn_switch"
+            android:id="@+id/btn_caps"
             style="@style/KeyboardButton"
-            android:text="123"
+            android:text="ABC"
+            android:textAllCaps="false"
             android:layout_weight="1"/>
 
         <!-- Space key -->
