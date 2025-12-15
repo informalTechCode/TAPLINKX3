@@ -73,6 +73,7 @@ import androidx.core.content.edit
 
 interface NavigationListener {
     fun onNavigationBackPressed()
+    fun onNavigationForwardPressed()
     fun onQuitPressed()
     fun onSettingsPressed()
     fun onRefreshPressed()
@@ -1089,6 +1090,12 @@ class MainActivity : AppCompatActivity(),
         Log.d("LinkEditing", "onHyperlinkPressed called")
         dualWebViewGroup.showLinkEditing()
 
+    }
+
+    override fun onNavigationForwardPressed() {
+         if (webView.canGoForward()) {
+             webView.goForward()
+         }
     }
 
     override fun onPause() {

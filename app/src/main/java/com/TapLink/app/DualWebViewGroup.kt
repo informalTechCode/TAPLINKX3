@@ -437,6 +437,10 @@ class DualWebViewGroup @JvmOverloads constructor(
                 left = leftNavigationBar.findViewById(R.id.btnBack),
                 right = leftNavigationBar.findViewById(R.id.btnBack)
             ),
+            "forward" to NavButton(
+                left = leftNavigationBar.findViewById(R.id.btnForward),
+                right = leftNavigationBar.findViewById(R.id.btnForward)
+            ),
             "home" to NavButton(
                 left = leftNavigationBar.findViewById(R.id.btnHome),
                 right = leftNavigationBar.findViewById(R.id.btnHome)
@@ -1349,7 +1353,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 leftBookmarksView.layout(
                     toggleBarWidth,
                     bookmarksY,
-                    toggleBarWidth + 320,
+                    toggleBarWidth + 480,
                     bookmarksY + bookmarksHeight
                 )
 
@@ -1393,7 +1397,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 leftBookmarksView.layout(
                     toggleBarWidth,
                     168,
-                    toggleBarWidth + 320,
+                    toggleBarWidth + 480,
                     height
                 )
             }
@@ -2304,16 +2308,17 @@ class DualWebViewGroup @JvmOverloads constructor(
             val buttonWidth = 40
             // Adjust the padding to account for all buttons
             val usableWidth = halfWidth - 16  // Total width minus padding (8dp on each side)
-            val remainingSpace = usableWidth - (6 * buttonWidth)
-            val gap = remainingSpace / 5  // Size of each gap
+            val remainingSpace = usableWidth - (7 * buttonWidth)
+            val gap = remainingSpace / 6  // Size of each gap
 
             // Define button zones based on layout
             val backZone     = 8..(8 + buttonWidth)
-            val homeZone     = (8 +   buttonWidth +   gap)..(8 + 2*buttonWidth +   gap)
-            val linkZone     = (8 + 2*buttonWidth + 2*gap)..(8 + 3*buttonWidth + 2*gap)
-            val settingsZone = (8 + 3*buttonWidth + 3*gap)..(8 + 4*buttonWidth + 3*gap)
-            val refreshZone  = (8 + 4*buttonWidth + 4*gap)..(8 + 5*buttonWidth + 4*gap)
-            val quitZone     = (8 + 5*buttonWidth + 5*gap)..(8 + 6*buttonWidth + 5*gap)
+            val forwardZone  = (8 +   buttonWidth +   gap)..(8 + 2*buttonWidth +   gap)
+            val homeZone     = (8 + 2*buttonWidth + 2*gap)..(8 + 3*buttonWidth + 2*gap)
+            val linkZone     = (8 + 3*buttonWidth + 3*gap)..(8 + 4*buttonWidth + 3*gap)
+            val settingsZone = (8 + 4*buttonWidth + 4*gap)..(8 + 5*buttonWidth + 4*gap)
+            val refreshZone  = (8 + 5*buttonWidth + 5*gap)..(8 + 6*buttonWidth + 5*gap)
+            val quitZone     = (8 + 6*buttonWidth + 6*gap)..(8 + 7*buttonWidth + 6*gap)
 
             // Clear all hover states initially
             clearNavigationButtonHoverStates()
@@ -2324,6 +2329,13 @@ class DualWebViewGroup @JvmOverloads constructor(
             when (localX.toInt()) {
                 in backZone -> {
                     navButtons["back"]?.let { button ->
+                        button.isHovered = true
+                        button.left.isHovered = true
+                        button.right.isHovered = true
+                    }
+                }
+                in forwardZone -> {
+                    navButtons["forward"]?.let { button ->
                         button.isHovered = true
                         button.left.isHovered = true
                         button.right.isHovered = true
@@ -2650,6 +2662,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                         navigationListener?.let { listener ->
                             when (key) {
                                 "back"     -> listener.onNavigationBackPressed()
+                                "forward"  -> listener.onNavigationForwardPressed()
                                 "home"     -> listener.onHomePressed()
                                 "link"     -> listener.onHyperlinkPressed()
                                 "settings" -> listener.onSettingsPressed()
@@ -2720,12 +2733,12 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftBookmarksView.visibility = View.VISIBLE
         leftBookmarksView.bringToFront()
         leftBookmarksView.measure(
-            MeasureSpec.makeMeasureSpec(320, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
         )
         leftBookmarksView.layout(
             leftBookmarksView.left, leftBookmarksView.top,
-            leftBookmarksView.left + 320,
+            leftBookmarksView.left + 480,
             leftBookmarksView.top + leftBookmarksView.measuredHeight
         )
 
@@ -2817,7 +2830,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     fun setBookmarksView(bookmarksView: BookmarksView) {
         this.leftBookmarksView = bookmarksView.apply {
-            val params = MarginLayoutParams(320, LayoutParams.WRAP_CONTENT).apply {
+            val params = MarginLayoutParams(480, LayoutParams.WRAP_CONTENT).apply {
                 leftMargin = 40  // After toggle bar
                 topMargin = 168  // Below toggle buttons
             }
