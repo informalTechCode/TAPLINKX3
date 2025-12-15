@@ -638,6 +638,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             // Add webView with correct position
             addView(webView, FrameLayout.LayoutParams(640 - 40, LayoutParams.MATCH_PARENT).apply {
                 leftMargin = 40  // Position after toggle bar
+                bottomMargin = 40 // Account for nav bar
             })
             addView(leftToggleBar)
             Log.d("ViewDebug", "Toggle bar added to UI container with hash: ${leftToggleBar.hashCode()}")
@@ -1244,7 +1245,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 40,  // Account for toggle bar
                 0,
                 640,  // Standard width + toggle bar offset
-                480
+                440
             )
         }
 
@@ -1752,7 +1753,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             // 640 - 40 = 600
             webView.measure(
                 MeasureSpec.makeMeasureSpec(600, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY)
+                MeasureSpec.makeMeasureSpec(440, MeasureSpec.EXACTLY)
             )
         }
 
@@ -3388,11 +3389,11 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftSystemInfoView.translationY = 0f  // Reset any translation
         } else {
             // First set WebView back to original size
-            webView.layoutParams = FrameLayout.LayoutParams(600, 480).apply {
+            webView.layoutParams = FrameLayout.LayoutParams(600, LayoutParams.MATCH_PARENT).apply {
                 leftMargin = 40
                 topMargin = 0
                 rightMargin = 0
-                bottomMargin = 0
+                bottomMargin = 40
             }
             webView.requestLayout()
 
