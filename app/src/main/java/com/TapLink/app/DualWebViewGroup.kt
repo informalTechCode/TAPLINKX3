@@ -141,20 +141,27 @@ class DualWebViewGroup @JvmOverloads constructor(
         fun onAnchorTogglePressed()
     }
 
+    private var hideProgressBarRunnable: Runnable? = null
+
     fun updateLoadingProgress(progress: Int) {
         if (!::progressBar.isInitialized) return
 
         post {
+            // Cancel any pending hide action whenever we get an update
+            hideProgressBarRunnable?.let { removeCallbacks(it) }
+            hideProgressBarRunnable = null
+
             if (progress < 100) {
                 progressBar.visibility = View.VISIBLE
                 progressBar.progress = progress
+                progressBar.bringToFront()
             } else {
                 progressBar.progress = 100
-                progressBar.visibility = View.GONE
-            }
-            // Ensure proper layering
-            if (progressBar.visibility == View.VISIBLE) {
-                progressBar.bringToFront()
+                // Delay hiding to ensure user sees 100%
+                hideProgressBarRunnable = Runnable {
+                    progressBar.visibility = View.GONE
+                }
+                postDelayed(hideProgressBarRunnable!!, 500)
             }
         }
     }

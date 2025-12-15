@@ -2902,6 +2902,9 @@ class MainActivity : AppCompatActivity(),
                     super.onPageStarted(view, url, favicon)
                     Log.d("WebViewDebug", "Page started loading: $url")
 
+                    // Show loading bar immediately
+                    dualWebViewGroup.updateLoadingProgress(0)
+
                     if (url != null && !url.startsWith("about:blank")) {
                         lastValidUrl = url
                         view?.visibility = View.INVISIBLE
