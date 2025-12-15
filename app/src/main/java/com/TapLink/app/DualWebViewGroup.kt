@@ -2320,7 +2320,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 //        """.trimIndent())
         }
 
-        else if (localX < buttonHeight) {
+        else if (localX < 40) {
             // For left/right scroll buttons, check both X and Y coordinates
 
             val zoomButtonsY = 3*buttonHeight
