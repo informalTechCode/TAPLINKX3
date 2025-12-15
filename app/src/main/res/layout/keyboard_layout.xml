@@ -14,7 +14,8 @@
         android:id="@+id/first_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
         <Button
             android:id="@+id/button_q"
             style="@style/KeyboardButton"
@@ -79,7 +80,14 @@
         android:id="@+id/second_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <!-- Switch key -->
+        <Button
+            android:id="@+id/btn_switch"
+            style="@style/KeyboardButton"
+            android:text="123"
+            android:layout_weight="1"/>
         <Button
             android:id="@+id/button_a"
             style="@style/KeyboardButton"
@@ -132,7 +140,15 @@
         android:id="@+id/third_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <!-- Caps key -->
+        <Button
+            android:id="@+id/btn_caps"
+            style="@style/KeyboardButton"
+            android:text="ABC"
+            android:textAllCaps="false"
+            android:layout_weight="1"/>
         <Button
             android:id="@+id/button_z"
             style="@style/KeyboardButton"
@@ -185,7 +201,8 @@
         android:id="@+id/fourth_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
         <!-- Hide key -->
         <Button
@@ -202,33 +219,19 @@
             android:textSize="12sp"
             android:layout_weight="1"/>
 
-        <!-- Caps key -->
-        <Button
-            android:id="@+id/btn_caps"
-            style="@style/KeyboardButton"
-            android:text="ABC"
-            android:textAllCaps="false"
-            android:layout_weight="1"/>
-
-        <!-- Switch key -->
-        <Button
-            android:id="@+id/btn_switch"
-            style="@style/KeyboardButton"
-            android:text="123"
-            android:layout_weight="1"/>
-
-        <Button
-            android:id="@+id/button_left_dynamic"
-            style="@style/KeyboardButton"
-            android:text="\@"
-            android:layout_weight="1"/>
-
         <!-- Space key -->
         <Button
             android:id="@+id/btn_space"
             style="@style/KeyboardButton"
             android:text="Space"
             android:layout_weight="4"/>
+
+        <!-- Left Dynamic (@) key -->
+        <Button
+            android:id="@+id/button_left_dynamic"
+            style="@style/KeyboardButton"
+            android:text="\@"
+            android:layout_weight="1"/>
 
         <!-- Enter key -->
         <Button

@@ -482,7 +482,7 @@ class CustomKeyboardView @JvmOverloads constructor(
         R.id.btn_backspace,
         R.id.btn_enter,
         R.id.btn_switch,
-        //R.id.btn_caps,
+        R.id.btn_caps,
         R.id.btn_clear,
         R.id.button_left_dynamic
     )
