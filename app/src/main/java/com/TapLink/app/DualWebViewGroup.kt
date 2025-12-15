@@ -74,6 +74,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private val nButtons    = 9
     private val buttonHeight = verticalBarSize / nButtons
     private val buttonFeedbackDuration = 200L
+    private val KEYBOARD_HEIGHT = 220
     var lastCursorX = 0f
     var lastCursorY = 0f
 
@@ -1476,7 +1477,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val halfWidth = width / 2
         val toggleBarWidth = 48
         val navBarHeight = 48
-        val keyboardHeight = 220
+        val keyboardHeight = KEYBOARD_HEIGHT
         val keyboardWidth = halfWidth - toggleBarWidth
 
         // Position the WebView differently based on scroll mode
@@ -1999,12 +2000,12 @@ class DualWebViewGroup @JvmOverloads constructor(
         val heightSize = MeasureSpec.getSize(heightMeasureSpec)
         val halfWidth = widthSize / 2
         val navBarHeight = 48
-        val keyboardHeight = 240
+        val keyboardHeight = KEYBOARD_HEIGHT
         val toggleBarWidth = 48
         val keyboardWidth = halfWidth - toggleBarWidth
 
         val contentHeight = if (keyboardContainer.visibility == View.VISIBLE) {
-            heightSize - 220  // keyboard height
+            heightSize - KEYBOARD_HEIGHT
         } else {
             heightSize - 48  // nav bar height
         }
