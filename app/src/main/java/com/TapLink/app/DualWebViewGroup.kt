@@ -890,6 +890,10 @@ class DualWebViewGroup @JvmOverloads constructor(
         webView.translationY = adjustment
         urlEditText.translationY = adjustment
 
+        if (isDialogVisible()) {
+            dialogView.translationY = adjustment
+        }
+
         if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
             // Ensure bookmarks view stays above keyboard
             leftBookmarksView.translationY = adjustment
@@ -904,6 +908,10 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     fun getCurrentUrlEditField(): EditText? {
         return if (isUrlEditing) urlEditText else null
+    }
+
+    fun getDialogInputView(): EditText? {
+        return if (isDialogVisible() && isPromptDialog) dialogInputView else null
     }
 
     fun animateViewportAdjustment() {
@@ -1867,47 +1875,72 @@ class DualWebViewGroup @JvmOverloads constructor(
             var isOverTarget = false
             val (cursorX, cursorY) = getCursorInContainerCoords()
 
-            // Check Keyboard
-            if (keyboardContainer.visibility == View.VISIBLE) {
-                val localCoords = computeAnchoredKeyboardCoordinates()
-                if (localCoords != null) {
-                    val (localX, localY) = localCoords
-                    if (localX >= 0 && localX <= keyboardContainer.width &&
-                        localY >= 0 && localY <= keyboardContainer.height) {
-                        isOverTarget = true
-                        anchoredTarget = 1
-                    }
-                }
-            }
-
-            // Check Bookmarks (if not already over keyboard)
-            if (!isOverTarget && ::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
-                if (cursorX >= leftBookmarksView.left && cursorX <= leftBookmarksView.right &&
-                    cursorY >= leftBookmarksView.top && cursorY <= leftBookmarksView.bottom) {
+            // Handle Modal Dialog interactions
+            if (dialogView.visibility == View.VISIBLE) {
+                // 1. Check if tap is within Dialog bounds
+                if (cursorX >= dialogView.left && cursorX <= dialogView.right &&
+                    cursorY >= dialogView.top && cursorY <= dialogView.bottom) {
                     isOverTarget = true
-                    anchoredTarget = 2
-                    Log.d("TouchDebug", "Intercepting anchored tap for bookmarks")
+                    anchoredTarget = 4
+                    Log.d("TouchDebug", "Intercepting anchored tap for dialog")
                 }
-            }
-
-            // Check TripleClickMenu
-            tripleClickMenu?.let { menu ->
-                if (!isOverTarget && menu.visibility == View.VISIBLE) {
-                    if (cursorX >= menu.left && cursorX <= menu.right &&
-                        cursorY >= menu.top && cursorY <= menu.bottom) {
-                        isOverTarget = true
-                        anchoredTarget = 3
-                        Log.d("TouchDebug", "Intercepting anchored tap for menu")
+                // 2. Check if tap is within Keyboard bounds (allow typing in prompts)
+                else if (keyboardContainer.visibility == View.VISIBLE) {
+                    val localCoords = computeAnchoredKeyboardCoordinates()
+                    if (localCoords != null) {
+                        val (localX, localY) = localCoords
+                        if (localX >= 0 && localX <= keyboardContainer.width &&
+                            localY >= 0 && localY <= keyboardContainer.height) {
+                            isOverTarget = true
+                            anchoredTarget = 1
+                            Log.d("TouchDebug", "Intercepting anchored tap for keyboard (dialog active)")
+                        }
                     }
                 }
-            }
 
-            // Check Dialog
-            if (!isOverTarget && dialogView.visibility == View.VISIBLE) {
-                // If dialog is visible, we always intercept (modal)
-                isOverTarget = true
-                anchoredTarget = 4
-                Log.d("TouchDebug", "Intercepting anchored tap for dialog")
+                // 3. If neither, block the touch (Modality)
+                if (!isOverTarget) {
+                    isOverTarget = true
+                    anchoredTarget = -1 // Target -1 means "consume but do nothing"
+                    Log.d("TouchDebug", "Blocking anchored tap (modal dialog active)")
+                }
+            } else {
+                // Normal Interaction Handling (No Dialog)
+
+                // Check Keyboard
+                if (!isOverTarget && keyboardContainer.visibility == View.VISIBLE) {
+                    val localCoords = computeAnchoredKeyboardCoordinates()
+                    if (localCoords != null) {
+                        val (localX, localY) = localCoords
+                        if (localX >= 0 && localX <= keyboardContainer.width &&
+                            localY >= 0 && localY <= keyboardContainer.height) {
+                            isOverTarget = true
+                            anchoredTarget = 1
+                        }
+                    }
+                }
+
+                // Check Bookmarks (if not already over keyboard)
+                if (!isOverTarget && ::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
+                    if (cursorX >= leftBookmarksView.left && cursorX <= leftBookmarksView.right &&
+                        cursorY >= leftBookmarksView.top && cursorY <= leftBookmarksView.bottom) {
+                        isOverTarget = true
+                        anchoredTarget = 2
+                        Log.d("TouchDebug", "Intercepting anchored tap for bookmarks")
+                    }
+                }
+
+                // Check TripleClickMenu
+                tripleClickMenu?.let { menu ->
+                    if (!isOverTarget && menu.visibility == View.VISIBLE) {
+                        if (cursorX >= menu.left && cursorX <= menu.right &&
+                            cursorY >= menu.top && cursorY <= menu.bottom) {
+                            isOverTarget = true
+                            anchoredTarget = 3
+                            Log.d("TouchDebug", "Intercepting anchored tap for menu")
+                        }
+                    }
+                }
             }
 
             when (ev.action) {
