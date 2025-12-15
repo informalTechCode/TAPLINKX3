@@ -2822,7 +2822,7 @@ class MainActivity : AppCompatActivity(),
             isFocusableInTouchMode = true
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
             setBackgroundColor(Color.BLACK)
-            visibility = View.INVISIBLE
+            visibility = View.VISIBLE
 
             // Ensure WebView can receive input methods
 //          setOnTouchListener { v, event ->
@@ -2909,7 +2909,6 @@ class MainActivity : AppCompatActivity(),
 
                     if (url != null && !url.startsWith("about:blank")) {
                         lastValidUrl = url
-                        view?.visibility = View.INVISIBLE
                     } else if (url?.startsWith("about:blank") == true && lastValidUrl != null) {
                         // Cancel about:blank load immediately
                         view?.stopLoading()
