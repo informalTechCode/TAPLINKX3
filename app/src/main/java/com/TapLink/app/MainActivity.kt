@@ -545,7 +545,17 @@ class MainActivity : AppCompatActivity(),
                     val verticalDelta = horizontalAsVertical + verticalFromDrag
 
                     if (kotlin.math.abs(verticalDelta) >= 1f) {
-                        webView.scrollBy(0, verticalDelta.toInt())
+                        val deltaInt = verticalDelta.toInt()
+                        // Check if we can scroll in the requested direction
+                        val canScroll = if (deltaInt < 0) {
+                            webView.canScrollVertically(-1)
+                        } else {
+                            webView.canScrollVertically(1)
+                        }
+
+                        if (canScroll) {
+                            webView.scrollBy(0, deltaInt)
+                        }
                     }
                     return true
                 }
@@ -780,116 +790,6 @@ class MainActivity : AppCompatActivity(),
                 }
 
                 onNavigationBackPressed()
-            }
-
-            override fun onFling(
-                e1: MotionEvent?,
-                e2: MotionEvent,
-                velocityX: Float,
-                velocityY: Float
-            ): Boolean {
-
-                Log.d("GestureDebug", """
-        --- onFling (X3: cursor > continuous) ---
-        vX=$velocityX vY=$velocityY
-        cursor=$isCursorVisible anchored=$isAnchored keyboard=$isKeyboardVisible
-        ringEnabled=$isRingSwitchEnabled ringConnected=$isRingConnected
-    """.trimIndent())
-                val isX3 = com.ffalcon.mercury.android.sdk.util.DeviceUtil.isX3Device()
-
-                if (isX3) {
-                    if (isAnchored) {
-                        // Combine horizontal and vertical velocities for Temple Gestures / Touchpad
-                        val effectiveVelocity = (velocityX * X_INVERT * H2V_GAIN) + (velocityY * Y_INVERT)
-                        dualWebViewGroup.handleAnchoredFling(effectiveVelocity)
-                        return true
-                    }
-                    return false
-                }
-
-                // Legacy path (!isX3)
-                if (e2.device?.name?.contains(
-                        "Virtual",
-                        ignoreCase = true
-                    ) == true && isRingSwitchEnabled && !isAnchored
-                ) {
-                        Log.d("GestureDebug", "Ring fling → handleScroll($velocityX)")
-                        handleScroll(velocityX)
-                        return true
-                    }
-
-                    // Thresholds
-                    val dx = e2.x - (e1?.x ?: 0f)
-                    val dy = e2.y - (e1?.y ?: 0f)
-                    val total = kotlin.math.sqrt(dx * dx + dy * dy)
-                    if (kotlin.math.abs(velocityX) < MINIMUM_FLING_VELOCITY || total < MINIMUM_FLING_DISTANCE) {
-                        Log.d("GestureDebug", "Below fling threshold → tap")
-                        potentialTapEvent?.let { down ->
-                            onSingleTapConfirmed(down); down.recycle()
-                        }
-                        potentialTapEvent = null
-                        return true
-                    }
-
-                    handleUserInteraction()
-
-                    if (tripleClickMenu.isMenuVisible() || dualWebViewGroup.isScreenMasked()) {
-                        Log.d("GestureDebug", "Menu/mask active → consume")
-                        return true
-                    }
-
-                    if (dualWebViewGroup.isBookmarksExpanded()) {
-                        Log.d(
-                            "GestureDebug",
-                            "Bookmarks open → DualWebViewGroup.handleFling($velocityX)"
-                        )
-                        dualWebViewGroup.handleFling(velocityX)
-                        return true
-                    }
-
-                    if (isKeyboardVisible) {
-                        if (isAnchored) {
-                            val slowed = velocityX * 0.15f
-                            Log.d(
-                                "GestureDebug",
-                                "Keyboard+Anchored → JS smooth scroll (slowed=$slowed)"
-                            )
-                            webView.evaluateJavascript(
-                                "window.scrollBy({top:${(-slowed).toInt()},behavior:'smooth'});",
-                                null
-                            )
-                        } else {
-                            Log.d(
-                                "GestureDebug",
-                                "Keyboard visible → keyboardView.handleFlingEvent($velocityX)"
-                            )
-                            keyboardView?.handleFlingEvent(velocityX)
-                        }
-                        return true
-                    }
-
-                    // ======== Non-X3 legacy path ========
-                    if (isAnchored) {
-                        Log.d("GestureDebug", "Anchored (legacy) → handleScroll($velocityX)")
-                        handleScroll(velocityX)
-                        return true
-                    }
-
-                    if (isCursorVisible && !(isRingConnected && isRingSwitchEnabled)) {
-                        val scale = 1f / 100f
-                        currentVelocityX = velocityX * scale
-                        currentVelocityY = 0f
-                        Log.d(
-                            "GestureDebug",
-                            "Cursor inertia (legacy) vX=$velocityX → curVx=$currentVelocityX"
-                        )
-                        handler.post(updateCursorRunnable)
-                        return true
-                    }
-
-                    Log.d("GestureDebug", "Default legacy → handleScroll($velocityX)")
-                    handleScroll(velocityX)
-                    return true
             }
 
             // Update for smoother, responsive movement with looping
@@ -2818,6 +2718,7 @@ class MainActivity : AppCompatActivity(),
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
             setBackgroundColor(Color.BLACK)
             visibility = View.INVISIBLE
+            overScrollMode = View.OVER_SCROLL_NEVER
 
             // Ensure WebView can receive input methods
 //          setOnTouchListener { v, event ->
