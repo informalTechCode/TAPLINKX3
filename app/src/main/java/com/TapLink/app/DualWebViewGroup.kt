@@ -2026,20 +2026,25 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     fun showDialog(message: String, type: String, defaultValue: String? = null, callback: (Any?) -> Unit) {
+        Log.d("DialogDebug", "showDialog called. Message: $message, Type: $type")
         post {
             dialogView?.apply {
+                Log.d("DialogDebug", "Applying dialog view. Current visibility: $visibility")
                 when (type) {
                     "alert" -> showAlert(message) {
+                        Log.d("DialogDebug", "Alert dismissed")
                         visibility = View.GONE
                         startRefreshing()
                         callback(null)
                     }
                     "confirm" -> showConfirm(message) { result ->
+                        Log.d("DialogDebug", "Confirm dismissed with: $result")
                         visibility = View.GONE
                         startRefreshing()
                         callback(result)
                     }
                     "prompt" -> showPrompt(message, defaultValue) { result ->
+                        Log.d("DialogDebug", "Prompt dismissed with: $result")
                         visibility = View.GONE
                         // Hide keyboard if it was shown for prompt
                         keyboardListener?.onHideKeyboard()
@@ -2048,11 +2053,16 @@ class DualWebViewGroup @JvmOverloads constructor(
                     }
                 }
                 bringToFront()
+                Log.d("DialogDebug", "Dialog brought to front. Visibility is now: $visibility")
 
                 // Show keyboard for prompt
                 if (type == "prompt") {
                     keyboardListener?.onShowKeyboard()
                 }
+
+                // Force layout
+                requestLayout()
+                invalidate()
             }
             startRefreshing()
         }

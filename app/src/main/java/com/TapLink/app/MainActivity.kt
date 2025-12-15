@@ -2978,8 +2978,10 @@ class MainActivity : AppCompatActivity(),
                     message: String?,
                     result: android.webkit.JsResult?
                 ): Boolean {
+                    Log.d("DialogDebug", "onJsAlert called with message: $message")
                     message?.let {
                         dualWebViewGroup.showDialog(it, "alert", null) {
+                            Log.d("DialogDebug", "Alert confirmed")
                             result?.confirm()
                         }
                         return true
@@ -2993,8 +2995,10 @@ class MainActivity : AppCompatActivity(),
                     message: String?,
                     result: android.webkit.JsResult?
                 ): Boolean {
+                    Log.d("DialogDebug", "onJsConfirm called with message: $message")
                     message?.let {
                         dualWebViewGroup.showDialog(it, "confirm") { confirmed ->
+                            Log.d("DialogDebug", "Confirm result: $confirmed")
                             if (confirmed == true) result?.confirm() else result?.cancel()
                         }
                         return true
@@ -3009,8 +3013,10 @@ class MainActivity : AppCompatActivity(),
                     defaultValue: String?,
                     result: android.webkit.JsPromptResult?
                 ): Boolean {
+                    Log.d("DialogDebug", "onJsPrompt called with message: $message")
                     message?.let {
                         dualWebViewGroup.showDialog(it, "prompt", defaultValue) { input ->
+                            Log.d("DialogDebug", "Prompt result: $input")
                             if (input != null) {
                                 result?.confirm(input.toString())
                             } else {
