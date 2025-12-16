@@ -1279,19 +1279,32 @@ class DualWebViewGroup @JvmOverloads constructor(
         val keyboardWidth = halfWidth - toggleBarWidth
 
         // Position the WebView differently based on scroll mode
+        // Shrink the WebView when keyboard is visible so content isn't blocked
+        val isKeyboardVisible = keyboardContainer.visibility == View.VISIBLE
+        
         if (isInScrollMode) {
+            val webViewBottom = if (isKeyboardVisible) {
+                height - keyboardHeight  // Shrink to fit above keyboard
+            } else {
+                480
+            }
             webView.layout(
                 0,  // No left margin in scroll mode
                 0,
                 640,  // Full width
-                480
+                webViewBottom
             )
         } else {
+            val webViewBottom = if (isKeyboardVisible) {
+                minOf(440, height - keyboardHeight)  // Shrink to fit above keyboard
+            } else {
+                440
+            }
             webView.layout(
                 40,  // Account for toggle bar
                 0,
                 640,  // Standard width + toggle bar offset
-                440
+                webViewBottom
             )
         }
 
