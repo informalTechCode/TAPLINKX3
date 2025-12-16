@@ -507,6 +507,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             setPadding(8, 8, 8, 8)
             alpha = 0.5f
             visibility = View.GONE
+            elevation = 2000f
             setOnClickListener {
                 setScrollMode(false)
             }
@@ -2570,8 +2571,27 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
 
-    fun handleNavigationClick(x: Float, y: Float) {
+    fun isNavBarVisible(): Boolean {
+        return leftNavigationBar.visibility == View.VISIBLE
+    }
 
+    fun isPointInRestoreButton(x: Float, y: Float): Boolean {
+        if (btnShowNavBars.visibility != View.VISIBLE) return false
+        val loc = IntArray(2)
+        btnShowNavBars.getLocationOnScreen(loc)
+        return x >= loc[0] && x <= loc[0] + btnShowNavBars.width &&
+                y >= loc[1] && y <= loc[1] + btnShowNavBars.height
+    }
+
+    fun performRestoreButtonClick() {
+        if (btnShowNavBars.visibility == View.VISIBLE) {
+            btnShowNavBars.performClick()
+        }
+    }
+
+    fun handleNavigationClick(x: Float, y: Float) {
+        // Ensure nav bar is visible before handling click
+        if (leftNavigationBar.visibility != View.VISIBLE) return
 
 
         val height = height

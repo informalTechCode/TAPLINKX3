@@ -703,28 +703,6 @@ class MainActivity : AppCompatActivity(),
                                     adjustedY = lastCursorY - UILocation[1]
                                 }
 
-                                // Handle navigation bar clicks first
-                                if (adjustedY >= 480 - 48) {
-                                    isSimulatingTouchEvent = false
-                                    Log.d(
-                                        "AnchoredTouchDebug",
-                                        "Modified click location: ${adjustedX}, ${adjustedY}"
-                                    )
-
-                                    dualWebViewGroup.handleNavigationClick(adjustedX, adjustedY)
-                                    return true
-                                }
-
-                                // Handle toggle bar clicks
-                                if (adjustedX < 48 && adjustedY < 592) {
-                                    //Log.d("AnchoredTouchDebug","Toggle Bar Location: ${toggleBarLocation[0]}, ${toggleBarLocation[1]}")
-
-                                    isSimulatingTouchEvent = false
-                                    dualWebViewGroup.handleNavigationClick(adjustedX, adjustedY)
-                                    return true
-                                }
-
-
                                 dispatchTouchEventAtCursor()
                             }
                         }
@@ -2315,6 +2293,57 @@ class MainActivity : AppCompatActivity(),
 
                 // Dispatch touch event to settings menu
                 dualWebViewGroup.dispatchSettingsTouchEvent(lastCursorX, lastCursorY)
+                return
+            }
+        }
+
+        // Check for restore button click
+        if (dualWebViewGroup.isPointInRestoreButton(lastCursorX, lastCursorY)) {
+            dualWebViewGroup.performRestoreButtonClick()
+            return
+        }
+
+        // Handle navigation bar and toggle bar clicks only if visible
+        if (dualWebViewGroup.isNavBarVisible()) {
+            val UILocation = IntArray(2)
+            dualWebViewGroup.leftEyeUIContainer.getLocationOnScreen(UILocation)
+            val adjustedX: Float
+            val adjustedY: Float
+
+            if (isAnchored) {
+                // Get rotation from the clip parent
+                val rotationRad = Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
+                val cos = Math.cos(rotationRad).toFloat()
+                val sin = Math.sin(rotationRad).toFloat()
+
+                // The cursor is fixed at (320, 240)
+                val cursorX = lastCursorX
+                val cursorY = lastCursorY
+
+                // Step 1: Inverse translation (subtract the translation)
+                val translatedX = cursorX - UILocation[0]
+                val translatedY = cursorY - UILocation[1]
+
+                // Step 2: Inverse rotation (rotate the translated point back to the view's local coordinates)
+                adjustedX = translatedX * cos + translatedY * sin - 48f
+                adjustedY = -translatedX * sin + translatedY * cos
+            } else {
+                adjustedX = lastCursorX - UILocation[0] - 48f //account for toggle bar
+                adjustedY = lastCursorY - UILocation[1]
+            }
+
+            // Handle navigation bar clicks
+            if (adjustedY >= 480 - 48) {
+                isSimulatingTouchEvent = false
+                Log.d("AnchoredTouchDebug", "Modified click location: ${adjustedX}, ${adjustedY}")
+                dualWebViewGroup.handleNavigationClick(adjustedX, adjustedY)
+                return
+            }
+
+            // Handle toggle bar clicks
+            if (adjustedX < 48 && adjustedY < 592) {
+                isSimulatingTouchEvent = false
+                dualWebViewGroup.handleNavigationClick(adjustedX, adjustedY)
                 return
             }
         }
