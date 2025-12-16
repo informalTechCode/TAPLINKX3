@@ -2,6 +2,11 @@
 
 The original TapLink builds and documentation were published through the release log hosted at https://pastebin.com/80GGhiEK. To preserve that history inside the repository, the paste contents are reproduced below with light formatting for readability.
 
+### TapLink 1.1.0 (December 16, 2025)
+
+- **New features**:
+  - Version bump to 1.1.0.
+
 ### TapLink 0.8 (February 16, 2025)
 
 - **APK**: https://drive.google.com/file/d/1f-boxhhJZGgNInatY--o-o_nFf5nBQom/view?usp=sharing
