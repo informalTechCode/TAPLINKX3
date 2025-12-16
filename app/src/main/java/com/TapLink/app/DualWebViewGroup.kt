@@ -68,11 +68,11 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var velocityTracker: android.view.VelocityTracker? = null
     private val refreshHandler = Handler(Looper.getMainLooper())
-    private val refreshInterval = 8L // Adjust as needed
+    private val refreshInterval = 33L // Reduced to ~30fps for performance
     private var lastCaptureTime = 0L
-    private val MIN_CAPTURE_INTERVAL = 16L  // Minimum time between captures in milliseconds
+    private val MIN_CAPTURE_INTERVAL = 33L  // Cap at ~30fps
     private var lastCursorUpdateTime = 0L
-    private val CURSOR_UPDATE_INTERVAL = 8L  // More frequent updates for cursor (~120 FPS)
+    private val CURSOR_UPDATE_INTERVAL = 16L  // 60fps cap for cursor updates
 
     private lateinit var leftSystemInfoView: SystemInfoView
 
