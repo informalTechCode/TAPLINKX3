@@ -93,7 +93,30 @@ class DualWebViewGroup @JvmOverloads constructor(
     private val ANCHORED_TOUCH_SLOP = 10f
 
     lateinit var leftToggleBar: View
-    lateinit var progressBar: android.widget.ProgressBar
+    var progressBar: android.widget.ProgressBar = android.widget.ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+        layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 4)
+        progressDrawable.setTint(Color.BLUE)
+        max = 100
+        visibility = View.GONE
+        elevation = 200f // Ensure it's above other views
+    }
+    private var btnShowNavBars: ImageButton = ImageButton(context).apply {
+        layoutParams = FrameLayout.LayoutParams(40, 40).apply {
+            gravity = Gravity.BOTTOM or Gravity.END
+            rightMargin = 8
+            bottomMargin = 8
+        }
+        setImageResource(R.drawable.ic_visibility_on)
+        setBackgroundColor(Color.BLACK)
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        setPadding(8, 8, 8, 8)
+        alpha = 1.0f
+        visibility = View.GONE
+        elevation = 2000f
+        setOnClickListener {
+            setScrollMode(false)
+        }
+    }
 
     @Volatile private var isRefreshing = false
     private val refreshLock = Object()
@@ -124,7 +147,20 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var isHoveringZoomIn = false
     private var isHoveringZoomOut = false
 
-    private lateinit var fullScreenTapDetector: GestureDetector
+    private var fullScreenTapDetector: GestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDown(e: MotionEvent): Boolean {
+            // Always accept the initial down event so we can track the full gesture
+            return fullScreenOverlayContainer.visibility == View.VISIBLE
+        }
+
+        override fun onSingleTapUp(e: MotionEvent): Boolean {
+            if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
+                (context as? AppCompatActivity)?.onBackPressedDispatcher?.onBackPressed()
+                return true
+            }
+            return false
+        }
+    })
 
     var isAnchored = false
     private var isHoveringAnchorToggle = false
@@ -151,7 +187,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var hideProgressBarRunnable: Runnable? = null
 
     fun updateLoadingProgress(progress: Int) {
-        if (!::progressBar.isInitialized) return
+
 
         post {
             // Cancel any pending hide action whenever we get an update
@@ -162,6 +198,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 progressBar.visibility = View.VISIBLE
                 progressBar.progress = progress
                 progressBar.bringToFront()
+                requestLayout()  // Force layout update to position progress bar correctly
             } else {
                 progressBar.progress = 100
                 // Delay hiding to ensure user sees 100%
@@ -299,7 +336,11 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var isScreenMasked = false
     private var isHoveringMaskToggle = false
-    private lateinit var maskOverlay: View
+    private var maskOverlay: View = View(context).apply {
+        setBackgroundColor(Color.BLACK)
+        visibility = View.GONE
+        elevation = 1000f  // Put it above everything except cursors
+    }
 
 
 
@@ -327,20 +368,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Set the background of the entire DualWebViewGroup to black
         setBackgroundColor(Color.BLACK)
 
-        fullScreenTapDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDown(e: MotionEvent): Boolean {
-                // Always accept the initial down event so we can track the full gesture
-                return fullScreenOverlayContainer.visibility == View.VISIBLE
-            }
 
-            override fun onSingleTapUp(e: MotionEvent): Boolean {
-                if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
-                    (context as? AppCompatActivity)?.onBackPressedDispatcher?.onBackPressed()
-                    return true
-                }
-                return false
-            }
-        })
 
         fullScreenOverlayContainer.setOnTouchListener { _, event ->
             if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
@@ -457,6 +485,10 @@ class DualWebViewGroup @JvmOverloads constructor(
                 left = leftNavigationBar.findViewById(R.id.btnRefresh),
                 right = leftNavigationBar.findViewById(R.id.btnRefresh)
             ),
+            "hide" to NavButton(
+                left = leftNavigationBar.findViewById(R.id.btnHide),
+                right = leftNavigationBar.findViewById(R.id.btnHide)
+            ),
             "quit" to NavButton(
                 left = leftNavigationBar.findViewById(R.id.btnQuit),
                 right = leftNavigationBar.findViewById(R.id.btnQuit)
@@ -489,6 +521,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             isFocusable = true    // Add this
         }
 
+
+
         Log.d("ViewDebug", "Toggle bar initialized with hash: ${leftToggleBar.hashCode()}")
 
 
@@ -511,16 +545,16 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
         // Set up the toggle buttons with explicit configurations
-        val leftModeToggleButton = leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle).apply {
+        leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle).apply {
             configureToggleButton(R.drawable.ic_mode_mobile)
         }
 
-        val leftDashboardButton = leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube).apply {
+        leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube).apply {
             configureToggleButton(R.drawable.ic_dashboard)
         }
 
 
-        val leftBookmarksButton = leftToggleBar.findViewById<ImageButton>(R.id.btnBookmarks).apply {
+        leftToggleBar.findViewById<ImageButton>(R.id.btnBookmarks).apply {
             visibility = View.VISIBLE
             setImageResource(R.drawable.ic_bookmarks)
             setBackgroundResource(R.drawable.nav_button_background)
@@ -535,14 +569,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Initialize URL EditTexts
         urlEditText  =  setupUrlEditText(true)
 
-        // Initialize ProgressBar
-        progressBar = android.widget.ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 4)
-            progressDrawable.setTint(Color.BLUE)
-            max = 100
-            visibility = View.GONE
-            elevation = 200f // Ensure it's above other views
-        }
+
 
         //addView(urlEditText)
 
@@ -664,6 +691,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             addView(leftNavigationBar.apply{
                 elevation = 101f
             })
+            addView(btnShowNavBars) // Add show nav bars button
             addView(progressBar) // Add progress bar
             addView(keyboardContainer)
             addView(dialogContainer)
@@ -696,11 +724,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
         // After other view initializations
-        maskOverlay = View(context).apply {
-            setBackgroundColor(Color.BLACK)
-            visibility = View.GONE
-            elevation = 1000f  // Put it above everything except cursors
-        }
+
 
         // Add the clip parent to the main view
         addView(leftEyeClipParent)
@@ -1251,6 +1275,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val navBarHeight = 40
         // Use actual measured height of keyboard if visible, otherwise default
         val keyboardHeight = if (keyboardContainer.measuredHeight > 0) keyboardContainer.measuredHeight else 160
+        // Keyboard width is same regardless of mode (matches original keyboard size)
         val keyboardWidth = halfWidth - toggleBarWidth
 
         // Position the WebView differently based on scroll mode
@@ -1316,18 +1341,33 @@ class DualWebViewGroup @JvmOverloads constructor(
         val keyboardY = height - keyboardHeight
         keyboardContainer.layout(toggleBarWidth, keyboardY, toggleBarWidth + keyboardWidth, height)
 
-        // Position ProgressBar above the navigation bar
+        // Position ProgressBar - at bottom in scroll mode, above nav bar otherwise
         val progressBarHeight = 4
-        progressBar.measure(
-            MeasureSpec.makeMeasureSpec(halfWidth - toggleBarWidth, MeasureSpec.EXACTLY),
-            MeasureSpec.makeMeasureSpec(progressBarHeight, MeasureSpec.EXACTLY)
-        )
-        // Only show if loading
-        if (progressBar.visibility == View.VISIBLE) {
-            val pbY = height - navBarHeight - progressBarHeight
-            progressBar.layout(toggleBarWidth, pbY, halfWidth, pbY + progressBarHeight)
+        if (isInScrollMode) {
+            // In scroll mode, position at very bottom, full width
+            progressBar.measure(
+                MeasureSpec.makeMeasureSpec(halfWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(progressBarHeight, MeasureSpec.EXACTLY)
+            )
+            if (progressBar.visibility == View.VISIBLE) {
+                val pbY = height - progressBarHeight
+                progressBar.layout(0, pbY, halfWidth, height)
+                progressBar.bringToFront()
+            } else {
+                progressBar.layout(0, 0, 0, 0)
+            }
         } else {
-            progressBar.layout(0, 0, 0, 0)
+            // Normal mode - position above navigation bar
+            progressBar.measure(
+                MeasureSpec.makeMeasureSpec(halfWidth - toggleBarWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(progressBarHeight, MeasureSpec.EXACTLY)
+            )
+            if (progressBar.visibility == View.VISIBLE) {
+                val pbY = height - navBarHeight - progressBarHeight
+                progressBar.layout(toggleBarWidth, pbY, halfWidth, pbY + progressBarHeight)
+            } else {
+                progressBar.layout(0, 0, 0, 0)
+            }
         }
 
         // Hide navigation bars
@@ -1335,8 +1375,13 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         if (keyboardContainer.visibility == View.VISIBLE) {
             // Position keyboards at the bottom
-            val keyboardY = height - keyboardHeight
-            keyboardContainer.layout(toggleBarWidth, keyboardY, toggleBarWidth + keyboardWidth, height)
+            // In scroll mode, center keyboard (no toggle bar offset)
+            val kbLeft = if (isInScrollMode) {
+                (halfWidth - keyboardWidth) / 2  // Center in left half
+            } else {
+                toggleBarWidth
+            }
+            keyboardContainer.layout(kbLeft, keyboardY, kbLeft + keyboardWidth, height)
 
             // Hide navigation bars
             leftNavigationBar.visibility = View.GONE
@@ -1415,36 +1460,37 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
         }
 
-        // Calculate system info bar position
-        val infoBarHeight = 24
-        val infoBarY = if (isInScrollMode) {
-            height - infoBarHeight  // Position at very bottom in scroll mode
+        // Hide system info bar in scroll mode, show otherwise
+        if (isInScrollMode) {
+            leftSystemInfoView.visibility = View.GONE
         } else {
-            height - navBarHeight - infoBarHeight  // Position above nav bar normally
+            leftSystemInfoView.visibility = View.VISIBLE
+            // Calculate system info bar position
+            val infoBarHeight = 24
+            val infoBarY = height - navBarHeight - infoBarHeight  // Position above nav bar
+
+            // First measure the info views to get their width
+            leftSystemInfoView.measure(
+                MeasureSpec.makeMeasureSpec(320, MeasureSpec.AT_MOST),
+                MeasureSpec.makeMeasureSpec(infoBarHeight, MeasureSpec.EXACTLY)
+            )
+
+            val infoBarWidth = leftSystemInfoView.measuredWidth
+            val leftX = (halfWidth - infoBarWidth) / 2 + toggleBarWidth  // Center in left half, account for toggle bar
+
+            // Position the info bars
+            leftSystemInfoView.layout(
+                leftX,
+                infoBarY,
+                leftX + infoBarWidth,
+                infoBarY + infoBarHeight
+            )
         }
-
-        // First measure the info views to get their width
-        leftSystemInfoView.measure(
-            MeasureSpec.makeMeasureSpec(320, MeasureSpec.AT_MOST),
-            MeasureSpec.makeMeasureSpec(infoBarHeight, MeasureSpec.EXACTLY)
-        )
-
-        val infoBarWidth = leftSystemInfoView.measuredWidth
-        val leftX = (halfWidth - infoBarWidth) / 2  // Center in left half
-
-
-        // Position the info bars
-        leftSystemInfoView.layout(
-            leftX + toggleBarWidth,  // Account for toggle bar width
-            infoBarY,
-            leftX + toggleBarWidth + infoBarWidth,
-            infoBarY + infoBarHeight
-        )
 
          // Position Dialog Container (Center it in the left view)
         if (dialogContainer.visibility != View.GONE) {
             val dialogWidth = 500
-            val dialogHeight = dialogContainer.measuredHeight.takeIf { it > 0 } ?: 300 // estimating
+
             
             // Measure the dialog container first if needed
             dialogContainer.measure(
@@ -1477,6 +1523,20 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Add after other layout code but before super call
         maskOverlay.layout(0, 0, width, height)
+
+        // Layout the unhide button when in scroll mode
+        if (isInScrollMode && btnShowNavBars.visibility == View.VISIBLE) {
+            val btnSize = 40
+            val btnRight = halfWidth - 8  // 8px margin from right
+            val btnBottom = height - 8    // 8px margin from bottom
+            btnShowNavBars.layout(
+                btnRight - btnSize,
+                btnBottom - btnSize,
+                btnRight,
+                btnBottom
+            )
+            btnShowNavBars.bringToFront()
+        }
 
         // Layout the UI container to cover just the left half
         leftEyeUIContainer.layout(0, 0, halfWidth, height)
@@ -2308,8 +2368,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             val buttonWidth = 40
             // Adjust the padding to account for all buttons
             val usableWidth = halfWidth - 16  // Total width minus padding (8dp on each side)
-            val remainingSpace = usableWidth - (7 * buttonWidth)
-            val gap = remainingSpace / 6  // Size of each gap
+            val remainingSpace = usableWidth - (8 * buttonWidth)
+            val gap = remainingSpace / 7  // Size of each gap
 
             // Define button zones based on layout
             val backZone     = 8..(8 + buttonWidth)
@@ -2318,7 +2378,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             val linkZone     = (8 + 3*buttonWidth + 3*gap)..(8 + 4*buttonWidth + 3*gap)
             val settingsZone = (8 + 4*buttonWidth + 4*gap)..(8 + 5*buttonWidth + 4*gap)
             val refreshZone  = (8 + 5*buttonWidth + 5*gap)..(8 + 6*buttonWidth + 5*gap)
-            val quitZone     = (8 + 6*buttonWidth + 6*gap)..(8 + 7*buttonWidth + 6*gap)
+            val hideZone     = (8 + 6*buttonWidth + 6*gap)..(8 + 7*buttonWidth + 6*gap)
+            val quitZone     = (8 + 7*buttonWidth + 7*gap)..(8 + 8*buttonWidth + 7*gap)
 
             // Clear all hover states initially
             clearNavigationButtonHoverStates()
@@ -2365,6 +2426,13 @@ class DualWebViewGroup @JvmOverloads constructor(
                 }
                 in refreshZone -> {
                     navButtons["refresh"]?.let { button ->
+                        button.isHovered = true
+                        button.left.isHovered = true
+                        button.right.isHovered = true
+                    }
+                }
+                in hideZone -> {
+                    navButtons["hide"]?.let { button ->
                         button.isHovered = true
                         button.left.isHovered = true
                         button.right.isHovered = true
@@ -2538,8 +2606,28 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
 
-    fun handleNavigationClick(x: Float, y: Float) {
+    fun isNavBarVisible(): Boolean {
+        // Check both visibility AND scroll mode - in scroll mode, bars are hidden even during fade animation
+        return !isInScrollMode && leftNavigationBar.visibility == View.VISIBLE
+    }
 
+    fun isPointInRestoreButton(x: Float, y: Float): Boolean {
+        if (btnShowNavBars.visibility != View.VISIBLE) return false
+        val loc = IntArray(2)
+        btnShowNavBars.getLocationOnScreen(loc)
+        return x >= loc[0] && x <= loc[0] + btnShowNavBars.width &&
+                y >= loc[1] && y <= loc[1] + btnShowNavBars.height
+    }
+
+    fun performRestoreButtonClick() {
+        if (btnShowNavBars.visibility == View.VISIBLE) {
+            btnShowNavBars.performClick()
+        }
+    }
+
+    fun handleNavigationClick(x: Float, y: Float) {
+        // Ensure nav bar is visible and not in scroll mode before handling click
+        if (isInScrollMode || leftNavigationBar.visibility != View.VISIBLE) return
 
 
         val height = height
@@ -2659,17 +2747,21 @@ class DualWebViewGroup @JvmOverloads constructor(
                     navButtons.entries.find { it.value.isHovered }?.let { (key, button) ->
                         showButtonClickFeedback(button.left)
                         showButtonClickFeedback(button.right)
-                        navigationListener?.let { listener ->
-                            when (key) {
-                                "back"     -> listener.onNavigationBackPressed()
-                                "forward"  -> listener.onNavigationForwardPressed()
-                                "home"     -> listener.onHomePressed()
-                                "link"     -> listener.onHyperlinkPressed()
-                                "settings" -> listener.onSettingsPressed()
-                                "refresh"  -> listener.onRefreshPressed()
-                                "quit"     -> listener.onQuitPressed()
+                        if (key == "hide") {
+                            setScrollMode(true)
+                        } else {
+                            navigationListener?.let { listener ->
+                                when (key) {
+                                    "back"     -> listener.onNavigationBackPressed()
+                                    "forward"  -> listener.onNavigationForwardPressed()
+                                    "home"     -> listener.onHomePressed()
+                                    "link"     -> listener.onHyperlinkPressed()
+                                    "settings" -> listener.onSettingsPressed()
+                                    "refresh"  -> listener.onRefreshPressed()
+                                    "quit"     -> listener.onQuitPressed()
+                                }
                             }
-                }
+                        }
             }
         }
 
@@ -3434,6 +3526,11 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
             webView.requestLayout()
 
+            // Immediately disable touch interception before animating
+            leftToggleBar.isClickable = false
+            leftNavigationBar.isClickable = false
+            leftSystemInfoView.visibility = View.GONE
+
             // Then animate menus away
             leftToggleBar.animate()
                 .alpha(0f)
@@ -3449,12 +3546,13 @@ class DualWebViewGroup @JvmOverloads constructor(
                 .withEndAction { leftNavigationBar.visibility = View.GONE }
                 .start()
 
-            // Move system info bar to bottom
-            leftSystemInfoView.layoutParams = (leftSystemInfoView.layoutParams as FrameLayout.LayoutParams).apply {
-                gravity = Gravity.BOTTOM
-                bottomMargin = 0  // Remove bottom margin to place at screen bottom
-            }
-            leftSystemInfoView.translationY = 0f  // Reset any translation
+            // Show force-show button
+            btnShowNavBars.visibility = View.VISIBLE
+            btnShowNavBars.bringToFront()
+            btnShowNavBars.alpha = 0f
+            btnShowNavBars.animate().alpha(1.0f).setDuration(200).start()
+            btnShowNavBars.requestLayout()
+
         } else {
             // First set WebView back to original size
             webView.layoutParams = FrameLayout.LayoutParams(600, LayoutParams.MATCH_PARENT).apply {
@@ -3464,6 +3562,11 @@ class DualWebViewGroup @JvmOverloads constructor(
                 bottomMargin = 40
             }
             webView.requestLayout()
+
+            // Re-enable touch interception and show system info bar
+            leftToggleBar.isClickable = true
+            leftNavigationBar.isClickable = true
+            leftSystemInfoView.visibility = View.VISIBLE
 
             // Then show menus with animation
             leftToggleBar.visibility = View.VISIBLE
@@ -3480,11 +3583,10 @@ class DualWebViewGroup @JvmOverloads constructor(
                 .setDuration(200)
                 .start()
 
-            // Restore system info bar position
-            leftSystemInfoView.layoutParams = (leftSystemInfoView.layoutParams as FrameLayout.LayoutParams).apply {
-                gravity = Gravity.TOP or Gravity.END
-                bottomMargin = 48  // Restore margin to position above navigation bar
-            }
+            // Hide force-show button
+            btnShowNavBars.animate().alpha(0f).setDuration(200).withEndAction {
+                btnShowNavBars.visibility = View.GONE
+            }.start()
         }
 
         // Force layout update
