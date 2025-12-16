@@ -2,6 +2,18 @@
 
 The original TapLink builds and documentation were published through the release log hosted at https://pastebin.com/80GGhiEK. To preserve that history inside the repository, the paste contents are reproduced below with light formatting for readability.
 
+### TapLink 1.0.0 (December 15, 2025)
+
+- **Source code**: Repository current
+- **New features**:
+  - Comprehensive code cleanup and refactoring for stability.
+  - Standardized package naming to `com.TapLinkX3.app`.
+  - Improved input handling and cursor logic centralization.
+- **Changes**:
+  - Removed legacy scroll direction toggle and inertia logic.
+  - Removed unused custom cursor views.
+  - Consolidated WebView client configuration.
+
 ### TapLink 0.8 (February 16, 2025)
 
 - **APK**: https://drive.google.com/file/d/1f-boxhhJZGgNInatY--o-o_nFf5nBQom/view?usp=sharing
