@@ -256,7 +256,7 @@ class MainActivity : AppCompatActivity(),
     private var scrollModeRunnable = Runnable {
         if (isCursorVisible && !isKeyboardVisible) {
             // Switch to scroll mode
-            toggleCursorVisibility(forceHide = true)
+            // Cursor remains visible
             dualWebViewGroup.setScrollMode(true)
         }
     }
@@ -635,12 +635,6 @@ class MainActivity : AppCompatActivity(),
                     isProcessingTap = true
                     Handler(Looper.getMainLooper()).postDelayed({ isProcessingTap = false }, 300)
 
-                    // Add this condition to handle exiting scroll mode
-                    if (dualWebViewGroup.isInScrollMode()) {
-                        dualWebViewGroup.setScrollMode(false)
-                        toggleCursorVisibility(forceShow = true)
-                        return true
-                    }
 //                Log.d("TouchDebug", """
 //        SingleTapConfirmed:
 //        Event: $e

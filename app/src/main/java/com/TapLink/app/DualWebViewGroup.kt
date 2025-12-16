@@ -94,6 +94,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     lateinit var leftToggleBar: View
     lateinit var progressBar: android.widget.ProgressBar
+    private lateinit var btnShowNavBars: ImageButton
 
     @Volatile private var isRefreshing = false
     private val refreshLock = Object()
@@ -457,6 +458,10 @@ class DualWebViewGroup @JvmOverloads constructor(
                 left = leftNavigationBar.findViewById(R.id.btnRefresh),
                 right = leftNavigationBar.findViewById(R.id.btnRefresh)
             ),
+            "hide" to NavButton(
+                left = leftNavigationBar.findViewById(R.id.btnHide),
+                right = leftNavigationBar.findViewById(R.id.btnHide)
+            ),
             "quit" to NavButton(
                 left = leftNavigationBar.findViewById(R.id.btnQuit),
                 right = leftNavigationBar.findViewById(R.id.btnQuit)
@@ -487,6 +492,24 @@ class DualWebViewGroup @JvmOverloads constructor(
             clipChildren = true   // Add this
             isClickable = true    // Add this
             isFocusable = true    // Add this
+        }
+
+        // Initialize show nav bars button
+        btnShowNavBars = ImageButton(context).apply {
+            layoutParams = FrameLayout.LayoutParams(40, 40).apply {
+                gravity = Gravity.BOTTOM or Gravity.END
+                rightMargin = 40
+                bottomMargin = 40
+            }
+            setImageResource(R.drawable.ic_visibility_on)
+            background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setPadding(8, 8, 8, 8)
+            alpha = 0.5f
+            visibility = View.GONE
+            setOnClickListener {
+                setScrollMode(false)
+            }
         }
 
         Log.d("ViewDebug", "Toggle bar initialized with hash: ${leftToggleBar.hashCode()}")
@@ -664,6 +687,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             addView(leftNavigationBar.apply{
                 elevation = 101f
             })
+            addView(btnShowNavBars) // Add show nav bars button
             addView(progressBar) // Add progress bar
             addView(keyboardContainer)
             addView(dialogContainer)
@@ -2308,8 +2332,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             val buttonWidth = 40
             // Adjust the padding to account for all buttons
             val usableWidth = halfWidth - 16  // Total width minus padding (8dp on each side)
-            val remainingSpace = usableWidth - (7 * buttonWidth)
-            val gap = remainingSpace / 6  // Size of each gap
+            val remainingSpace = usableWidth - (8 * buttonWidth)
+            val gap = remainingSpace / 7  // Size of each gap
 
             // Define button zones based on layout
             val backZone     = 8..(8 + buttonWidth)
@@ -2318,7 +2342,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             val linkZone     = (8 + 3*buttonWidth + 3*gap)..(8 + 4*buttonWidth + 3*gap)
             val settingsZone = (8 + 4*buttonWidth + 4*gap)..(8 + 5*buttonWidth + 4*gap)
             val refreshZone  = (8 + 5*buttonWidth + 5*gap)..(8 + 6*buttonWidth + 5*gap)
-            val quitZone     = (8 + 6*buttonWidth + 6*gap)..(8 + 7*buttonWidth + 6*gap)
+            val hideZone     = (8 + 6*buttonWidth + 6*gap)..(8 + 7*buttonWidth + 6*gap)
+            val quitZone     = (8 + 7*buttonWidth + 7*gap)..(8 + 8*buttonWidth + 7*gap)
 
             // Clear all hover states initially
             clearNavigationButtonHoverStates()
@@ -2365,6 +2390,13 @@ class DualWebViewGroup @JvmOverloads constructor(
                 }
                 in refreshZone -> {
                     navButtons["refresh"]?.let { button ->
+                        button.isHovered = true
+                        button.left.isHovered = true
+                        button.right.isHovered = true
+                    }
+                }
+                in hideZone -> {
+                    navButtons["hide"]?.let { button ->
                         button.isHovered = true
                         button.left.isHovered = true
                         button.right.isHovered = true
@@ -2659,17 +2691,21 @@ class DualWebViewGroup @JvmOverloads constructor(
                     navButtons.entries.find { it.value.isHovered }?.let { (key, button) ->
                         showButtonClickFeedback(button.left)
                         showButtonClickFeedback(button.right)
-                        navigationListener?.let { listener ->
-                            when (key) {
-                                "back"     -> listener.onNavigationBackPressed()
-                                "forward"  -> listener.onNavigationForwardPressed()
-                                "home"     -> listener.onHomePressed()
-                                "link"     -> listener.onHyperlinkPressed()
-                                "settings" -> listener.onSettingsPressed()
-                                "refresh"  -> listener.onRefreshPressed()
-                                "quit"     -> listener.onQuitPressed()
+                        if (key == "hide") {
+                            setScrollMode(true)
+                        } else {
+                            navigationListener?.let { listener ->
+                                when (key) {
+                                    "back"     -> listener.onNavigationBackPressed()
+                                    "forward"  -> listener.onNavigationForwardPressed()
+                                    "home"     -> listener.onHomePressed()
+                                    "link"     -> listener.onHyperlinkPressed()
+                                    "settings" -> listener.onSettingsPressed()
+                                    "refresh"  -> listener.onRefreshPressed()
+                                    "quit"     -> listener.onQuitPressed()
+                                }
                             }
-                }
+                        }
             }
         }
 
@@ -3455,6 +3491,12 @@ class DualWebViewGroup @JvmOverloads constructor(
                 bottomMargin = 0  // Remove bottom margin to place at screen bottom
             }
             leftSystemInfoView.translationY = 0f  // Reset any translation
+
+            // Show force-show button
+            btnShowNavBars.visibility = View.VISIBLE
+            btnShowNavBars.alpha = 0f
+            btnShowNavBars.animate().alpha(0.5f).setDuration(200).start()
+
         } else {
             // First set WebView back to original size
             webView.layoutParams = FrameLayout.LayoutParams(600, LayoutParams.MATCH_PARENT).apply {
@@ -3485,6 +3527,11 @@ class DualWebViewGroup @JvmOverloads constructor(
                 gravity = Gravity.TOP or Gravity.END
                 bottomMargin = 48  // Restore margin to position above navigation bar
             }
+
+            // Hide force-show button
+            btnShowNavBars.animate().alpha(0f).setDuration(200).withEndAction {
+                btnShowNavBars.visibility = View.GONE
+            }.start()
         }
 
         // Force layout update
