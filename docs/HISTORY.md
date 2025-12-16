@@ -2,17 +2,23 @@
 
 The original TapLink builds and documentation were published through the release log hosted at https://pastebin.com/80GGhiEK. To preserve that history inside the repository, the paste contents are reproduced below with light formatting for readability.
 
-### TapLink 1.0.0 (December 15, 2025)
+### TapLink 1.1.0 (December 15, 2025)
 
 - **Source code**: Repository current
 - **New features**:
-  - Comprehensive code cleanup and refactoring for stability.
-  - Standardized package naming to `com.TapLinkX3.app`.
-  - Improved input handling and cursor logic centralization.
-- **Changes**:
-  - Removed legacy scroll direction toggle and inertia logic.
-  - Removed unused custom cursor views.
-  - Consolidated WebView client configuration.
+  - Native JavaScript Dialogs: `alert()`, `confirm()`, and `prompt()` are now rendered with a native, dark-themed UI.
+  - Forward Navigation: Added a dedicated forward button to the navigation bar.
+- **Improvements**:
+  - Enhanced stability and input handling.
+
+### TapLink 1.0.0 (December 3, 2025)
+
+- **APK**: https://github.com/informalTechCode/TAPLINKX3/releases/tag/v1.0.0
+- **Source code**: https://github.com/informalTechCode/TAPLINKX3/tree/v1.0.0
+- **New features**:
+  - **Full-Screen Video Support**: Watch videos on YouTube and other streaming sites in true full screen.
+  - **Smart Keyboard Visibility**: The keyboard now automatically hides when you interact with left-menu buttons.
+  - **Production Cleanup**: Removed experimental navigation code and unused imports.
 
 ### TapLink 0.8 (February 16, 2025)
 
