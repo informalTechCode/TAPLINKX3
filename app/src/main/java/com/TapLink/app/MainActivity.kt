@@ -274,6 +274,7 @@ class MainActivity : AppCompatActivity(),
 
     private val doubleTapLock = Object()
     private var isProcessingDoubleTap = false
+    private var lastDoubleTapStartTime = 0L
     private val DOUBLE_TAP_CONFIRMATION_DELAY = 200L
 
     private var isRingSwitchEnabled = false
@@ -717,20 +718,34 @@ class MainActivity : AppCompatActivity(),
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
+                val isInScrollMode = dualWebViewGroup.isInScrollMode()
                 Log.d(
                     "DoubleTapDebug",
-                    """Handling double tap as back navigation. isProcessingDoubleTap: $isProcessingDoubleTap"""
+                    """onDoubleTap called. isProcessingDoubleTap: $isProcessingDoubleTap, isInScrollMode: $isInScrollMode"""
                 )
 
                 synchronized(doubleTapLock) {
-                    if (isProcessingDoubleTap) return true
+                    // Safety check: Reset if flag has been stuck for too long (>500ms)
+                    val currentTime = System.currentTimeMillis()
+                    if (isProcessingDoubleTap && lastDoubleTapStartTime > 0 && 
+                        currentTime - lastDoubleTapStartTime > 500) {
+                        Log.d("DoubleTapDebug", "Resetting stuck isProcessingDoubleTap flag")
+                        isProcessingDoubleTap = false
+                    }
+                    
+                    if (isProcessingDoubleTap) {
+                        Log.d("DoubleTapDebug", "Skipping - already processing double tap")
+                        return true
+                    }
                     isProcessingDoubleTap = true
+                    lastDoubleTapStartTime = currentTime
                     pendingDoubleTapAction = true
 
                     handler.postDelayed({
                         synchronized(doubleTapLock) {
                             try {
                                 if (pendingDoubleTapAction) {
+                                    Log.d("DoubleTapDebug", "Executing pending double tap action")
                                     performDoubleTapBackNavigation()
                                 }
                             } finally {
@@ -738,6 +753,7 @@ class MainActivity : AppCompatActivity(),
                                 lastTapTime = 0L
                                 pendingDoubleTapAction = false
                                 isProcessingDoubleTap = false
+                                lastDoubleTapStartTime = 0L
                             }
                         }
                     }, DOUBLE_TAP_CONFIRMATION_DELAY)
@@ -893,9 +909,13 @@ class MainActivity : AppCompatActivity(),
                 return@setOnTouchListener isCursorVisible  // Let the event propagate to the settings menu
             }
 
-            // In scroll mode, let the gesture detector handle taps but allow scrolling
+            // In scroll mode, let taps pass through to WebView
+            // The gesture detector still sees all events via dispatchTouchEvent,
+            // so double-tap detection still works independently
             if (dualWebViewGroup.isInScrollMode()) {
-                return@setOnTouchListener handled // Return true if gesture detector handled it
+                // Always return false to let taps reach the WebView (for clicking links, etc.)
+                // The gesture detector has already processed the event in dispatchTouchEvent
+                return@setOnTouchListener false
             }
 
             if (isCursorVisible) {
@@ -2309,43 +2329,47 @@ class MainActivity : AppCompatActivity(),
         if (dualWebViewGroup.isNavBarVisible()) {
             val UILocation = IntArray(2)
             dualWebViewGroup.leftEyeUIContainer.getLocationOnScreen(UILocation)
-            val adjustedX: Float
-            val adjustedY: Float
-
+            
+            // Calculate local coordinates relative to UI container
+            val localX: Float
+            val localY: Float
+            
             if (isAnchored) {
                 // Get rotation from the clip parent
                 val rotationRad = Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
                 val cos = Math.cos(rotationRad).toFloat()
                 val sin = Math.sin(rotationRad).toFloat()
 
-                // The cursor is fixed at (320, 240)
                 val cursorX = lastCursorX
                 val cursorY = lastCursorY
 
-                // Step 1: Inverse translation (subtract the translation)
+                // Inverse translation (subtract the translation)
                 val translatedX = cursorX - UILocation[0]
                 val translatedY = cursorY - UILocation[1]
 
-                // Step 2: Inverse rotation (rotate the translated point back to the view's local coordinates)
-                adjustedX = translatedX * cos + translatedY * sin - 48f
-                adjustedY = -translatedX * sin + translatedY * cos
+                // Inverse rotation (rotate the translated point back to the view's local coordinates)
+                localX = translatedX * cos + translatedY * sin
+                localY = -translatedX * sin + translatedY * cos
             } else {
-                adjustedX = lastCursorX - UILocation[0] - 48f //account for toggle bar
-                adjustedY = lastCursorY - UILocation[1]
+                localX = lastCursorX - UILocation[0]
+                localY = lastCursorY - UILocation[1]
             }
 
-            // Handle navigation bar clicks
-            if (adjustedY >= 480 - 48) {
+            // Handle toggle bar clicks (left toggle bar is 40dp wide, buttons span Y 0-440)
+            // Check this BEFORE offsetting for the toggle bar width
+            if (localX >= 0 && localX < 40 && localY >= 0 && localY < 440) {
                 isSimulatingTouchEvent = false
-                Log.d("AnchoredTouchDebug", "Modified click location: ${adjustedX}, ${adjustedY}")
-                dualWebViewGroup.handleNavigationClick(adjustedX, adjustedY)
+                dualWebViewGroup.handleNavigationClick(localX, localY)
                 return
             }
 
-            // Handle toggle bar clicks
-            if (adjustedX < 48 && adjustedY < 592) {
+            // Handle navigation bar clicks (bottom navbar is 40dp tall)
+            if (localY >= 480 - 40) {
                 isSimulatingTouchEvent = false
-                dualWebViewGroup.handleNavigationClick(adjustedX, adjustedY)
+                // Offset X by toggle bar width for navigation click handling
+                val adjustedX = localX - 40f
+                Log.d("AnchoredTouchDebug", "Modified click location: ${adjustedX}, ${localY}")
+                dualWebViewGroup.handleNavigationClick(adjustedX, localY)
                 return
             }
         }
