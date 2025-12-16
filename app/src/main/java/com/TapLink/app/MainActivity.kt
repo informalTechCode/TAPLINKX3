@@ -130,6 +130,8 @@ class MainActivity : AppCompatActivity(),
     private var isToggling = false
     private var lastCursorX = 320f
     private var lastCursorY = 240f
+    private var isDispatchingTouchEvent = false
+    private var isGestureHandled = false
 
     private val CAMERA_REQUEST_CODE = 1001
     private val CAMERA_PERMISSION_CODE = 100
@@ -519,9 +521,9 @@ class MainActivity : AppCompatActivity(),
                 distanceY: Float
             ): Boolean {
                 // Keep menu behavior first
-                if (tripleClickMenu?.isMenuVisible() == true) {
+                if (tripleClickMenu.isMenuVisible()) {
                     val scaledDistance = -distanceX * 0.5f
-                    tripleClickMenu?.handleScroll(scaledDistance)
+                    tripleClickMenu.handleScroll(scaledDistance)
                     return true
                 }
 
@@ -583,7 +585,6 @@ class MainActivity : AppCompatActivity(),
                 return false
             }
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-
                 Log.d("RingInput", "Single Tap from device: ${e.device?.name}")
 
 
@@ -675,39 +676,17 @@ class MainActivity : AppCompatActivity(),
                                 val UILocation = IntArray(2)
                                 dualWebViewGroup.leftEyeUIContainer.getLocationOnScreen(UILocation)
 
-                                val adjustedX: Float
-                                val adjustedY: Float
-
-                                if (isAnchored) {
-
-
-                                    // Get rotation from the clip parent
-                                    val rotationRad =
-                                        Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
-                                    val cos = Math.cos(rotationRad).toFloat()
-                                    val sin = Math.sin(rotationRad).toFloat()
-
-                                    // The cursor is fixed at (320, 240)
-                                    val cursorX = lastCursorX
-                                    val cursorY = lastCursorY
-
-                                    // Step 1: Inverse translation (subtract the translation)
-                                    val translatedX = cursorX - UILocation[0]
-                                    val translatedY = cursorY - UILocation[1]
-
-                                    // Step 2: Inverse rotation (rotate the translated point back to the view's local coordinates)
-                                    adjustedX = translatedX * cos + translatedY * sin
-                                    adjustedY = -translatedX * sin + translatedY * cos
-                                } else {
-                                    adjustedX = lastCursorX - UILocation[0]
-                                    adjustedY = lastCursorY - UILocation[1]
-                                }
-
+                                // Dispatch the touch event at the current cursor position
                                 dispatchTouchEventAtCursor()
                             }
                         }
 
                         else -> {
+                            // In scroll mode (cursor hidden), let taps pass through to the WebView
+                            // User can exit scroll mode via the dedicated unhide button
+                            if (dualWebViewGroup.isInScrollMode()) {
+                                return false  // Don't consume - let tap go to WebView
+                            }
                             isSimulatingTouchEvent = true
                             toggleCursorVisibility()
                             Log.d("TouchDebug", "Toggling Cursor Visibility")
@@ -825,15 +804,17 @@ class MainActivity : AppCompatActivity(),
 
         // Set up the cursor views directly in the main container
         cursorLeftView = ImageView(this).apply {
-            layoutParams = ViewGroup.LayoutParams(32, 32) // Adjust size as needed
+            layoutParams = ViewGroup.LayoutParams(24, 24) // Adjust size as needed
             setImageResource(R.drawable.cursor_arrow_image)
+            scaleType = ImageView.ScaleType.FIT_START // Anchor to top-left for accurate click alignment
             x = 320f
             y = 240f
             visibility = View.GONE
         }
         cursorRightView = ImageView(this).apply {
-            layoutParams = ViewGroup.LayoutParams(32, 32)
+            layoutParams = ViewGroup.LayoutParams(24, 24)
             setImageResource(R.drawable.cursor_arrow_image)
+            scaleType = ImageView.ScaleType.FIT_START // Anchor to top-left for accurate click alignment
             x = 960f
             y = 240f
             visibility = View.GONE
@@ -884,7 +865,9 @@ class MainActivity : AppCompatActivity(),
                 return@setOnTouchListener true
             }
 
-            val handled = gestureDetector.onTouchEvent(event)
+            // Use the cached result from dispatchTouchEvent instead of calling gestureDetector again
+            // This prevents double-processing which can corrupt gesture state
+            val handled = isGestureHandled
 
             // Add check for settings menu visibility
             if (dualWebViewGroup.isSettingsVisible()) {
@@ -2359,8 +2342,9 @@ class MainActivity : AppCompatActivity(),
 // Existing WebView click path
         isSimulatingTouchEvent = true
         try {
-            val UILocation = IntArray(2)
-            dualWebViewGroup.leftEyeUIContainer.getLocationOnScreen(UILocation)
+            // Get WebView's actual screen location for accurate coordinate translation
+            val webViewLocation = IntArray(2)
+            webView.getLocationOnScreen(webViewLocation)
             val adjustedX: Float
             val adjustedY: Float
 
@@ -2374,23 +2358,24 @@ class MainActivity : AppCompatActivity(),
                 val cursorX = lastCursorX
                 val cursorY = lastCursorY
 
-                // Step 1: Inverse translation (subtract the translation)
-                val translatedX = cursorX - UILocation[0]
-                val translatedY = cursorY - UILocation[1]
+                // Step 1: Inverse translation (subtract the WebView's screen position)
+                val translatedX = cursorX - webViewLocation[0]
+                val translatedY = cursorY - webViewLocation[1]
 
                 // Step 2: Inverse rotation (rotate the translated point back to the view's local coordinates)
-                adjustedX = translatedX * cos + translatedY * sin - 48f
+                adjustedX = translatedX * cos + translatedY * sin
                 adjustedY = -translatedX * sin + translatedY * cos
             } else {
-                adjustedX = lastCursorX - UILocation[0]   - 48f //account for toggle bar
-                adjustedY = lastCursorY - UILocation[1]
+                // Direct mapping using WebView's actual position
+                adjustedX = lastCursorX - webViewLocation[0]
+                adjustedY = lastCursorY - webViewLocation[1]
             }
             Log.d("ClickDebug", """
     Click coordinates:
     Raw cursor: ($lastCursorX, $lastCursorY)
     Adjusted for WebView: ($adjustedX, $adjustedY)
-    parent window Location: (${UILocation[0]}, ${UILocation[1]})
-    Final click position relative to content: (${adjustedX + UILocation[0]}, ${adjustedY + UILocation[1]})
+    WebView Location: (${webViewLocation[0]}, ${webViewLocation[1]})
+    Final click position relative to content: (${adjustedX + webViewLocation[0]}, ${adjustedY + webViewLocation[1]})
 """.trimIndent())
             val eventTime = SystemClock.uptimeMillis()
 
@@ -2434,7 +2419,7 @@ class MainActivity : AppCompatActivity(),
         }
         return null;
     })();
-""") { result ->
+""") { _ ->
                 // Complete the touch sequence regardless of whether we found a special link
                 Handler(Looper.getMainLooper()).postDelayed({
                     val motionEventUp = MotionEvent.obtain(
@@ -2810,7 +2795,9 @@ class MainActivity : AppCompatActivity(),
                 mediaPlaybackRequiresUserGesture = false
 
                 // Security and Access Settings
+                @Suppress("DEPRECATION")
                 saveFormData = true
+                @Suppress("DEPRECATION")
                 savePassword = true
                 allowFileAccess = true
                 allowContentAccess = true
@@ -3042,6 +3029,7 @@ class MainActivity : AppCompatActivity(),
                     }
 
                     try {
+                        @Suppress("DEPRECATION")
                         startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
                     } catch (e: ActivityNotFoundException) {
                         this@MainActivity.filePathCallback = null
@@ -3100,6 +3088,7 @@ class MainActivity : AppCompatActivity(),
 
         // Section 5: Input Handling Configuration
         disableDefaultKeyboard()
+        @Suppress("DEPRECATION")
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
         // Before loading the initial page, try to restore the previous session
@@ -3232,6 +3221,7 @@ class MainActivity : AppCompatActivity(),
     }
 
 
+    @Suppress("DEPRECATION")
     private fun showFullScreenCustomView(view: View, callback: WebChromeClient.CustomViewCallback?) {
         if (fullScreenCustomView != null) {
             callback?.onCustomViewHidden()
@@ -3258,6 +3248,7 @@ class MainActivity : AppCompatActivity(),
         cursorRightView.visibility = View.GONE
     }
 
+    @Suppress("DEPRECATION")
     private fun hideFullScreenCustomView() {
         if (fullScreenCustomView == null) {
             return
@@ -3276,6 +3267,7 @@ class MainActivity : AppCompatActivity(),
         customViewCallback = null
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
@@ -3308,6 +3300,7 @@ class MainActivity : AppCompatActivity(),
         }
 
         if (requestCode == CAMERA_REQUEST_CODE && resultCode == RESULT_OK) {
+            @Suppress("DEPRECATION")
             data?.extras?.get("data")?.let { imageBitmap ->
                 // Convert bitmap to base64
                 val base64Image = convertBitmapToBase64(imageBitmap as Bitmap)
@@ -3886,6 +3879,18 @@ class MainActivity : AppCompatActivity(),
     }
 
 
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // Let gestureDetector see the event for global gestures (like double-tap back)
+        // regardless of whether a child view consumes it.
+        isDispatchingTouchEvent = true
+        try {
+            isGestureHandled = gestureDetector.onTouchEvent(ev)
+        } finally {
+            isDispatchingTouchEvent = false
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         Log.d("RingInput", """
         Touch Event:
@@ -3900,8 +3905,9 @@ class MainActivity : AppCompatActivity(),
         Duration: ${event.eventTime - event.downTime}ms
     """.trimIndent())
 
-        // Always let gestureDetector see the event
-        val handled = gestureDetector.onTouchEvent(event)
+        // Use the result captured in dispatchTouchEvent to avoid calling it twice
+        val handled = isGestureHandled
+        
         if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
             tripleClickMenu.stopFling()
         }
@@ -3948,13 +3954,12 @@ class MainActivity : AppCompatActivity(),
 
         dualWebViewGroup.updateLoadingProgress(0)
 
-        val previousUrl = if (historyList.size > 1) {
+        if (historyList.size > 1) {
             historyList.getItemAtIndex(historyList.size - 2).url.also {
                 Log.d("NavigationDebug", "Attempting to go back to: $it")
             }
         } else {
             Log.d("NavigationDebug", "History stack did not expose a previous URL")
-            null
         }
 
         // First, stop all JavaScript execution and ongoing loads
