@@ -103,8 +103,8 @@ class MainActivity : AppCompatActivity(),
 {
 
     private val H2V_GAIN = 1.0f   // how strongly horizontal motion affects vertical scroll
-    private val X_INVERT = 1.0f   // 1 = left -> up (what you want). Use -1 to flip.
-    private val Y_INVERT = 1.0f   // 1 = drag up -> up. Use -1 to flip if needed.
+    private val X_INVERT = -1.0f   // 1 = left -> up (what you want). Use -1 to flip.
+    private val Y_INVERT = -1.0f   // 1 = drag up -> up. Use -1 to flip if needed.
     lateinit var dualWebViewGroup: DualWebViewGroup
     private lateinit var webView: WebView
     private lateinit var mainContainer: FrameLayout
@@ -341,7 +341,7 @@ class MainActivity : AppCompatActivity(),
 
 
 
-    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
+    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility", "DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Set window background to black immediately
@@ -504,6 +504,7 @@ class MainActivity : AppCompatActivity(),
             }
 
             override fun onLongPress(e: MotionEvent) {
+                tapCount = 0
                 Log.d("RingInput", """
             Long Press:
             Source: ${e.source}
@@ -520,6 +521,7 @@ class MainActivity : AppCompatActivity(),
                 distanceX: Float,
                 distanceY: Float
             ): Boolean {
+                tapCount = 0 // Reset tap count on scroll to prevent accidental triple-tap detection
                 // Keep menu behavior first
                 if (tripleClickMenu.isMenuVisible()) {
                     val scaledDistance = -distanceX * 0.5f
@@ -548,17 +550,34 @@ class MainActivity : AppCompatActivity(),
                     val verticalDelta = horizontalAsVertical + verticalFromDrag
 
                     if (kotlin.math.abs(verticalDelta) >= 1f) {
-                        val deltaInt = verticalDelta.toInt()
-                        // Check if we can scroll in the requested direction
-                        val canScroll = if (deltaInt < 0) {
-                            webView.canScrollVertically(-1)
-                        } else {
-                            webView.canScrollVertically(1)
-                        }
+                        val pointerCoords = MotionEvent.PointerCoords()
+                        pointerCoords.x = 320f
+                        pointerCoords.y = 240f
+                        pointerCoords.setAxisValue(MotionEvent.AXIS_VSCROLL, verticalDelta / 30f)
 
-                        if (canScroll) {
-                            webView.scrollBy(0, deltaInt)
-                        }
+                        val pointerProperties = MotionEvent.PointerProperties()
+                        pointerProperties.id = 0
+                        pointerProperties.toolType = MotionEvent.TOOL_TYPE_MOUSE
+
+                        val event = MotionEvent.obtain(
+                            SystemClock.uptimeMillis(),
+                            SystemClock.uptimeMillis(),
+                            MotionEvent.ACTION_SCROLL,
+                            1,
+                            arrayOf(pointerProperties),
+                            arrayOf(pointerCoords),
+                            0,
+                            0,
+                            1.0f,
+                            1.0f,
+                            0,
+                            0,
+                            InputDevice.SOURCE_MOUSE,
+                            0
+                        )
+                        
+                        webView.dispatchGenericMotionEvent(event)
+                        event.recycle()
                     }
                     return true
                 }
@@ -2795,10 +2814,9 @@ class MainActivity : AppCompatActivity(),
                 mediaPlaybackRequiresUserGesture = false
 
                 // Security and Access Settings
-                @Suppress("DEPRECATION")
-                saveFormData = true
-                @Suppress("DEPRECATION")
-                savePassword = true
+                // Security and Access Settings
+                // saveFormData = true // Deprecated
+                // savePassword = true // Deprecated
                 allowFileAccess = true
                 allowContentAccess = true
                 setGeolocationEnabled(true)
@@ -2809,6 +2827,7 @@ class MainActivity : AppCompatActivity(),
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
+                textZoom = 80
 
                 // Disable Unnecessary Zoom Controls
                 setSupportZoom(false)
@@ -3267,6 +3286,7 @@ class MainActivity : AppCompatActivity(),
         customViewCallback = null
     }
 
+    @Suppress("DEPRECATION")
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
