@@ -1683,20 +1683,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     private fun getCursorInContainerCoords(): Pair<Float, Float> {
-        val uiLocation = IntArray(2)
-        leftEyeUIContainer.getLocationOnScreen(uiLocation)
-
-        val rotationRad = Math.toRadians(leftEyeUIContainer.rotation.toDouble())
-        val cos = Math.cos(rotationRad).toFloat()
-        val sin = Math.sin(rotationRad).toFloat()
-
-        val translatedX = lastCursorX - uiLocation[0]
-        val translatedY = lastCursorY - uiLocation[1]
-
-        val adjustedX = translatedX * cos + translatedY * sin
-        val adjustedY = -translatedX * sin + translatedY * cos
-
-        return Pair(adjustedX, adjustedY)
+        return computeAnchoredCoordinates(lastCursorX, lastCursorY)
     }
 
     private fun computeAnchoredKeyboardCoordinates(): Pair<Float, Float>? {

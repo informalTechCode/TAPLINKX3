@@ -530,17 +530,6 @@ class MainActivity : AppCompatActivity(),
                     return true
                 }
 
-                // Handle bookmarks scrolling in anchored mode
-                if (isAnchored && dualWebViewGroup.isBookmarksExpanded()) {
-                    // Map horizontal to vertical scrolling for bookmarks
-                    val horizontalAsVertical = (-distanceX) * X_INVERT * H2V_GAIN
-                    val verticalFromDrag = distanceY * Y_INVERT
-                    val verticalDelta = horizontalAsVertical + verticalFromDrag
-                    
-                    dualWebViewGroup.getBookmarksView().handleAnchoredSwipe(verticalDelta)
-                    return true
-                }
-
                 // When ANCHORED: both X and Y move the page vertically
                 if (isAnchored && !isKeyboardVisible && !dualWebViewGroup.isScreenMasked()) {
                     // Map horizontal to vertical: LEFT -> UP, RIGHT -> DOWN
@@ -665,7 +654,7 @@ class MainActivity : AppCompatActivity(),
 //    """.trimIndent())
                     Log.d("TouchDebug", "checkpoint6")
                     // Check if bookmarks are visible first
-                    if (dualWebViewGroup.isBookmarksExpanded()) {
+                    if (!isAnchored && dualWebViewGroup.isBookmarksExpanded()) {
                         Log.d("BookmarksDebug", "Processing tap while bookmarks are visible")
                         val handled = dualWebViewGroup.handleBookmarkTap()
                         if (handled) return true
