@@ -726,13 +726,19 @@ class DualWebViewGroup @JvmOverloads constructor(
         // After other view initializations
 
 
+        // In init block
+        // leftEyeUIContainer is already added to leftEyeClipParent earlier.
+        // leftEyeClipParent.addView(fullScreenOverlayContainer) // Reverted move
+
         // Add the clip parent to the main view
         addView(leftEyeClipParent)
         addView(rightEyeView)  // Keep right eye view separate
-        addView(fullScreenOverlayContainer)
+        addView(fullScreenOverlayContainer) // Added back as direct child
         addView(maskOverlay)   // Keep overlay on top
 
     }
+
+
 
     fun showFullScreenOverlay(view: View) {
         if (view.parent is ViewGroup) {
@@ -1077,6 +1083,11 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftEyeUIContainer.translationY = xOffset
         leftEyeUIContainer.rotation     = rotationDeg
 
+        // Apply same transformations to full screen overlay for anchored mode consistency
+        fullScreenOverlayContainer.translationX = yOffset
+        fullScreenOverlayContainer.translationY = xOffset
+        fullScreenOverlayContainer.rotation     = rotationDeg
+
         val adjustedX: Float
         val adjustedY: Float
 
@@ -1329,6 +1340,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftEyeClipParent.right,
             leftEyeClipParent.bottom
         )
+
 
         // Position SurfaceView exactly like WebView but offset horizontally for right eye
         rightEyeView.layout(
