@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/settingsMenu"
-    android:layout_width="240dp"
+    android:layout_width="320dp"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="#202020"
@@ -20,6 +20,7 @@
         android:id="@+id/volumeSeekBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:minHeight="48dp"
         android:layout_marginTop="8dp"
         android:layout_marginBottom="16dp"
         android:progressTint="#FFFFFF"
@@ -37,7 +38,29 @@
         android:id="@+id/brightnessSeekBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:minHeight="48dp"
         android:layout_marginTop="8dp"
+        android:layout_marginBottom="16dp"
+        android:progressTint="#FFFFFF"
+        android:thumbTint="#FFFFFF"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Anchor Smoothness"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:layout_marginBottom="8dp"/>
+
+    <SeekBar
+        android:id="@+id/smoothnessSeekBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="16dp"
+        android:max="100"
+        android:progress="80"
         android:progressTint="#FFFFFF"
         android:thumbTint="#FFFFFF"/>
 

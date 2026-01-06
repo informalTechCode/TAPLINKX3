@@ -31,6 +31,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Base64
 import android.util.Log
+import android.view.Choreographer
 import android.view.GestureDetector
 import android.view.GestureDetector.SimpleOnGestureListener
 import android.view.Gravity
@@ -235,11 +236,24 @@ class MainActivity : AppCompatActivity(),
     private var rotationSensor: Sensor? = null
     private var isAnchored = true
 
-
+    // Smoothing and performance parameters for anchored mode
     private var firstSensorReading = true
     private val TRANSLATION_SCALE = 2000f // Adjusted for better visual stability (approx 36 deg FOV)
-    private val ANCHOR_SMOOTHING_FACTOR = 0.25f // Factor for quaternion smoothing (0.0 = no update, 1.0 = instant)
-
+    
+    // Dynamic smoothing factors (controlled by user preference)
+    // Range: 0 (fastest/least smooth) to 100 (slowest/most smooth)
+    private var smoothnessLevel = 80 // Default: fairly smooth
+    private var anchorSmoothingFactor = 0.08f // Calculated from smoothnessLevel
+    private var velocitySmoothing = 0.15f // Calculated from smoothnessLevel
+    
+    // Velocity tracking for double exponential smoothing
+    private var smoothedDeltaX = 0f
+    private var smoothedDeltaY = 0f
+    private var smoothedRollDeg = 0f
+    
+    // Frame timing for vsync
+    private var lastFrameTime = 0L
+    private val MIN_FRAME_INTERVAL_MS = 8L // ~120 FPS max (displays may be 90-120Hz)
 
     private var sensorEventListener = createSensorEventListener()
 
@@ -1025,6 +1039,15 @@ class MainActivity : AppCompatActivity(),
         sensorManager  = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
 
+        // Load preferences
+        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+        smoothnessLevel = prefs.getInt("anchorSmoothness", 80)
+        updateSmoothnessFactors(smoothnessLevel)
+        
+        // Load saved anchored mode state (default to true for backward compatibility)
+        isAnchored = prefs.getBoolean("isAnchored", true)
+        Log.d("AnchorDebug", "Loading saved anchored state: $isAnchored")
+
         // After initializing webView and dualWebViewGroup but before loadInitialPage()
         // Set initial cursor position
         // Make cursor visible
@@ -1035,12 +1058,17 @@ class MainActivity : AppCompatActivity(),
         resetScrollModeTimer()
         Log.d("ScrollModeDebug", "Initial scroll mode timer started")
 
-        // Start in anchored mode
-        rotationSensor?.let { sensor ->
-            sensorEventListener = createSensorEventListener()
-            sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_GAME)
+        // Start in saved anchored mode state
+        if (isAnchored) {
+            rotationSensor?.let { sensor ->
+                sensorEventListener = createSensorEventListener()
+                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_FASTEST)
+            }
+            dualWebViewGroup.startAnchoring()
+        } else {
+            // Not anchored - make sure anchored mode is off
+            dualWebViewGroup.stopAnchoring()
         }
-        dualWebViewGroup.startAnchoring()
 
 
         // Then try to restore the previous state
@@ -3554,6 +3582,13 @@ class MainActivity : AppCompatActivity(),
 
 
         isAnchored = !isAnchored
+        
+        // Save anchored mode state
+        getSharedPreferences(prefsName, MODE_PRIVATE)
+            .edit()
+            .putBoolean("isAnchored", isAnchored)
+            .apply()
+        
         hideCustomKeyboard()
         Log.d("AnchorDebug", """
         Anchor toggled:
@@ -3565,22 +3600,36 @@ class MainActivity : AppCompatActivity(),
             // Move cursor to center of left screen
             centerCursor()
 
-            // Initialize sensor handling
+            // Initialize sensor handling with reset velocity tracking
+            smoothedDeltaX = 0f
+            smoothedDeltaY = 0f
+            smoothedRollDeg = 0f
+            lastFrameTime = 0L
+            
             sensorEventListener = createSensorEventListener()
             rotationSensor?.let { sensor ->
-                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_GAME)
+                // Use FASTEST for maximum responsiveness (smoothing handles jitter)
+                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_FASTEST)
             }
             dualWebViewGroup.startAnchoring()
 
+
         } else {
-            // Stop sensor updates
+            // CRITICAL: Set isAnchored to false FIRST to stop any pending sensor callbacks
+            // (The sensor listener checks this flag before applying updates)
+            
+            // Stop sensor updates immediately
             sensorManager.unregisterListener(sensorEventListener)
-
-            // Restore cursor position
-            refreshCursor()
-
-            // Reset view positions
-            dualWebViewGroup.stopAnchoring()
+            
+            // Wait a tiny bit for any in-flight Choreographer callbacks to complete
+            // before resetting positions
+            Handler(Looper.getMainLooper()).postDelayed({
+                // Now reset view positions after sensor updates have stopped
+                dualWebViewGroup.stopAnchoring()
+                
+                // Restore cursor position
+                refreshCursor()
+            }, 50) // Small delay to ensure pending frames are processed
         }
     }
 
@@ -3594,6 +3643,45 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
+    /**
+     * Updates the smoothing factors based on user preference slider (0-100)
+     * 0 = Fastest/least smooth (high factor values = more responsive)
+     * 100 = Slowest/most smooth (low factor values = very smooth)
+     * 80 = Default balanced setting
+     */
+    private fun updateSmoothnessFactors(level: Int) {
+        smoothnessLevel = level.coerceIn(0, 100)
+        
+        // Map 0-100 to smoothing factors with INVERTED non-linear scaling
+        // Higher slider values = LOWER factors = MORE smoothing
+        // Lower slider values = HIGHER factors = LESS smoothing (more responsive)
+        
+        // Quaternion SLERP: 0.20 (fast/left) to 0.02 (very smooth/right)
+        // Inverting: 100 - level gives us the inverse
+        val invertedLevel = 100 - smoothnessLevel
+        anchorSmoothingFactor = 0.02f + (invertedLevel / 100f) * 0.18f
+        
+        // Velocity smoothing: 0.30 (fast/left) to 0.05 (very smooth/right)
+        velocitySmoothing = 0.05f + (invertedLevel / 100f) * 0.25f
+        
+        Log.d("SmoothnessDebug", """
+            Smoothness updated:
+            Level: $smoothnessLevel (0=fast, 100=smooth)
+            Inverted: $invertedLevel
+            Quaternion SLERP: $anchorSmoothingFactor
+            Velocity Damping: $velocitySmoothing
+        """.trimIndent())
+    }
+
+    /**
+     * Public function called from DualWebViewGroup when user adjusts smoothness slider
+     */
+    fun updateAnchorSmoothness(level: Int) {
+        updateSmoothnessFactors(level)
+        // Preference is already saved by DualWebViewGroup, just update the factors
+    }
+
+
     private fun createSensorEventListener(): SensorEventListener {
         return object : SensorEventListener {
             var initialQuaternion: FloatArray? = null
@@ -3601,6 +3689,11 @@ class MainActivity : AppCompatActivity(),
 
             override fun onSensorChanged(event: SensorEvent) {
                 if (!isAnchored || event.sensor.type != Sensor.TYPE_ROTATION_VECTOR) return
+
+                // Frame rate limiting to prevent excessive updates
+                val currentTime = SystemClock.elapsedRealtime()
+                if (currentTime - lastFrameTime < MIN_FRAME_INTERVAL_MS) return
+                lastFrameTime = currentTime
 
                 val qx = event.values[0]
                 val qy = event.values[1]
@@ -3612,8 +3705,8 @@ class MainActivity : AppCompatActivity(),
                 if (smoothedQuaternion == null) {
                     smoothedQuaternion = currentQuaternion.clone()
                 } else {
-                    // Apply smoothing (SLERP)
-                    smoothedQuaternion = quaternionSlerp(smoothedQuaternion!!, currentQuaternion, ANCHOR_SMOOTHING_FACTOR)
+                    // Apply smoothing (SLERP) using dynamic factor
+                    smoothedQuaternion = quaternionSlerp(smoothedQuaternion!!, currentQuaternion, anchorSmoothingFactor)
                 }
 
                 // Use the smoothed quaternion for calculations
@@ -3623,6 +3716,10 @@ class MainActivity : AppCompatActivity(),
                 if (shouldResetInitialQuaternion || initialQuaternion == null) {
                     initialQuaternion = activeQuaternion.clone()
                     shouldResetInitialQuaternion = false
+                    // Reset velocity smoothing
+                    smoothedDeltaX = 0f
+                    smoothedDeltaY = 0f
+                    smoothedRollDeg = 0f
                     return
                 }
 
@@ -3633,12 +3730,20 @@ class MainActivity : AppCompatActivity(),
                 val rollRad = euler[2]  // or [2], etc., depends on your system
                 val rollDeg = Math.toDegrees(rollRad.toDouble()).toFloat()
 
-
                 val deltaX = relativeQuaternion[1] * TRANSLATION_SCALE
                 val deltaY = relativeQuaternion[2] * TRANSLATION_SCALE
 
-                runOnUiThread {
-                    dualWebViewGroup.updateLeftEyePosition(deltaX, deltaY, rollDeg)
+                // Apply velocity smoothing (double exponential smoothing) using dynamic factor
+                smoothedDeltaX = smoothedDeltaX * (1f - velocitySmoothing) + deltaX * velocitySmoothing
+                smoothedDeltaY = smoothedDeltaY * (1f - velocitySmoothing) + deltaY * velocitySmoothing
+                smoothedRollDeg = smoothedRollDeg * (1f - velocitySmoothing) + rollDeg * velocitySmoothing
+
+                // Use Choreographer to sync with display vsync for buttery smooth updates
+                Choreographer.getInstance().postFrameCallback {
+                    // Double-check isAnchored before applying update (prevents race conditions)
+                    if (isAnchored) {
+                        dualWebViewGroup.updateLeftEyePosition(smoothedDeltaX, smoothedDeltaY, smoothedRollDeg)
+                    }
                 }
             }
 

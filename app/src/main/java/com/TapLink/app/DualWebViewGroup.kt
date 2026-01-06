@@ -265,13 +265,15 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private val fullScreenOverlayContainer = FrameLayout(context).apply {
         clipChildren = true
-        clipToPadding = true
         clipToOutline = true  // Ensure clipping to bounds
         setBackgroundColor(Color.BLACK)
         visibility = View.GONE
         isClickable = true
         isFocusable = true
     }
+    
+    // Track scroll mode state before fullscreen
+    private var wasInScrollModeBeforeFullscreen = false
 
     private val fullScreenHiddenViews: List<View> by lazy {
         listOf(
@@ -742,6 +744,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
     fun showFullScreenOverlay(view: View) {
+        Log.d("FullscreenDebug", "showFullScreenOverlay called")
+        
         if (view.parent is ViewGroup) {
             (view.parent as ViewGroup).removeView(view)
         }
@@ -756,13 +760,35 @@ class DualWebViewGroup @JvmOverloads constructor(
         )
 
         previousFullScreenVisibility.clear()
+        Log.d("FullscreenDebug", "Hiding ${fullScreenHiddenViews.size} UI elements")
         fullScreenHiddenViews.forEach { target ->
+            val name = when(target) {
+                webView -> "webView"
+                leftToggleBar -> "leftToggleBar"
+                leftNavigationBar -> "leftNavigationBar"
+                keyboardContainer -> "keyboardContainer"
+                leftSystemInfoView -> "leftSystemInfoView"
+                urlEditText -> "urlEditText"
+                else -> "unknown"
+            }
+            Log.d("FullscreenDebug", "  Hiding $name (was ${if (target.visibility == View.VISIBLE) "VISIBLE" else "GONE"})")
             previousFullScreenVisibility[target] = target.visibility
             target.visibility = View.GONE
         }
 
         fullScreenOverlayContainer.visibility = View.VISIBLE
         fullScreenOverlayContainer.bringToFront()
+        
+        // Save current scroll mode state and enable it to hide all navigation bars
+        wasInScrollModeBeforeFullscreen = isInScrollMode
+        if (!isInScrollMode) {
+            Log.d("FullscreenDebug", "Enabling scroll mode to hide navigation bars")
+            setScrollMode(true)
+        }
+        
+        // Hide system UI (status bar if any) for immersive fullscreen
+        Log.d("FullscreenDebug", "About to call hideSystemUI()")
+        hideSystemUI()
     }
 
     fun hideFullScreenOverlay() {
@@ -772,6 +798,89 @@ class DualWebViewGroup @JvmOverloads constructor(
             target.visibility = visibility
         }
         previousFullScreenVisibility.clear()
+        
+        // Restore previous scroll mode state
+        if (!wasInScrollModeBeforeFullscreen && isInScrollMode) {
+            Log.d("FullscreenDebug", "Restoring non-scroll mode (showing navigation bars)")
+            setScrollMode(false)
+        }
+        
+        // Restore system UI
+        showSystemUI()
+    }
+
+    private fun hideSystemUI() {
+        val activity = context as? Activity ?: run {
+            Log.w("FullscreenDebug", "Cannot hide system UI - context is not an Activity")
+            return
+        }
+        
+        post {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    // Android 11+ (API 30+) - Use WindowInsetsController
+                    // CRITICAL: Must set decorFitsSystemWindows to false first
+                    activity.window.setDecorFitsSystemWindows(false)
+                    
+                    activity.window.insetsController?.let { controller ->
+                        controller.hide(
+                            android.view.WindowInsets.Type.statusBars() 
+                            or android.view.WindowInsets.Type.navigationBars()
+                        )
+                        controller.systemBarsBehavior = 
+                            android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                        Log.d("FullscreenDebug", "System UI hidden (API 30+)")
+                    } ?: Log.w("FullscreenDebug", "WindowInsetsController is null!")
+                } else {
+                    // Older Android versions - Use deprecated flags
+                    @Suppress("DEPRECATION")
+                    activity.window.decorView.systemUiVisibility = (
+                        View.SYSTEM_UI_FLAG_FULLSCREEN
+                        or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    )
+                    Log.d("FullscreenDebug", "System UI hidden (legacy API)")
+                }
+            } catch (e: Exception) {
+                Log.e("FullscreenDebug", "Error hiding system UI", e)
+            }
+        }
+    }
+
+    private fun showSystemUI() {
+        val activity = context as? Activity ?: run {
+            Log.w("FullscreenDebug", "Cannot show system UI - context is not an Activity")
+            return
+        }
+        
+        post {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    // Android 11+ (API 30+) - Use WindowInsetsController
+                    // Restore decorFitsSystemWindows
+                    activity.window.setDecorFitsSystemWindows(true)
+                    
+                    activity.window.insetsController?.show(
+                        android.view.WindowInsets.Type.statusBars() 
+                        or android.view.WindowInsets.Type.navigationBars()
+                    )
+                    Log.d("FullscreenDebug", "System UI shown (API 30+)")
+                } else {
+                    // Older Android versions - Clear flags
+                    @Suppress("DEPRECATION")
+                    activity.window.decorView.systemUiVisibility = (
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    )
+                    Log.d("FullscreenDebug", "System UI shown (legacy API)")
+                }
+            } catch (e: Exception) {
+                Log.e("FullscreenDebug", "Error showing system UI", e)
+            }
+        }
     }
 
     fun maskScreen() {
@@ -1132,10 +1241,12 @@ class DualWebViewGroup @JvmOverloads constructor(
 //        val adjustedY = 240f - toggleBarLocation[1]
         updateButtonHoverStates(adjustedX, adjustedY)
 
-        // Force a refresh of the right eye view
-        post {
-            startRefreshing()
-            invalidate()
+        // Only do expensive operations occasionally, not every frame
+        // The Choreographer already ensures smooth vsync timing
+        if (!isRefreshing) {
+            post {
+                startRefreshing()
+            }
         }
     }
 
@@ -2822,6 +2933,11 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftEyeClipParent.translationX = 0f
         leftEyeClipParent.translationY = 0f
         leftEyeClipParent.rotation = 0f
+        
+        // Also reset fullscreen overlay
+        fullScreenOverlayContainer.translationX = 0f
+        fullScreenOverlayContainer.translationY = 0f
+        fullScreenOverlayContainer.rotation = 0f
 
         postDelayed({
             startRefreshing()
@@ -3334,7 +3450,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
 
             val layoutParams = FrameLayout.LayoutParams(
-                240,
+                320,
                 settingsMenu?.measuredHeight ?: FrameLayout.LayoutParams.WRAP_CONTENT
             ).apply {
                 gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP
@@ -3349,7 +3465,25 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         // Before toggling visibility, update the seek bars with current system values.
-        initializeSettingsBars()
+        settingsMenu?.let { menu ->
+            // Initialize volume seekbar
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val volumeSeekBar = menu.findViewById<SeekBar>(R.id.volumeSeekBar)
+            volumeSeekBar?.max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            volumeSeekBar?.progress = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+
+            // Initialize brightness seekbar
+            val brightnessSeekBar = menu.findViewById<SeekBar>(R.id.brightnessSeekBar)
+            brightnessSeekBar?.max = 100
+            val currentBrightness = (context as? Activity)?.window?.attributes?.screenBrightness ?: 0.5f
+            brightnessSeekBar?.progress = (currentBrightness * 100).toInt()
+
+            // Initialize smoothness seekbar from saved preference
+            val smoothnessSeekBar = menu.findViewById<SeekBar>(R.id.smoothnessSeekBar)
+            val savedSmoothness = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                .getInt("anchorSmoothness", 80)
+            smoothnessSeekBar?.progress = savedSmoothness
+        }
 
         // Toggle visibility state
         isSettingsVisible = !isSettingsVisible
@@ -3363,7 +3497,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             // Keep the force immediate layout code
             settingsMenu?.measure(
-                MeasureSpec.makeMeasureSpec(240, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(320, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
             )
             settingsMenu?.layout(
@@ -3397,11 +3531,13 @@ class DualWebViewGroup @JvmOverloads constructor(
             // Get locations of all interactive elements
             val volumeSeekBar = menu.findViewById<SeekBar>(R.id.volumeSeekBar)
             val brightnessSeekBar = menu.findViewById<SeekBar>(R.id.brightnessSeekBar)
+            val smoothnessSeekBar = menu.findViewById<SeekBar>(R.id.smoothnessSeekBar)
             val closeButton = menu.findViewById<Button>(R.id.btnCloseSettings)
 
             // Get screen locations
             val volumeLocation = IntArray(2)
             val brightnessLocation = IntArray(2)
+            val smoothnessLocation = IntArray(2)
             val closeLocation = IntArray(2)
 
             val menuLocation = IntArray(2)
@@ -3409,6 +3545,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             volumeSeekBar?.getLocationOnScreen(volumeLocation)
             brightnessSeekBar?.getLocationOnScreen(brightnessLocation)
+            smoothnessSeekBar?.getLocationOnScreen(smoothnessLocation)
             closeButton?.getLocationOnScreen(closeLocation)
 
             if (x >= menuLocation[0] && x <= menuLocation[0] + menu.width &&
@@ -3468,6 +3605,36 @@ class DualWebViewGroup @JvmOverloads constructor(
                     return
                 }
 
+                // Check if click is on smoothness seekbar
+                if (smoothnessSeekBar != null &&
+                    x >= smoothnessLocation[0] && x <= smoothnessLocation[0] + smoothnessSeekBar.width &&
+                    y >= smoothnessLocation[1] && y <= smoothnessLocation[1] + smoothnessSeekBar.height) {
+
+                    // Calculate relative position on seekbar
+                    val relativeX = x - smoothnessLocation[0]
+                    val percentage = relativeX.coerceIn(0f, smoothnessSeekBar.width.toFloat()) / smoothnessSeekBar.width
+                    val newProgress = (percentage * smoothnessSeekBar.max).toInt()
+
+                    // Update smoothness
+                    smoothnessSeekBar.progress = newProgress
+                    
+                    // Save preference and notify MainActivity
+                    context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putInt("anchorSmoothness", newProgress)
+                        .apply()
+                    
+                    // Call MainActivity to update smoothness
+                    (context as? MainActivity)?.updateAnchorSmoothness(newProgress)
+
+                    // Visual feedback
+                    smoothnessSeekBar.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        smoothnessSeekBar.isPressed = false
+                    }, 100)
+                    return
+                }
+
                 // Check if click is on close button
                 if (closeButton != null &&
                     x >= closeLocation[0] && x <= closeLocation[0] + closeButton.width &&
@@ -3490,6 +3657,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             Touch at ($x, $y)
             Volume seekbar at (${volumeLocation[0]}, ${volumeLocation[1]}) size ${volumeSeekBar?.width}x${volumeSeekBar?.height}
             Brightness seekbar at (${brightnessLocation[0]}, ${brightnessLocation[1]}) size ${brightnessSeekBar?.width}x${brightnessSeekBar?.height}
+            Smoothness seekbar at (${smoothnessLocation[0]}, ${smoothnessLocation[1]}) size ${smoothnessSeekBar?.width}x${smoothnessSeekBar?.height}
             Close button at (${closeLocation[0]}, ${closeLocation[1]}) size ${closeButton?.width}x${closeButton?.height}
         """.trimIndent())
             }
