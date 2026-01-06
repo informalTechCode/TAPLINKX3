@@ -447,10 +447,11 @@ class MainActivity : AppCompatActivity(),
         // Initialize GestureDetector
         gestureDetector = GestureDetector(this, object : SimpleOnGestureListener() {
             private var isProcessingTap = false
-
+            private var totalScrollDistance = 0f
 
 
             override fun onDown(e: MotionEvent): Boolean {
+                totalScrollDistance = 0f
                 Log.d("GestureInput", """
             Gesture Down:
             Source: ${e.source}
@@ -523,6 +524,8 @@ class MainActivity : AppCompatActivity(),
                 distanceY: Float
             ): Boolean {
                 tapCount = 0 // Reset tap count on scroll to prevent accidental triple-tap detection
+                totalScrollDistance += kotlin.math.sqrt(distanceX * distanceX + distanceY * distanceY)
+
                 // Keep menu behavior first
                 if (tripleClickMenu.isMenuVisible()) {
                     val scaledDistance = -distanceX * 0.5f
@@ -576,7 +579,7 @@ class MainActivity : AppCompatActivity(),
                 val cursorGain = 0.45f
                 val dx = -distanceX * cursorGain
                 val dy = -distanceY * cursorGain
-                if (!isAnchored && com.ffalcon.mercury.android.sdk.util.DeviceUtil.isX3Device()) {
+                if (!isAnchored) {
                     val maxW = dualWebViewGroup.width.coerceAtLeast(1)
                     val maxH = dualWebViewGroup.height.coerceAtLeast(1)
                     lastCursorX = (lastCursorX + dx).coerceIn(0f, (maxW - 1).toFloat())
@@ -596,6 +599,10 @@ class MainActivity : AppCompatActivity(),
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 Log.d("RingInput", "Single Tap from device: ${e.device?.name}")
 
+                if (totalScrollDistance > 10f) {
+                    Log.d("GestureInput", "Tap ignored due to swipe distance: $totalScrollDistance")
+                    return false
+                }
 
                 handleUserInteraction()
 
