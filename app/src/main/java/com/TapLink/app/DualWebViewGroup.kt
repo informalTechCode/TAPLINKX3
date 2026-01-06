@@ -266,6 +266,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private val fullScreenOverlayContainer = FrameLayout(context).apply {
         clipChildren = true
         clipToPadding = true
+        clipToOutline = true  // Ensure clipping to bounds
         setBackgroundColor(Color.BLACK)
         visibility = View.GONE
         isClickable = true
@@ -676,6 +677,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Set up the container hierarchy
         leftEyeClipParent.addView(leftEyeUIContainer)
+        leftEyeClipParent.addView(fullScreenOverlayContainer) // Add to clip parent for proper clipping
 
         // Add views to UI container
         leftEyeUIContainer.apply {
@@ -726,13 +728,18 @@ class DualWebViewGroup @JvmOverloads constructor(
         // After other view initializations
 
 
+        // In init block
+        // leftEyeUIContainer is already added to leftEyeClipParent earlier.
+        // leftEyeClipParent.addView(fullScreenOverlayContainer) // Reverted move
+
         // Add the clip parent to the main view
         addView(leftEyeClipParent)
         addView(rightEyeView)  // Keep right eye view separate
-        addView(fullScreenOverlayContainer)
         addView(maskOverlay)   // Keep overlay on top
 
     }
+
+
 
     fun showFullScreenOverlay(view: View) {
         if (view.parent is ViewGroup) {
@@ -1077,6 +1084,19 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftEyeUIContainer.translationY = xOffset
         leftEyeUIContainer.rotation     = rotationDeg
 
+        // Only apply same transformations to full screen overlay when it's actually visible
+        // This prevents the video from being positioned incorrectly when fullscreen is activated
+        if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
+            fullScreenOverlayContainer.translationX = yOffset
+            fullScreenOverlayContainer.translationY = xOffset
+            fullScreenOverlayContainer.rotation     = rotationDeg
+        } else {
+            // Keep at zero when not visible to ensure clean state
+            fullScreenOverlayContainer.translationX = 0f
+            fullScreenOverlayContainer.translationY = 0f
+            fullScreenOverlayContainer.rotation     = 0f
+        }
+
         val adjustedX: Float
         val adjustedY: Float
 
@@ -1324,11 +1344,12 @@ class DualWebViewGroup @JvmOverloads constructor(
         )
 
         fullScreenOverlayContainer.layout(
-            leftEyeClipParent.left,
-            leftEyeClipParent.top,
-            leftEyeClipParent.right,
-            leftEyeClipParent.bottom
+            0,  // Relative to leftEyeClipParent
+            0,
+            halfWidth,  // 640px width (matches clip parent)
+            height
         )
+
 
         // Position SurfaceView exactly like WebView but offset horizontally for right eye
         rightEyeView.layout(
