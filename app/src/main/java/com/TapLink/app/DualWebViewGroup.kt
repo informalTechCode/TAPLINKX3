@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
 import android.os.Build
@@ -407,6 +408,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             isClickable = false
             layoutParams = LayoutParams(640, LayoutParams.MATCH_PARENT)
             setBackgroundColor(Color.TRANSPARENT)
+            holder.setFormat(PixelFormat.RGBA_8888)
             holder.addCallback(object : SurfaceHolder.Callback {
                 override fun surfaceCreated(holder: SurfaceHolder) {
                     setupBitmap(width, height)
