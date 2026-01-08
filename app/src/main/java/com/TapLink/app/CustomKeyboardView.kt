@@ -5,7 +5,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.util.AttributeSet
-import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -18,7 +17,7 @@ import androidx.core.view.children
 import kotlin.math.abs
 import android.view.ViewConfiguration
 
-private const val DEBUG_TOUCH = true
+private const val DEBUG_TOUCH = BuildConfig.DEBUG
 private const val TAG_TOUCH = "TouchDebug"
 class CustomKeyboardView @JvmOverloads constructor(
     context: Context,
