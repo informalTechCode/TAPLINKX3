@@ -312,11 +312,19 @@ class DualWebViewGroup @JvmOverloads constructor(
         uiScale = scale
         
         // Set pivot point to center (320, 240) so scaling happens around the center
-        leftEyeClipParent.pivotX = 320f
-        leftEyeClipParent.pivotY = 240f
+        leftEyeUIContainer.pivotX = 320f
+        leftEyeUIContainer.pivotY = 240f
+        leftEyeUIContainer.scaleX = scale
+        leftEyeUIContainer.scaleY = scale
+
+        fullScreenOverlayContainer.pivotX = 320f
+        fullScreenOverlayContainer.pivotY = 240f
+        fullScreenOverlayContainer.scaleX = scale
+        fullScreenOverlayContainer.scaleY = scale
         
-        leftEyeClipParent.scaleX = scale
-        leftEyeClipParent.scaleY = scale
+        // Ensure parent is not scaled so it acts as a fixed window
+        leftEyeClipParent.scaleX = 1f
+        leftEyeClipParent.scaleY = 1f
         
         // Notify listener to refresh cursor scale visually
         listener?.onCursorPositionChanged(lastCursorX, lastCursorY, true)
@@ -770,7 +778,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         post {
             val savedScaleProgress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
                 .getInt("uiScaleProgress", 100)
-            val savedScale = 0.25f + (savedScaleProgress / 100f) * 0.75f
+            val savedScale = 0.35f + (savedScaleProgress / 100f) * 0.65f
             updateUiScale(savedScale)
         }
 
@@ -3659,8 +3667,8 @@ class DualWebViewGroup @JvmOverloads constructor(
                         .putInt("uiScaleProgress", newProgress)
                         .apply()
 
-                    // Apply scale: 25% (0.25) to 100% (1.0)
-                    val scale = 0.25f + (newProgress / 100f) * 0.75f
+                    // Apply scale: 35% (0.35) to 100% (1.0)
+                    val scale = 0.35f + (newProgress / 100f) * 0.65f
                     updateUiScale(scale)
 
                     // Visual feedback
