@@ -234,7 +234,7 @@ class MainActivity : AppCompatActivity(),
 
     private lateinit var sensorManager: SensorManager
     private var rotationSensor: Sensor? = null
-    private var isAnchored = true
+    private var isAnchored = false  // Will be loaded from preferences in onCreate
         set(value) {
             field = value
             if (::dualWebViewGroup.isInitialized) {
@@ -426,7 +426,18 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.listener = this
         dualWebViewGroup.navigationListener = this
         dualWebViewGroup.maskToggleListener = this
+        
+        // Load saved anchored mode state
+        isAnchored = getSharedPreferences(prefsName, MODE_PRIVATE)
+            .getBoolean("isAnchored", true) // Default to true on first run
+            
         dualWebViewGroup.isAnchored = isAnchored
+        
+        if (isAnchored) {
+            dualWebViewGroup.startAnchoring()
+        } else {
+            dualWebViewGroup.stopAnchoring()
+        }
 
         tripleClickMenu = TripleClickMenu(this).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -602,10 +613,11 @@ class MainActivity : AppCompatActivity(),
                 val dx = -distanceX * cursorGain
                 val dy = -distanceY * cursorGain
                 if (!isAnchored) {
-                    val maxW = dualWebViewGroup.width.coerceAtLeast(1)
-                    val maxH = dualWebViewGroup.height.coerceAtLeast(1)
-                    lastCursorX = (lastCursorX + dx).coerceIn(0f, (maxW - 1).toFloat())
-                    lastCursorY = (lastCursorY + dy).coerceIn(0f, (maxH - 1).toFloat())
+                    // Clamp to single eye dimensions (640x480), not full dual display width
+                    val maxW = 640f
+                    val maxH = 480f
+                    lastCursorX = (lastCursorX + dx).coerceIn(0f, maxW)
+                    lastCursorY = (lastCursorY + dy).coerceIn(0f, maxH)
 
                     val loc = IntArray(2)
                     webView.getLocationOnScreen(loc)
@@ -797,19 +809,32 @@ class MainActivity : AppCompatActivity(),
                 onNavigationBackPressed()
             }
 
-            // Update for smoother, responsive movement with looping
+            // Update for smoother, responsive movement with clamping
             private val updateCursorRunnable = object : Runnable {
                 override fun run() {
                     if (abs(currentVelocityX) < 0.1f && abs(currentVelocityY) < 0.1f) {
                         handler.removeCallbacks(this)
                     } else {
-                        // Update position with wrapping
-                        lastCursorX = (lastCursorX + currentVelocityX) % 640
-                        lastCursorY = (lastCursorY + currentVelocityY) % 480
+                        // Use single eye dimensions (640x480), not full dual display width
+                        val maxW = 640f
+                        val maxH = 480f
 
-                        // Handle wrapping for negative values
-                        if (lastCursorX < 0) lastCursorX += 640
-                        if (lastCursorY < 0) lastCursorY += 480
+                        // Update position
+                        var nextX = lastCursorX + currentVelocityX
+                        var nextY = lastCursorY + currentVelocityY
+
+                        // Clamp to screen boundaries
+                        // Subtract 1 to ensure it doesn't sit exactly on the edge if that causes issues, 
+                        // though typically maxW is fine. Using 0 to maxW is standard.
+                        nextX = nextX.coerceIn(0f, maxW)
+                        nextY = nextY.coerceIn(0f, maxH)
+
+                        // If we hit a wall, zero out velocity in that direction (optional polish)
+                        if (nextX == 0f || nextX == maxW) currentVelocityX = 0f
+                        if (nextY == 0f || nextY == maxH) currentVelocityY = 0f
+
+                        lastCursorX = nextX
+                        lastCursorY = nextY
 
                         // Update cursor position
                         refreshCursor()
@@ -1048,11 +1073,11 @@ class MainActivity : AppCompatActivity(),
         rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
 
         // Load preferences
-        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         smoothnessLevel = prefs.getInt("anchorSmoothness", 80)
         updateSmoothnessFactors(smoothnessLevel)
         
-        // Load saved anchored mode state (default to true for backward compatibility)
+        // Load saved anchored mode state (default to true on first run)
         isAnchored = prefs.getBoolean("isAnchored", true)
         Log.d("AnchorDebug", "Loading saved anchored state: $isAnchored")
 
@@ -2297,16 +2322,34 @@ class MainActivity : AppCompatActivity(),
             return
         }
         
+        val scale = dualWebViewGroup.uiScale
+        val interactionX: Float
+        val interactionY: Float
+        val groupLocation = IntArray(2)
+        dualWebViewGroup.getLocationOnScreen(groupLocation)
+
+        if (isAnchored) {
+            // In anchored mode, interaction center is always screen center of the eye
+            interactionX = 320f + groupLocation[0]
+            interactionY = 240f + groupLocation[1]
+        } else {
+            // In non-anchored mode, interaction follows the visual cursor scaled around (320, 240)
+            val visualX = 320f + (lastCursorX - 320f) * scale
+            val visualY = 240f + (lastCursorY - 240f) * scale
+            
+            interactionX = visualX + groupLocation[0]
+            interactionY = visualY + groupLocation[1]
+        }
+
         // Intercept touches for dialogs
-        if (dualWebViewGroup.isDialogAction(lastCursorX, lastCursorY)) {
-             // We need to calculate local coordinates for the dialog container
+        if (dualWebViewGroup.isDialogAction(interactionX, interactionY)) {
              val dialogContainer = dualWebViewGroup.dialogContainer
              val location = IntArray(2)
              dialogContainer.getLocationOnScreen(location)
              
-             val scale = dualWebViewGroup.uiScale
-             val localX = (lastCursorX - location[0]) / scale
-             val localY = (lastCursorY - location[1]) / scale
+             // Calculate local coordinates relative to dialog container
+             val localX = (interactionX - location[0]) / scale
+             val localY = (interactionY - location[1]) / scale
              
              // Dispatch DOWN
              val downEvent = MotionEvent.obtain(
@@ -2336,26 +2379,33 @@ class MainActivity : AppCompatActivity(),
 
         // Check if settings menu is visible first
         if (dualWebViewGroup.isSettingsVisible()) {
-            // Get the settings menu bounds and check if cursor is within them
             val settingsMenuLocation = IntArray(2)
             dualWebViewGroup.getSettingsMenuLocation(settingsMenuLocation)
             val settingsMenuSize = dualWebViewGroup.getSettingsMenuSize()
 
-            if (lastCursorX >= settingsMenuLocation[0] &&
-                lastCursorX <= settingsMenuLocation[0] + settingsMenuSize.first &&
-                lastCursorY >= settingsMenuLocation[1] &&
-                lastCursorY <= settingsMenuLocation[1] + settingsMenuSize.second) {
+            if (interactionX >= settingsMenuLocation[0] &&
+                interactionX <= settingsMenuLocation[0] + settingsMenuSize.first &&
+                interactionY >= settingsMenuLocation[1] &&
+                interactionY <= settingsMenuLocation[1] + settingsMenuSize.second) {
 
-                // Dispatch touch event to settings menu
-                dualWebViewGroup.dispatchSettingsTouchEvent(lastCursorX, lastCursorY)
+                // Dispatch touch event to settings menu using screen coordinates
+                dualWebViewGroup.dispatchSettingsTouchEvent(interactionX, interactionY)
                 return
             }
         }
 
         // Check for restore button click
-        if (dualWebViewGroup.isPointInRestoreButton(lastCursorX, lastCursorY)) {
+        if (dualWebViewGroup.isPointInRestoreButton(interactionX, interactionY)) {
             dualWebViewGroup.performRestoreButtonClick()
             return
+        }
+
+        // Hit test for custom keyboard
+        if (isKeyboardVisible) {
+            if (dualWebViewGroup.isPointInKeyboard(interactionX, interactionY)) {
+                dualWebViewGroup.dispatchKeyboardTap(interactionX, interactionY)
+                return
+            }
         }
 
         // Handle navigation bar and toggle bar clicks only if visible
@@ -2363,58 +2413,46 @@ class MainActivity : AppCompatActivity(),
             val UILocation = IntArray(2)
             dualWebViewGroup.leftEyeUIContainer.getLocationOnScreen(UILocation)
             
-            // Calculate local coordinates relative to UI container
+            // Calculate local distance relative to UI container on screen
+            val translatedX = interactionX - UILocation[0]
+            val translatedY = interactionY - UILocation[1]
+            
             val localX: Float
             val localY: Float
             
             if (isAnchored) {
-                // Get rotation from the clip parent
+                // Account for rotation in anchored mode
                 val rotationRad = Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
                 val cos = Math.cos(rotationRad).toFloat()
                 val sin = Math.sin(rotationRad).toFloat()
-
-                val cursorX = lastCursorX
-                val cursorY = lastCursorY
-
-                // Inverse translation (subtract the translation)
-                val translatedX = cursorX - UILocation[0]
-                val translatedY = cursorY - UILocation[1]
-
-                // Inverse rotation (no scale division for navigation)
                 localX = translatedX * cos + translatedY * sin
                 localY = -translatedX * sin + translatedY * cos
             } else {
-                // Direct local coordinates (no scale division for navigation)
-                localX = lastCursorX - UILocation[0]
-                localY = lastCursorY - UILocation[1]
+                // Direct translation for non-anchored mode
+                localX = translatedX
+                localY = translatedY
             }
 
-            // Scale the hit test boundaries instead
-            val scale = dualWebViewGroup.uiScale
+            // Hit test against scaled boundaries
             val visualToggleBarWidth = 40 * scale
             val visualBottomNavStart = (480 - 40) * scale
 
-            // Handle toggle bar clicks (left toggle bar is 40dp wide, buttons span Y 0-440)
-            // Check this BEFORE offsetting for the toggle bar width
+            // Handle toggle bar clicks
             if (localX >= 0 && localX < visualToggleBarWidth && localY >= 0 && localY < 440 * scale) {
                 isSimulatingTouchEvent = false
-                // Scale coordinates back for handleNavigationClick
                 dualWebViewGroup.handleNavigationClick(localX / scale, localY / scale)
                 return
             }
 
-            // Handle navigation bar clicks (bottom navbar is 40dp tall)
+            // Handle navigation bar clicks
             if (localY >= visualBottomNavStart) {
                 isSimulatingTouchEvent = false
-                // Offset X by toggle bar width for navigation click handling
                 val adjustedX = (localX - visualToggleBarWidth) / scale
                 val adjustedY = localY / scale
-                Log.d("AnchoredTouchDebug", "Modified click location: ${adjustedX}, ${adjustedY}")
                 dualWebViewGroup.handleNavigationClick(adjustedX, adjustedY)
                 return
             }
         }
-
 
         val currentTime = SystemClock.uptimeMillis()
         if (currentTime - lastClickTime < MIN_CLICK_INTERVAL) {
@@ -2422,40 +2460,29 @@ class MainActivity : AppCompatActivity(),
         }
         lastClickTime = currentTime
 
-
-// Existing WebView click path
+        // WebView click path
         isSimulatingTouchEvent = true
         try {
-            // Get WebView's actual screen location for accurate coordinate translation
             val webViewLocation = IntArray(2)
             webView.getLocationOnScreen(webViewLocation)
+            
+            val translatedX = interactionX - webViewLocation[0]
+            val translatedY = interactionY - webViewLocation[1]
+            
             val adjustedX: Float
             val adjustedY: Float
 
             if (isAnchored) {
-                // Get rotation from the clip parent
                 val rotationRad = Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
                 val cos = Math.cos(rotationRad).toFloat()
                 val sin = Math.sin(rotationRad).toFloat()
-
-                // The cursor is fixed at (320, 240)
-                val cursorX = lastCursorX
-                val cursorY = lastCursorY
-
-                // Step 1: Inverse translation (subtract the WebView's screen position)
-                val translatedX = cursorX - webViewLocation[0]
-                val translatedY = cursorY - webViewLocation[1]
-
-                // Step 2: Inverse rotation and scale
                 val unscaledX = translatedX * cos + translatedY * sin
                 val unscaledY = -translatedX * sin + translatedY * cos
-                
-                adjustedX = unscaledX / dualWebViewGroup.uiScale
-                adjustedY = unscaledY / dualWebViewGroup.uiScale
+                adjustedX = unscaledX / scale
+                adjustedY = unscaledY / scale
             } else {
-                // Direct mapping using WebView's actual position
-                adjustedX = (lastCursorX - webViewLocation[0]) / dualWebViewGroup.uiScale
-                adjustedY = (lastCursorY - webViewLocation[1]) / dualWebViewGroup.uiScale
+                adjustedX = translatedX / scale
+                adjustedY = translatedY / scale
             }
             Log.d("ClickDebug", """
     Click coordinates:
@@ -3892,14 +3919,14 @@ class MainActivity : AppCompatActivity(),
         val visualY = 240f + (y - 240f) * scale
 
         // Left screen cursor
-        cursorLeftView.x = visualX % 640
+        cursorLeftView.x = visualX
         cursorLeftView.y = visualY
         cursorLeftView.scaleX = scale
         cursorLeftView.scaleY = scale
         cursorLeftView.visibility = if (isVisible) View.VISIBLE else View.GONE
 
         // Right screen cursor, offset by 640 pixels to appear on the right screen
-        cursorRightView.x = (visualX % 640) + 640
+        cursorRightView.x = visualX + 640
         cursorRightView.y = visualY
         cursorRightView.scaleX = scale
         cursorRightView.scaleY = scale
