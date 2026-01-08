@@ -336,7 +336,13 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     private fun updateUiTranslation() {
-        if (isAnchored) return
+        if (isAnchored) {
+            leftEyeUIContainer.translationX = 0f
+            leftEyeUIContainer.translationY = 0f
+            fullScreenOverlayContainer.translationX = 0f
+            fullScreenOverlayContainer.translationY = 0f
+            return
+        }
 
         // Calculate max allowed translation based on current scale
         val maxTransX = 320f * (1f - uiScale)
@@ -3480,7 +3486,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
 
             val layoutParams = FrameLayout.LayoutParams(
-                320,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
             ).apply {
                 gravity = Gravity.CENTER
@@ -3526,17 +3532,14 @@ class DualWebViewGroup @JvmOverloads constructor(
             val showPosSliders = !isAnchored && initialScale < 0.99f
             val visibility = if (showPosSliders) View.VISIBLE else View.GONE
 
-            menu.findViewById<View>(R.id.lblHorizontalPos)?.visibility = visibility
-            menu.findViewById<View>(R.id.lblVerticalPos)?.visibility = visibility
+            menu.findViewById<View>(R.id.positionSettingsContainer)?.visibility = visibility
 
             menu.findViewById<SeekBar>(R.id.horizontalPosSeekBar)?.apply {
-                this.visibility = visibility
                 progress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
                     .getInt("uiTransXProgress", 50)
             }
 
             menu.findViewById<SeekBar>(R.id.verticalPosSeekBar)?.apply {
-                this.visibility = visibility
                 progress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
                     .getInt("uiTransYProgress", 50)
             }
@@ -3554,7 +3557,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             // Keep the force immediate layout code
             settingsMenu?.measure(
-                MeasureSpec.makeMeasureSpec(320, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
                 MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
             )
             settingsMenu?.layout(
@@ -3731,10 +3734,10 @@ class DualWebViewGroup @JvmOverloads constructor(
                     val showPosSliders = !isAnchored && scale < 0.99f
                     val visibility = if (showPosSliders) View.VISIBLE else View.GONE
 
-                    menu.findViewById<View>(R.id.lblHorizontalPos)?.visibility = visibility
-                    menu.findViewById<View>(R.id.lblVerticalPos)?.visibility = visibility
-                    menu.findViewById<SeekBar>(R.id.horizontalPosSeekBar)?.visibility = visibility
-                    menu.findViewById<SeekBar>(R.id.verticalPosSeekBar)?.visibility = visibility
+                    menu.findViewById<View>(R.id.positionSettingsContainer)?.visibility = visibility
+
+                    // Recalculate translation based on new scale
+                    updateUiTranslation()
 
                     // Force layout of settings menu to adjust for visibility changes
                     menu.requestLayout()
