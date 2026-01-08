@@ -2340,9 +2340,12 @@ class MainActivity : AppCompatActivity(),
             interactionX = 320f + groupLocation[0]
             interactionY = 240f + groupLocation[1]
         } else {
-            // In non-anchored mode, interaction follows the visual cursor scaled around (320, 240)
-            val visualX = 320f + (lastCursorX - 320f) * scale
-            val visualY = 240f + (lastCursorY - 240f) * scale
+            // In non-anchored mode, interaction follows the visual cursor scaled around (320, 240) and translated
+            val transX = dualWebViewGroup.leftEyeUIContainer.translationX
+            val transY = dualWebViewGroup.leftEyeUIContainer.translationY
+            
+            val visualX = 320f + (lastCursorX - 320f) * scale + transX
+            val visualY = 240f + (lastCursorY - 240f) * scale + transY
             
             interactionX = visualX + groupLocation[0]
             interactionY = visualY + groupLocation[1]
@@ -3961,9 +3964,12 @@ class MainActivity : AppCompatActivity(),
     override fun onCursorPositionChanged(x: Float, y: Float, isVisible: Boolean) {
         val scale = dualWebViewGroup.uiScale
 
-        // Calculate visual position scaled around center (320, 240)
-        val visualX = 320f + (x - 320f) * scale
-        val visualY = 240f + (y - 240f) * scale
+        // Calculate visual position scaled around center (320, 240) and translated (only in non-anchored mode)
+        val transX = if (isAnchored) 0f else dualWebViewGroup.leftEyeUIContainer.translationX
+        val transY = if (isAnchored) 0f else dualWebViewGroup.leftEyeUIContainer.translationY
+        
+        val visualX = 320f + (x - 320f) * scale + transX
+        val visualY = 240f + (y - 240f) * scale + transY
 
         // Left screen cursor
         cursorLeftView.x = visualX
