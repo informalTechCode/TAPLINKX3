@@ -170,9 +170,15 @@ class CustomKeyboardView @JvmOverloads constructor(
         isSyncing = false
     }
 
+    fun updateHover(x: Float, y: Float) {
+        val key = getKeyAtPosition(x, y)
+        if (hoveredKey != key) {
+            hoveredKey = key
+            updateKeyFocus()
+        }
+    }
+    
     fun handleAnchoredTap(x: Float, y: Float) {
-        if (!isAnchoredMode) return
-
         Log.d("KeyboardDebug", "handleAnchoredTap at ($x, $y)")
 
         val key = getKeyAtPosition(x, y)
@@ -499,20 +505,38 @@ class CustomKeyboardView @JvmOverloads constructor(
 
     fun updateKeyFocus() {
         if (isAnchoredMode) {
-            // Don't update focus in anchored mode - no focus system needed
+            // In anchored mode, we only care about hover
+            keys.forEach { button ->
+                if (button == hoveredKey) {
+                    button.setBackgroundColor(Color.GRAY)
+                    button.setTextColor(Color.WHITE)
+                } else {
+                    button.setBackgroundColor(Color.DKGRAY)
+                    button.setTextColor(Color.WHITE)
+                }
+                button.invalidate()
+            }
             return
         }
 
-        // Non-anchored mode: use the focus system
+        // Non-anchored mode: use both focus and hover
+        val focusedKey = getFocusedKey()
+        
         keys.forEach { button ->
-            button.setBackgroundColor(Color.DKGRAY)
-            button.setTextColor(Color.WHITE)
-            button.invalidate()
-        }
-
-        getFocusedKey()?.let { button ->
-            button.setBackgroundColor(Color.BLUE)
-            button.setTextColor(Color.WHITE)
+            when {
+                button == hoveredKey -> {
+                    button.setBackgroundColor(Color.GRAY)
+                    button.setTextColor(Color.WHITE)
+                }
+                button == focusedKey -> {
+                    button.setBackgroundColor(Color.DKGRAY) // Removed blue highlight
+                    button.setTextColor(Color.WHITE)
+                }
+                else -> {
+                    button.setBackgroundColor(Color.DKGRAY)
+                    button.setTextColor(Color.WHITE)
+                }
+            }
             button.invalidate()
         }
 
@@ -693,13 +717,17 @@ class CustomKeyboardView @JvmOverloads constructor(
         updateKeyFocus()
     }
     fun performFocusedTap() {
-        getFocusedKey()?.let { button ->
+        // In non-anchored mode, usage relies on cursor hover. Only click if hovering a key.
+        // In other modes (or if fallback needed), use focusedKey.
+        val targetKey = if (!isAnchoredMode) hoveredKey else (hoveredKey ?: getFocusedKey())
+        
+        targetKey?.let { button ->
             android.util.Log.d("TouchDebug", "CKV.performFocusedTap on: ${button.text}")
             handleButtonClick(button)
             updateKeyFocus()
             syncWithParent()
         } ?: run {
-            android.util.Log.d("TouchDebug", "CKV.performFocusedTap: no focused key")
+            android.util.Log.d("TouchDebug", "CKV.performFocusedTap: no focused/hovered key")
         }
     }
 
@@ -708,6 +736,9 @@ class CustomKeyboardView @JvmOverloads constructor(
             dbg("handleDrag: IGNORED (anchored) action=${actName(action)}")
             return
         }
+
+        // Swipe logic removed as per request - only clicks allowed
+        // We still track basic state for click detection if needed, but no movement processing
 
         val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
 
@@ -730,38 +761,13 @@ class CustomKeyboardView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_MOVE -> {
-                val dx = x - lastX
                 val totalMove = kotlin.math.abs(x - startX)
 
+                // Just track dragging state, but DO NOT MOVE FOCUS
                 if (!isDragging && totalMove > touchSlop) {
                     isDragging = true
-                    dbg(
-                        "handleDrag MOVE  START DRAG  dx=%.2f total=%.2f > slop=%d"
-                            .format(dx, totalMove, touchSlop)
-                    )
                 }
-
-                if (isDragging) {
-                    accumulatedX += dx
-
-                    var stepsR = 0; var stepsL = 0
-                    while (accumulatedX >= stepThresholdX) { moveFocusRight(); updateKeyFocus(); syncWithParent(); accumulatedX -= stepThresholdX; stepsR++ }
-                    while (accumulatedX <= -stepThresholdX) { moveFocusLeft();  updateKeyFocus(); syncWithParent(); accumulatedX += stepThresholdX; stepsL++ }
-
-                    if (stepsR + stepsL > 0) {
-                        dbg(
-                            "handleDrag MOVE  dx=%.2f accX=%.2f  stepsR=%d stepsL=%d  focus=%s"
-                                .format(dx, accumulatedX, stepsR, stepsL, getFocusedKey()?.text ?: "null")
-                        )
-                    }
-                } else {
-                    // Not yet a drag—helpful to see small jitter vs slop
-                    dbg(
-                        "handleDrag MOVE  dx=%.2f total=%.2f (waiting > slop=%d)"
-                            .format(dx, totalMove, touchSlop)
-                    )
-                }
-
+                
                 lastX = x
             }
 
@@ -777,10 +783,10 @@ class CustomKeyboardView @JvmOverloads constructor(
                 )
 
                 if (wasTap) {
-                    dbg("handleDrag TAP → handleTap() on focus=%s".format(getFocusedKey()?.text ?: "null"))
-                    handleTap()
-                    updateKeyFocus()
-                    syncWithParent()
+                    dbg("handleDrag TAP → handleTap() IGNORED (handled by MainActivity)")
+                    // handleTap()
+                    // updateKeyFocus()
+                    // syncWithParent()
                 }
 
                 isDragging = false
@@ -790,7 +796,7 @@ class CustomKeyboardView @JvmOverloads constructor(
             }
         }
     }
-
+    
     private fun resetDragState() {
         accumulatedX = 0f
         isDragging = false
@@ -798,43 +804,12 @@ class CustomKeyboardView @JvmOverloads constructor(
         Log.d("FlingDebug", "Drag state reset")
     }
 
-    fun endDrag() {
-        if (isAnchoredMode) return
-
-        val touchDuration = System.currentTimeMillis() - touchStartTime
-        val totalMove = abs(lastX - startX)
-
-        val wasTap = !isDragging && touchDuration < clickTimeout && totalMove < touchSlop
-        if (wasTap) {
-            Log.d("TouchDebug", "Processing as tap (dur=$touchDuration, move=$totalMove < slop=$touchSlop)")
-            handleTap()   // clicks the focused key
-        }
-
-        // reset state
-        isDragging = false
-        firstMove = true
-        accumulatedX = 0f
-    }
-
     private fun handleTap() {
         Log.d("AnchoringDebug", "isAnchoredMode: $isAnchoredMode")
         if (!isAnchoredMode) {
-            //Log.d("TouchDebug", "Processing tap")
-            getFocusedKey()?.let { button ->
-                //Log.d("TouchDebug", "Tapped key: ${button.text}")
-                // Visual feedback
-                button.setBackgroundColor(Color.GRAY)
-                postDelayed({
-                    handleButtonClick(button)
-                    updateKeyFocus()
-                }, 50)
-            }
+             performFocusedTap()
         }
-
-
     }
-
-
 
     private fun getKeyAtPosition(x: Float, y: Float): Button? {
         Log.d("KeyboardDebug", "getKeyAtPosition called with ($x, $y)")
@@ -845,8 +820,6 @@ class CustomKeyboardView @JvmOverloads constructor(
             return null
         }
 
-        // x and y are relative to CustomKeyboardView
-        // Calculate coordinates relative to the internal keyboard layout
         val kX = x - keyboard.x
         val kY = y - keyboard.y
 
@@ -857,43 +830,46 @@ class CustomKeyboardView @JvmOverloads constructor(
                 continue
             }
 
-            // Calculate coordinates relative to the row
             val rX = kX - row.x
             val rY = kY - row.y
 
-            // Optimization: Check if point is within row's vertical bounds
-            if (rY < 0 || rY > row.height) continue
+            if (rY < -10f || rY > row.height + 10f) continue
+
+            var closestButton: Button? = null
+            var minDistance = Float.MAX_VALUE
 
             for (j in 0 until row.childCount) {
                 val button = row.getChildAt(j) as? Button ?: continue
                 if (button.visibility != View.VISIBLE) continue
 
-                // Check if point is within button bounds (relative to row)
-                if (rX >= button.left && rX <= button.right &&
-                    rY >= button.top && rY <= button.bottom) {
-                    Log.d("KeyboardDebug", "Found matching button: ${button.text}")
-                    return button
+                if (rY >= -10f && rY <= row.height + 10f) {
+                    val buttonCenterX = (button.left + button.right) / 2f
+                    val distance = abs(rX - buttonCenterX)
+                    
+                    if (distance < minDistance) {
+                        minDistance = distance
+                        closestButton = button
+                    }
                 }
+            }
+            
+            if (closestButton != null && minDistance < 100f) {
+                Log.d("KeyboardDebug", "Found matching button by proximity: ${closestButton.text}")
+                return closestButton
             }
         }
 
         Log.d("KeyboardDebug", "No button found at ($x, $y)")
         return null
     }
-
+    
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         post {
             updateKeyFocus()
         }
     }
-
-//    override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
-//        Log.d("TouchDebug", "CustomKeyboardView: Intercepting - action: ${getActionString(event.action)}")
-//        // Intercept all touches to handle them in onTouchEvent
-//        return true
-//    }
-// In CustomKeyboardView.kt (top of class with other fields)
+    
     private var startX = 0f
     private var hoveredKey: Button? = null
 
@@ -907,10 +883,9 @@ class CustomKeyboardView @JvmOverloads constructor(
     private var lastTouchY = 0f
     private var touchStartTime = 0L
 
-    // Increase the step threshold to make keyboard swipe less sensitive
     private val stepThresholdX = 100f
     private val stepThresholdY = 100f
-
+    
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
@@ -923,69 +898,8 @@ class CustomKeyboardView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_MOVE -> {
-                val dx = event.x - lastTouchX
-                val dy = event.y - lastTouchY
-
-                // accumulate deltas
-                accumulatedX += dx
-                accumulatedY += dy
-                isDragging = true
-
-                // Decide which axis to step first to avoid diagonal jitter:
-                // step the axis with the larger absolute distance first.
-                fun stepHorizontal() {
-                    val keyboard = getKeyboardLayout()
-                    val row = keyboard?.getChildAt(currentRow) as? LinearLayout
-                    val visibleButtons = row?.children?.filter { it.visibility == View.VISIBLE }?.toList() ?: emptyList()
-                    val maxColumns = visibleButtons.size
-
-                    if (maxColumns > 0) {
-                        while (accumulatedX >= stepThresholdX) {
-                            currentColumn = (currentColumn + 1).coerceIn(0, maxColumns - 1)
-                            updateKeyFocus()
-                            syncWithParent()
-                            accumulatedX -= stepThresholdX
-                        }
-                        while (accumulatedX <= -stepThresholdX) {
-                            currentColumn = (currentColumn - 1).coerceIn(0, maxColumns - 1)
-                            updateKeyFocus()
-                            syncWithParent()
-                            accumulatedX += stepThresholdX
-                        }
-                    }
-                }
-
-                fun stepVertical() {
-                    val keyboardLayout = getKeyboardLayout()
-                    val maxRows = keyboardLayout?.childCount ?: 0
-
-                    if (maxRows > 0) {
-                        while (accumulatedY >= stepThresholdY) {
-                            currentRow = (currentRow + 1).coerceIn(0, maxRows - 1)
-                            adjustCurrentColumn() // Adjust column when changing rows
-                            updateKeyFocus()
-                            syncWithParent()
-                            accumulatedY -= stepThresholdY
-                        }
-                        while (accumulatedY <= -stepThresholdY) {
-                            currentRow = (currentRow - 1).coerceIn(0, maxRows - 1)
-                            adjustCurrentColumn() // Adjust column when changing rows
-                            updateKeyFocus()
-                            syncWithParent()
-                            accumulatedY += stepThresholdY
-                        }
-                    }
-                }
-
-                if (abs(accumulatedX) > abs(accumulatedY)) {
-                    stepHorizontal(); stepVertical()
-                } else {
-                    stepVertical();   stepHorizontal()
-                }
-
-                lastTouchX = event.x
-                lastTouchY = event.y
-                return true
+                 // Swipe logic removed - do nothing on move
+                 return true
             }
 
             MotionEvent.ACTION_UP -> {

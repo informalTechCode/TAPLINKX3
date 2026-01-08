@@ -18,6 +18,7 @@ import android.os.SystemClock
 import android.text.Editable
 import android.text.TextUtils
 import android.text.TextWatcher
+import android.text.method.ScrollingMovementMethod
 import android.util.AttributeSet
 import android.util.Log
 import android.view.Gravity
@@ -251,6 +252,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     var keyboardListener: KeyboardListener? = null
 
+
     private var navButtons: Map<String, NavButton>
 
     var listener: DualWebViewGroupListener? = null
@@ -265,13 +267,18 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private val fullScreenOverlayContainer = FrameLayout(context).apply {
         clipChildren = true
-        clipToPadding = true
         clipToOutline = true  // Ensure clipping to bounds
         setBackgroundColor(Color.BLACK)
         visibility = View.GONE
         isClickable = true
         isFocusable = true
     }
+    
+    // Track scroll mode state before fullscreen
+    private var wasInScrollModeBeforeFullscreen = false
+    
+    // UI scale factor (0.5 to 1.0) - controlled by screen size slider
+    var uiScale = 1.0f
 
     private val fullScreenHiddenViews: List<View> by lazy {
         listOf(
@@ -300,6 +307,23 @@ class DualWebViewGroup @JvmOverloads constructor(
         setBackgroundColor(Color.BLACK)  // Set background to ensure proper rendering
     }
 
+    fun updateUiScale(scale: Float) {
+        uiScale = scale
+        
+        // Set pivot point to center (320, 240) so scaling happens around the center
+        leftEyeClipParent.pivotX = 320f
+        leftEyeClipParent.pivotY = 240f
+        
+        leftEyeClipParent.scaleX = scale
+        leftEyeClipParent.scaleY = scale
+        
+        // Notify listener to refresh cursor scale visually
+        listener?.onCursorPositionChanged(lastCursorX, lastCursorY, true)
+        
+        requestLayout()
+        invalidate()
+    }
+
     // Function to update the cursor positions and visibility
     fun updateCursorPosition(x: Float, y: Float, isVisible: Boolean) {
         val currentTime = System.currentTimeMillis()
@@ -312,22 +336,20 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         if (currentTime - lastCursorUpdateTime >= CURSOR_UPDATE_INTERVAL) {
             if (isVisible) {
-                val toggleBarLocation = IntArray(2)
-                leftToggleBar.getLocationOnScreen(toggleBarLocation)
-
-                val adjustedX = if (isAnchored) {
-                    x - toggleBarLocation[0]
-                } else {
-                    x
-                }
-                val adjustedY = if (isAnchored) {
-                    y  - toggleBarLocation[1]
-                } else {
-                    y
-                }
-
-                updateButtonHoverStates(adjustedX, adjustedY)
-
+                // Convert cursor from container-local to screen coordinates
+                val containerLocation = IntArray(2)
+                getLocationOnScreen(containerLocation)
+                
+                // Account for UI scale when calculating screen position
+                // Visual cursor is scaled around (320, 240)
+                val visualX = 320f + (x - 320f) * uiScale
+                val visualY = 240f + (y - 240f) * uiScale
+                
+                val screenX = visualX + containerLocation[0]
+                val screenY = visualY + containerLocation[1]
+                
+                // Pass screen coordinates - buttons also use screen coordinates
+                updateButtonHoverStates(screenX, screenY)
             }
             listener?.onCursorPositionChanged(x, y, isVisible)
             lastCursorUpdateTime = currentTime
@@ -400,6 +422,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             setOnTouchListener { _, _ ->
                 keyboardContainer.visibility == View.VISIBLE
             }
+            setOnLongClickListener { true }
         }
 
         // Configure SurfaceView for right eye mirroring
@@ -737,11 +760,21 @@ class DualWebViewGroup @JvmOverloads constructor(
         addView(rightEyeView)  // Keep right eye view separate
         addView(maskOverlay)   // Keep overlay on top
 
+        // Load and apply saved UI scale after view hierarchy is ready
+        post {
+            val savedScaleProgress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                .getInt("uiScaleProgress", 100)
+            val savedScale = 0.25f + (savedScaleProgress / 100f) * 0.75f
+            updateUiScale(savedScale)
+        }
+
     }
 
 
 
     fun showFullScreenOverlay(view: View) {
+        Log.d("FullscreenDebug", "showFullScreenOverlay called")
+        
         if (view.parent is ViewGroup) {
             (view.parent as ViewGroup).removeView(view)
         }
@@ -756,13 +789,35 @@ class DualWebViewGroup @JvmOverloads constructor(
         )
 
         previousFullScreenVisibility.clear()
+        Log.d("FullscreenDebug", "Hiding ${fullScreenHiddenViews.size} UI elements")
         fullScreenHiddenViews.forEach { target ->
+            val name = when(target) {
+                webView -> "webView"
+                leftToggleBar -> "leftToggleBar"
+                leftNavigationBar -> "leftNavigationBar"
+                keyboardContainer -> "keyboardContainer"
+                leftSystemInfoView -> "leftSystemInfoView"
+                urlEditText -> "urlEditText"
+                else -> "unknown"
+            }
+            Log.d("FullscreenDebug", "  Hiding $name (was ${if (target.visibility == View.VISIBLE) "VISIBLE" else "GONE"})")
             previousFullScreenVisibility[target] = target.visibility
             target.visibility = View.GONE
         }
 
         fullScreenOverlayContainer.visibility = View.VISIBLE
         fullScreenOverlayContainer.bringToFront()
+        
+        // Save current scroll mode state and enable it to hide all navigation bars
+        wasInScrollModeBeforeFullscreen = isInScrollMode
+        if (!isInScrollMode) {
+            Log.d("FullscreenDebug", "Enabling scroll mode to hide navigation bars")
+            setScrollMode(true)
+        }
+        
+        // Hide system UI (status bar if any) for immersive fullscreen
+        Log.d("FullscreenDebug", "About to call hideSystemUI()")
+        hideSystemUI()
     }
 
     fun hideFullScreenOverlay() {
@@ -772,6 +827,89 @@ class DualWebViewGroup @JvmOverloads constructor(
             target.visibility = visibility
         }
         previousFullScreenVisibility.clear()
+        
+        // Restore previous scroll mode state
+        if (!wasInScrollModeBeforeFullscreen && isInScrollMode) {
+            Log.d("FullscreenDebug", "Restoring non-scroll mode (showing navigation bars)")
+            setScrollMode(false)
+        }
+        
+        // Restore system UI
+        showSystemUI()
+    }
+
+    private fun hideSystemUI() {
+        val activity = context as? Activity ?: run {
+            Log.w("FullscreenDebug", "Cannot hide system UI - context is not an Activity")
+            return
+        }
+        
+        post {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    // Android 11+ (API 30+) - Use WindowInsetsController
+                    // CRITICAL: Must set decorFitsSystemWindows to false first
+                    activity.window.setDecorFitsSystemWindows(false)
+                    
+                    activity.window.insetsController?.let { controller ->
+                        controller.hide(
+                            android.view.WindowInsets.Type.statusBars() 
+                            or android.view.WindowInsets.Type.navigationBars()
+                        )
+                        controller.systemBarsBehavior = 
+                            android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                        Log.d("FullscreenDebug", "System UI hidden (API 30+)")
+                    } ?: Log.w("FullscreenDebug", "WindowInsetsController is null!")
+                } else {
+                    // Older Android versions - Use deprecated flags
+                    @Suppress("DEPRECATION")
+                    activity.window.decorView.systemUiVisibility = (
+                        View.SYSTEM_UI_FLAG_FULLSCREEN
+                        or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    )
+                    Log.d("FullscreenDebug", "System UI hidden (legacy API)")
+                }
+            } catch (e: Exception) {
+                Log.e("FullscreenDebug", "Error hiding system UI", e)
+            }
+        }
+    }
+
+    private fun showSystemUI() {
+        val activity = context as? Activity ?: run {
+            Log.w("FullscreenDebug", "Cannot show system UI - context is not an Activity")
+            return
+        }
+        
+        post {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    // Android 11+ (API 30+) - Use WindowInsetsController
+                    // Restore decorFitsSystemWindows
+                    activity.window.setDecorFitsSystemWindows(true)
+                    
+                    activity.window.insetsController?.show(
+                        android.view.WindowInsets.Type.statusBars() 
+                        or android.view.WindowInsets.Type.navigationBars()
+                    )
+                    Log.d("FullscreenDebug", "System UI shown (API 30+)")
+                } else {
+                    // Older Android versions - Clear flags
+                    @Suppress("DEPRECATION")
+                    activity.window.decorView.systemUiVisibility = (
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    )
+                    Log.d("FullscreenDebug", "System UI shown (legacy API)")
+                }
+            } catch (e: Exception) {
+                Log.e("FullscreenDebug", "Error showing system UI", e)
+            }
+        }
     }
 
     fun maskScreen() {
@@ -1097,45 +1235,24 @@ class DualWebViewGroup @JvmOverloads constructor(
             fullScreenOverlayContainer.rotation     = 0f
         }
 
-        val adjustedX: Float
-        val adjustedY: Float
+        // Pass the fixed screen cursor position to hover detection
+        // In anchored mode, the cursor is visually fixed at the center (320, 240)
+        val containerLocation = IntArray(2)
+        getLocationOnScreen(containerLocation)
+        val screenX = 320f + containerLocation[0]
+        val screenY = 240f + containerLocation[1]
+        
+        updateButtonHoverStates(screenX, screenY)
 
-        val UILocation = IntArray(2)
-        leftEyeUIContainer.getLocationOnScreen(UILocation)
+        // Ensure visual cursor scale/visibility is refreshed in anchored mode
+        listener?.onCursorPositionChanged(320f, 240f, true)
 
-        val rotationRad = Math.toRadians(leftEyeUIContainer.rotation.toDouble())
-        val cos = Math.cos(rotationRad).toFloat()
-        val sin = Math.sin(rotationRad).toFloat()
-
-        // The cursor is fixed at (320, 240)
-        val cursorX = lastCursorX
-        val cursorY = lastCursorY
-
-        // Step 1: Inverse translation (subtract the translation)
-        val translatedX = cursorX - UILocation[0]
-        val translatedY = cursorY - UILocation[1]
-
-        // Step 2: Inverse rotation (rotate the translated point back to the view's local coordinates)
-        adjustedX = translatedX * cos + translatedY * sin
-        adjustedY = -translatedX * sin + translatedY * cos
-
-
-
-
-        // Add this: update hover states since screen position changed
-//        val toggleBarLocation = IntArray(2)
-//        leftToggleBar.getLocationOnScreen(toggleBarLocation)
-//        //Log.d("Rotation debug", "Rotation of Clip Parent, ${leftEyeClipParent.rotation.toDouble()}")
-//        //Log.d("Rotation debug", "Rotation of Toggle bar, ${leftToggleBar.rotation.toDouble()}")
-//        Log.d("Rotation debug", "Rotation of UI container, ${leftEyeUIContainer.rotation.toDouble()}")
-//        val adjustedX = 320f - toggleBarLocation[0]
-//        val adjustedY = 240f - toggleBarLocation[1]
-        updateButtonHoverStates(adjustedX, adjustedY)
-
-        // Force a refresh of the right eye view
-        post {
-            startRefreshing()
-            invalidate()
+        // Only do expensive operations occasionally, not every frame
+        // The Choreographer already ensures smooth vsync timing
+        if (!isRefreshing) {
+            post {
+                startRefreshing()
+            }
         }
     }
 
@@ -1985,11 +2102,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                             // Dispatch tap based on target determined at ACTION_DOWN
                             when (anchoredTarget) {
                                 1 -> { // Keyboard
-                                    val localCoords = computeAnchoredKeyboardCoordinates()
-                                    localCoords?.let { (lx, ly) ->
-                                        Log.d("TouchDebug", "Dispatching anchored tap to keyboard at ($lx, $ly)")
-                                        customKeyboard?.handleAnchoredTap(lx, ly)
-                                    }
+                                    // Managed by MainActivity dispatchKeyboardTap
                                 }
                                 2 -> { // Bookmarks
                                     if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
@@ -2084,6 +2197,40 @@ class DualWebViewGroup @JvmOverloads constructor(
         keyboardContainer.getLocationOnScreen(location)
     }
 
+    fun getLogicalKeyboardLocation(location: IntArray) {
+        location[0] = keyboardContainer.left
+        location[1] = keyboardContainer.top
+    }
+
+    fun isPointInKeyboard(screenX: Float, screenY: Float): Boolean {
+        if (keyboardContainer.visibility != View.VISIBLE) return false
+        val kbView = customKeyboard ?: return false
+        if (kbView.visibility != View.VISIBLE) return false
+
+        val uiLocation = IntArray(2)
+        leftEyeUIContainer.getLocationOnScreen(uiLocation)
+
+        val translatedX = screenX - uiLocation[0]
+        val translatedY = screenY - uiLocation[1]
+
+        val localX: Float
+        val localY: Float
+
+        if (isAnchored) {
+            val rotationRad = Math.toRadians(leftEyeUIContainer.rotation.toDouble())
+            val cos = Math.cos(rotationRad).toFloat()
+            val sin = Math.sin(rotationRad).toFloat()
+            localX = (translatedX * cos + translatedY * sin) / uiScale
+            localY = (-translatedX * sin + translatedY * cos) / uiScale
+        } else {
+            localX = translatedX / uiScale
+            localY = translatedY / uiScale
+        }
+
+        return localX >= keyboardContainer.left && localX <= keyboardContainer.right &&
+               localY >= keyboardContainer.top && localY <= keyboardContainer.bottom
+    }
+
     fun getKeyboardSize(): Pair<Int, Int> {
         return Pair(
             keyboardContainer.width,
@@ -2092,47 +2239,46 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     // Called from MainActivity when the cursor is over the keyboard
-    fun dispatchKeyboardTap() {
-        if (!isAnchored) return
-
-        val UILocation = IntArray(2)
-        leftEyeUIContainer.getLocationOnScreen(UILocation)
-
-        // Transform cursor position to account for rotation and translation
-        val rotationRad = Math.toRadians(leftEyeUIContainer.rotation.toDouble())
-        val cos = Math.cos(rotationRad).toFloat()
-        val sin = Math.sin(rotationRad).toFloat()
-
-        val cursorX = lastCursorX
-        val cursorY = lastCursorY
-
-        // Inverse translation
-        val translatedX = cursorX - UILocation[0]
-        val translatedY = cursorY - UILocation[1]
-
-        // Inverse rotation
-        val adjustedX = translatedX * cos + translatedY * sin
-        val adjustedY = -translatedX * sin + translatedY * cos
-
-        // Calculate position relative to keyboard using view hierarchy
-        val localXContainer = adjustedX - keyboardContainer.x
-        val localYContainer = adjustedY - keyboardContainer.y
-
+    // Called from MainActivity to dispatch a tap to the custom keyboard
+    fun dispatchKeyboardTap(screenX: Float, screenY: Float) {
         val kbView = customKeyboard ?: return
+        if (kbView.visibility != View.VISIBLE) return
 
-        val localX = localXContainer - kbView.x
-        val localY = localYContainer - kbView.y
+        val groupLocation = IntArray(2)
+        getLocationOnScreen(groupLocation)
 
-        Log.d("KeyboardDebug", """
-        Keyboard tap:
-        Cursor: ($cursorX, $cursorY)
-        Adjusted: ($adjustedX, $adjustedY)
-        Local: ($localX, $localY)
-        Keyboard x/y: (${keyboardContainer.x}, ${keyboardContainer.y})
-        UI location: (${UILocation[0]}, ${UILocation[1]})
-    """.trimIndent())
+        // Translate screen coordinates to be relative to the UI container's screen origin
+        // Note: keyboardContainer is a child of leftEyeUIContainer
+        val uiLocation = IntArray(2)
+        leftEyeUIContainer.getLocationOnScreen(uiLocation)
 
-        customKeyboard?.handleAnchoredTap(localX, localY)
+        val translatedX = screenX - uiLocation[0]
+        val translatedY = screenY - uiLocation[1]
+
+        val localX: Float
+        val localY: Float
+
+        if (isAnchored) {
+            val rotationRad = Math.toRadians(leftEyeUIContainer.rotation.toDouble())
+            val cos = Math.cos(rotationRad).toFloat()
+            val sin = Math.sin(rotationRad).toFloat()
+            
+            // Interaction is already scaled in MainActivity for non-anchored, 
+            // but in anchored mode screen coordinates are absolute.
+            // However, the UI inside the container is logical.
+            localX = (translatedX * cos + translatedY * sin) / uiScale
+            localY = (-translatedX * sin + translatedY * cos) / uiScale
+        } else {
+            localX = translatedX / uiScale
+            localY = translatedY / uiScale
+        }
+
+        // Subtract keyboard's logical position within the container
+        val finalX = localX - keyboardContainer.left
+        val finalY = localY - keyboardContainer.top
+
+        Log.d("KeyboardDebug", "Keyboard tap: screen($screenX, $screenY) -> local($finalX, $finalY)")
+        kbView.handleAnchoredTap(finalX, finalY)
     }
 
     fun updateBrowsingMode(isDesktop: Boolean) {
@@ -2372,176 +2518,126 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
     // Add this method to handle cursor hovering
-    private fun updateButtonHoverStates(x: Float, y: Float) {
-
-
-        val height = height
-        val halfWidth = width / 2
-        val navBarHeight = 40
-        val localX = x % halfWidth
-
-        val smallButtonSize = 24
-
+    private fun updateButtonHoverStates(screenX: Float, screenY: Float) {
         // Clear all states initially
         clearAllHoverStates()
-
-        if (y >= height - navBarHeight) {
-            val buttonWidth = 40
-            // Adjust the padding to account for all buttons
-            val usableWidth = halfWidth - 16  // Total width minus padding (8dp on each side)
-            val remainingSpace = usableWidth - (8 * buttonWidth)
-            val gap = remainingSpace / 7  // Size of each gap
-
-            // Define button zones based on layout
-            val backZone     = 8..(8 + buttonWidth)
-            val forwardZone  = (8 +   buttonWidth +   gap)..(8 + 2*buttonWidth +   gap)
-            val homeZone     = (8 + 2*buttonWidth + 2*gap)..(8 + 3*buttonWidth + 2*gap)
-            val linkZone     = (8 + 3*buttonWidth + 3*gap)..(8 + 4*buttonWidth + 3*gap)
-            val settingsZone = (8 + 4*buttonWidth + 4*gap)..(8 + 5*buttonWidth + 4*gap)
-            val refreshZone  = (8 + 5*buttonWidth + 5*gap)..(8 + 6*buttonWidth + 5*gap)
-            val hideZone     = (8 + 6*buttonWidth + 6*gap)..(8 + 7*buttonWidth + 6*gap)
-            val quitZone     = (8 + 7*buttonWidth + 7*gap)..(8 + 8*buttonWidth + 7*gap)
-
-            // Clear all hover states initially
-            clearNavigationButtonHoverStates()
-
-            //Log.d("HoverStateDebug","Home zone: ${homeZone}")
-
-            // Check which button zone the cursor is in
-            when (localX.toInt()) {
-                in backZone -> {
-                    navButtons["back"]?.let { button ->
-                        button.isHovered = true
-                        button.left.isHovered = true
-                        button.right.isHovered = true
-                    }
-                }
-                in forwardZone -> {
-                    navButtons["forward"]?.let { button ->
-                        button.isHovered = true
-                        button.left.isHovered = true
-                        button.right.isHovered = true
-                    }
-                }
-
-                in homeZone -> {
-                    navButtons["home"]?.let { button ->
-                        button.isHovered = true
-                        button.left.isHovered = true
-                        button.right.isHovered = true
-                    }
-                }
-                in linkZone -> {
-                    navButtons["link"]?.let { button ->
-                        button.isHovered = true
-                        button.left.isHovered = true
-                        button.right.isHovered = true
-                    }
-                }
-                in settingsZone -> {
-                    navButtons["settings"]?.let { button ->
-                        button.isHovered = true
-                        button.left.isHovered = true
-                        button.right.isHovered = true
-                    }
-                }
-                in refreshZone -> {
-                    navButtons["refresh"]?.let { button ->
-                        button.isHovered = true
-                        button.left.isHovered = true
-                        button.right.isHovered = true
-                    }
-                }
-                in hideZone -> {
-                    navButtons["hide"]?.let { button ->
-                        button.isHovered = true
-                        button.left.isHovered = true
-                        button.right.isHovered = true
-                    }
-                }
-                in quitZone -> {
-                    navButtons["quit"]?.let { button ->
-                        button.isHovered = true
-                        button.left.isHovered = true
-                        button.right.isHovered = true
-                    }
-                }
+        
+        // Debug: Log cursor position
+        Log.d("HoverDebug", "Cursor at screen: ($screenX, $screenY)")
+        
+        // Helper function to check if cursor is over a button or view
+        fun isOver(button: View?): Boolean {
+            if (button == null || button.visibility != View.VISIBLE) return false
+            val location = IntArray(2)
+            button.getLocationOnScreen(location)
+            
+            // Account for scale in hit testing
+            val isOver = screenX >= location[0] && screenX <= location[0] + (button.width * uiScale) &&
+                   screenY >= location[1] && screenY <= location[1] + (button.height * uiScale)
+            
+            if (isOver) {
+                Log.d("HoverDebug", "Button at screen: (${location[0]}, ${location[1]}) size: ${button.width}x${button.height}")
             }
-
-//            Log.d("ButtonHover", """
-//            Cursor at ($localX, $y)
-//            Zones:
-//            Back: $backZone
-//            Home: $homeZone
-//            Link: $linkZone
-//            Refresh: $refreshZone
-//            Quit: $quitZone
-//        """.trimIndent())
+            return isOver
         }
-
-        else if (localX < 40) {
-            // For left/right scroll buttons, check both X and Y coordinates
-
-            val zoomButtonsY = 3*buttonHeight
-
-            if (y >= 5*buttonHeight && y < 6*buttonHeight) {  // Y-range for horizontal scroll buttons
-                if (localX < smallButtonSize) {
-                    // Zoom out button
-                    isHoveringScrollLeft = true
-                    leftToggleBar.findViewById<ImageButton>(R.id.btnScrollLeft)?.isHovered = true
-                } else if (localX < 2 * smallButtonSize) {
-                    // Zoom in button
-                    isHoveringScrollRight = true
-                    leftToggleBar.findViewById<ImageButton>(R.id.btnScrollRight)?.isHovered = true
-                }
-                clearNavigationButtonStates()
-                return
+        
+        // Check bottom navigation bar buttons using actual screen positions
+        navButtons.forEach { (name, navButton) ->
+            if (isOver(navButton.left)) {
+                navButton.isHovered = true
+                navButton.left.isHovered = true
+                navButton.right.isHovered = true
+                Log.d("HoverDebug", "Hovering over nav button: $name")
+                return  // Found the hovered button, stop checking
             }
-            else if (y >= zoomButtonsY && y < zoomButtonsY + buttonHeight) {  // Y-range for zoom buttons
-                if (localX < smallButtonSize) {
-                    // Zoom out button
-                    leftToggleBar.findViewById<ImageButton>(R.id.btnZoomOut)?.isHovered = true
-                    isHoveringZoomOut = true
-                } else if (localX < 2 * smallButtonSize) {
-                    // Zoom in button
-                    leftToggleBar.findViewById<ImageButton>(R.id.btnZoomIn)?.isHovered = true
-                    isHoveringZoomIn = true
-                }
+        }
+        
+        // Check left toggle bar buttons
+        val toggleBarButtons = listOf(
+            Triple(R.id.btnModeToggle, "ModeToggle") { isHoveringModeToggle = true },
+            Triple(R.id.btnYouTube, "Dashboard") { isHoveringDashboardToggle = true },
+            Triple(R.id.btnBookmarks, "Bookmarks") { isHoveringBookmarksMenu = true },
+            Triple(R.id.btnZoomOut, "ZoomOut") { isHoveringZoomOut = true },
+            Triple(R.id.btnZoomIn, "ZoomIn") { isHoveringZoomIn = true },
+            Triple(R.id.btnScrollUp, "ScrollUp") { isHoveringScrollUp = true },
+            Triple(R.id.btnScrollLeft, "ScrollLeft") { isHoveringScrollLeft = true },
+            Triple(R.id.btnScrollRight, "ScrollRight") { isHoveringScrollRight = true },
+            Triple(R.id.btnScrollDown, "ScrollDown") { isHoveringScrollDown = true },
+            Triple(R.id.btnMask, "Mask") { isHoveringMaskToggle = true },
+            Triple(R.id.btnAnchor, "Anchor") { isHoveringAnchorToggle = true }
+        )
+        
+        for ((buttonId, name, setHoverFlag) in toggleBarButtons) {
+            val button = leftToggleBar.findViewById<ImageButton>(buttonId)
+            if (isOver(button)) {
+                button?.isHovered = true
+                setHoverFlag()
                 clearNavigationButtonStates()
-                return
+                Log.d("HoverDebug", "Hovering over toggle button: $name")
+                return  // Found the hovered button, stop checking
             }
-
-            // Regular toggle buttons
-            val toggleButtons = mapOf(
-                (  0f                     ..  buttonHeight.toFloat()) to Pair(R.id.btnModeToggle   , "ModeToggle"   ),
-                (  buttonHeight.toFloat() ..2*buttonHeight.toFloat()) to Pair(R.id.btnYouTube      , "Dashboard"    ),
-                (2*buttonHeight.toFloat() ..3*buttonHeight.toFloat()) to Pair(R.id.btnBookmarks    , "Bookmarks"    ),
-                (4*buttonHeight.toFloat() ..5*buttonHeight.toFloat()) to Pair(R.id.btnScrollUp     , "ScrollUp"     ),
-                (6*buttonHeight.toFloat() ..7*buttonHeight.toFloat()) to Pair(R.id.btnScrollDown   , "ScrollDown"   ),
-                (7*buttonHeight.toFloat() ..8*buttonHeight.toFloat()) to Pair(R.id.btnMask         , "Mask"         ),
-                (8*buttonHeight.toFloat() ..9*buttonHeight.toFloat()) to Pair(R.id.btnAnchor       , "Anchor"       )
-            )
-
-            toggleButtons.forEach { (range, buttonInfo) ->
-                if (y in range) {
-                    leftToggleBar.findViewById<ImageButton>(buttonInfo.first)?.isHovered = true
-                    when (buttonInfo.second) {
-                        "ModeToggle"   -> isHoveringModeToggle    = true
-                        "Dashboard"    -> isHoveringDashboardToggle = true
-                        "Bookmarks"    -> isHoveringBookmarksMenu = true
-                        "ScrollUp"     -> isHoveringScrollUp      = true
-                        "ScrollDown"   -> isHoveringScrollDown    = true
-                        "Mask"         -> isHoveringMaskToggle    = true
-                        "Anchor"       -> isHoveringAnchorToggle  = true
-
+        }
+        
+        // Check settings window elements if visible
+        if (isSettingsVisible) {
+            settingsMenu?.let { menu ->
+                val settingsElements = listOf(
+                    R.id.volumeSeekBar,
+                    R.id.brightnessSeekBar,
+                    R.id.smoothnessSeekBar,
+                    R.id.screenSizeSeekBar,
+                    R.id.btnHelp,
+                    R.id.btnCloseSettings
+                )
+                for (id in settingsElements) {
+                    val view = menu.findViewById<View>(id)
+                    if (isOver(view)) {
+                        view?.isHovered = true
+                        Log.d("HoverDebug", "Hovering over settings element: $id")
+                        return // Found the hovered element, stop checking
                     }
-
-                    clearNavigationButtonStates()
-                    return
                 }
             }
-        }    else {
-            clearNavigationButtonHoverStates()
+        }
+        
+        // Check keyboard elements if visible
+        if (keyboardContainer.visibility == View.VISIBLE) {
+            val kbView = customKeyboard
+            if (kbView != null && kbView.visibility == View.VISIBLE) {
+                val uiLocation = IntArray(2)
+                leftEyeUIContainer.getLocationOnScreen(uiLocation)
+
+                val translatedX = screenX - uiLocation[0]
+                val translatedY = screenY - uiLocation[1]
+
+                val localX: Float
+                val localY: Float
+
+                if (isAnchored) {
+                    val rotationRad = Math.toRadians(leftEyeUIContainer.rotation.toDouble())
+                    val cos = Math.cos(rotationRad).toFloat()
+                    val sin = Math.sin(rotationRad).toFloat()
+                    localX = (translatedX * cos + translatedY * sin) / uiScale
+                    localY = (-translatedX * sin + translatedY * cos) / uiScale
+                } else {
+                    localX = translatedX / uiScale
+                    localY = translatedY / uiScale
+                }
+
+                // Check if the logical point is within the keyboard's logical bounds
+                if (localX >= keyboardContainer.left && localX <= keyboardContainer.right &&
+                    localY >= keyboardContainer.top && localY <= keyboardContainer.bottom) {
+                    
+                    val innerX = localX - keyboardContainer.left
+                    val innerY = localY - keyboardContainer.top
+                    
+                    kbView.updateHover(innerX, innerY)
+                    return // Found hovered keyboard, stop checking
+                } else {
+                    // Not over keyboard, clear its hover
+                    kbView.updateHover(-1f, -1f)
+                }
+            }
         }
     }
 
@@ -2577,9 +2673,29 @@ class DualWebViewGroup @JvmOverloads constructor(
         ).forEach { id ->
             leftToggleBar.findViewById<ImageButton>(id)?.isHovered = false
         }
+        
+        // Clear settings hover states
+        if (isSettingsVisible) {
+            settingsMenu?.let { menu ->
+                val settingsElements = listOf(
+                    R.id.volumeSeekBar,
+                    R.id.brightnessSeekBar,
+                    R.id.smoothnessSeekBar,
+                    R.id.screenSizeSeekBar,
+                    R.id.btnHelp,
+                    R.id.btnCloseSettings
+                )
+                for (id in settingsElements) {
+                    menu.findViewById<View>(id)?.isHovered = false
+                }
+            }
+        }
 
         // Clear navigation button states
         clearNavigationButtonStates()
+        
+        // Clear keyboard hover
+        customKeyboard?.updateHover(-1f, -1f)
     }
 
 
@@ -2822,6 +2938,11 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftEyeClipParent.translationX = 0f
         leftEyeClipParent.translationY = 0f
         leftEyeClipParent.rotation = 0f
+        
+        // Also reset fullscreen overlay
+        fullScreenOverlayContainer.translationX = 0f
+        fullScreenOverlayContainer.translationY = 0f
+        fullScreenOverlayContainer.rotation = 0f
 
         postDelayed({
             startRefreshing()
@@ -2872,21 +2993,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         startRefreshing()
 
         // Disable direct touch handling on toggle bar buttons in anchored mode
-        leftToggleBar.apply {
-            isEnabled = false
-            isClickable = false
-            isFocusable = false
-            // Also disable all child buttons
-            if (this is ViewGroup) {
-                for (i in 0 until childCount) {
-                    getChildAt(i).apply {
-                        isEnabled = false
-                        isClickable = false
-                        isFocusable = false
-                    }
-                }
-            }
-        }
+        // Logic removed to keep buttons enabled
+
 
         // Update keyboard behavior
         customKeyboard?.setAnchoredMode(true)
@@ -2906,21 +3014,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         resetPositions()
 
         // Re-enable touch handling on toggle bar buttons
-        leftToggleBar.apply {
-            isEnabled = true
-            isClickable = true
-            isFocusable = true
-            // Also re-enable all child buttons
-            if (this is ViewGroup) {
-                for (i in 0 until childCount) {
-                    getChildAt(i).apply {
-                        isEnabled = true
-                        isClickable = true
-                        isFocusable = true
-                    }
-                }
-            }
-        }
+        // Logic removed as buttons are no longer disabled
+
 
         // Update keyboard behavior
         customKeyboard?.setAnchoredMode(false)
@@ -3333,13 +3428,17 @@ class DualWebViewGroup @JvmOverloads constructor(
                 startRefreshing()
             }
 
+            // Add click handler for help button
+            settingsMenu?.findViewById<ImageButton>(R.id.btnHelp)?.setOnClickListener {
+                Log.d("SettingsDebug", "Help button clicked")
+                showHelpDialog()
+            }
+
             val layoutParams = FrameLayout.LayoutParams(
-                240,
-                settingsMenu?.measuredHeight ?: FrameLayout.LayoutParams.WRAP_CONTENT
+                320,
+                FrameLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP
-                leftMargin = 48
-                topMargin = 100
+                gravity = Gravity.CENTER
             }
 
             leftEyeUIContainer.addView(settingsMenu, layoutParams)
@@ -3349,7 +3448,35 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         // Before toggling visibility, update the seek bars with current system values.
-        initializeSettingsBars()
+        settingsMenu?.let { menu ->
+            // Initialize volume seekbar
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val volumeSeekBar = menu.findViewById<SeekBar>(R.id.volumeSeekBar)
+            volumeSeekBar?.max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            volumeSeekBar?.progress = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+
+            // Initialize brightness seekbar
+            val brightnessSeekBar = menu.findViewById<SeekBar>(R.id.brightnessSeekBar)
+            brightnessSeekBar?.max = 100
+            val currentBrightness = (context as? Activity)?.window?.attributes?.screenBrightness ?: 0.5f
+            brightnessSeekBar?.progress = (currentBrightness * 100).toInt()
+
+            // Initialize smoothness seekbar from saved preference
+            val smoothnessSeekBar = menu.findViewById<SeekBar>(R.id.smoothnessSeekBar)
+            val savedSmoothness = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                .getInt("anchorSmoothness", 80)
+            smoothnessSeekBar?.progress = savedSmoothness
+
+            // Initialize screen size seekbar
+            val screenSizeSeekBar = menu.findViewById<SeekBar>(R.id.screenSizeSeekBar)
+            val savedScaleProgress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                .getInt("uiScaleProgress", 100)
+            screenSizeSeekBar?.progress = savedScaleProgress
+            
+            // Apply initial scale
+            val initialScale = 0.25f + (savedScaleProgress / 100f) * 0.75f
+            updateUiScale(initialScale)
+        }
 
         // Toggle visibility state
         isSettingsVisible = !isSettingsVisible
@@ -3363,7 +3490,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             // Keep the force immediate layout code
             settingsMenu?.measure(
-                MeasureSpec.makeMeasureSpec(240, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(320, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
             )
             settingsMenu?.layout(
@@ -3397,29 +3524,38 @@ class DualWebViewGroup @JvmOverloads constructor(
             // Get locations of all interactive elements
             val volumeSeekBar = menu.findViewById<SeekBar>(R.id.volumeSeekBar)
             val brightnessSeekBar = menu.findViewById<SeekBar>(R.id.brightnessSeekBar)
+            val smoothnessSeekBar = menu.findViewById<SeekBar>(R.id.smoothnessSeekBar)
+            val screenSizeSeekBar = menu.findViewById<SeekBar>(R.id.screenSizeSeekBar)
             val closeButton = menu.findViewById<Button>(R.id.btnCloseSettings)
+            val helpButton = menu.findViewById<ImageButton>(R.id.btnHelp)
 
             // Get screen locations
             val volumeLocation = IntArray(2)
             val brightnessLocation = IntArray(2)
+            val smoothnessLocation = IntArray(2)
+            val screenSizeLocation = IntArray(2)
             val closeLocation = IntArray(2)
+            val helpLocation = IntArray(2)
 
             val menuLocation = IntArray(2)
             menu.getLocationOnScreen(menuLocation)
 
             volumeSeekBar?.getLocationOnScreen(volumeLocation)
             brightnessSeekBar?.getLocationOnScreen(brightnessLocation)
+            smoothnessSeekBar?.getLocationOnScreen(smoothnessLocation)
+            screenSizeSeekBar?.getLocationOnScreen(screenSizeLocation)
             closeButton?.getLocationOnScreen(closeLocation)
+            helpButton?.getLocationOnScreen(helpLocation)
 
-            if (x >= menuLocation[0] && x <= menuLocation[0] + menu.width &&
-                y >= menuLocation[1] && y <= menuLocation[1] + menu.height) {
+            if (x >= menuLocation[0] && x <= menuLocation[0] + (menu.width * uiScale) &&
+                y >= menuLocation[1] && y <= menuLocation[1] + (menu.height * uiScale)) {
                 // Check if click is on volume seekbar
                 if (volumeSeekBar != null &&
-                    x >= volumeLocation[0] && x <= volumeLocation[0] + volumeSeekBar.width &&
-                    y >= volumeLocation[1] && y <= volumeLocation[1] + volumeSeekBar.height) {
+                    x >= volumeLocation[0] && x <= volumeLocation[0] + (volumeSeekBar.width * uiScale) &&
+                    y >= volumeLocation[1] && y <= volumeLocation[1] + (volumeSeekBar.height * uiScale)) {
 
                     // Calculate relative position on seekbar
-                    val relativeX = x - volumeLocation[0]
+                    val relativeX = (x - volumeLocation[0]) / uiScale
                     val percentage = relativeX.coerceIn(0f, volumeSeekBar.width.toFloat()) / volumeSeekBar.width
                     val newProgress = (percentage * volumeSeekBar.max).toInt()
 
@@ -3446,11 +3582,11 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on brightness seekbar
                 if (brightnessSeekBar != null &&
-                    x >= brightnessLocation[0] && x <= brightnessLocation[0] + brightnessSeekBar.width &&
-                    y >= brightnessLocation[1] && y <= brightnessLocation[1] + brightnessSeekBar.height) {
+                    x >= brightnessLocation[0] && x <= brightnessLocation[0] + (brightnessSeekBar.width * uiScale) &&
+                    y >= brightnessLocation[1] && y <= brightnessLocation[1] + (brightnessSeekBar.height * uiScale)) {
 
                     // Calculate relative position on seekbar
-                    val relativeX = x - brightnessLocation[0]
+                    val relativeX = (x - brightnessLocation[0]) / uiScale
                     val percentage = relativeX.coerceIn(0f, brightnessSeekBar.width.toFloat()) / brightnessSeekBar.width
                     val newProgress = (percentage * brightnessSeekBar.max).toInt()
 
@@ -3468,10 +3604,86 @@ class DualWebViewGroup @JvmOverloads constructor(
                     return
                 }
 
+                // Check if click is on smoothness seekbar
+                if (smoothnessSeekBar != null &&
+                    x >= smoothnessLocation[0] && x <= smoothnessLocation[0] + (smoothnessSeekBar.width * uiScale) &&
+                    y >= smoothnessLocation[1] && y <= smoothnessLocation[1] + (smoothnessSeekBar.height * uiScale)) {
+
+                    // Calculate relative position on seekbar
+                    val relativeX = (x - smoothnessLocation[0]) / uiScale
+                    val percentage = relativeX.coerceIn(0f, smoothnessSeekBar.width.toFloat()) / smoothnessSeekBar.width
+                    val newProgress = (percentage * smoothnessSeekBar.max).toInt()
+
+                    // Update smoothness
+                    smoothnessSeekBar.progress = newProgress
+                    
+                    // Save preference and notify MainActivity
+                    context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putInt("anchorSmoothness", newProgress)
+                        .apply()
+                    
+                    // Call MainActivity to update smoothness
+                    (context as? MainActivity)?.updateAnchorSmoothness(newProgress)
+
+                    // Visual feedback
+                    smoothnessSeekBar.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        smoothnessSeekBar.isPressed = false
+                    }, 100)
+                    return
+                }
+
+                // Check if click is on screen size seekbar
+                if (screenSizeSeekBar != null &&
+                    x >= screenSizeLocation[0] && x <= screenSizeLocation[0] + (screenSizeSeekBar.width * uiScale) &&
+                    y >= screenSizeLocation[1] && y <= screenSizeLocation[1] + (screenSizeSeekBar.height * uiScale)) {
+
+                    // Calculate relative position on seekbar
+                    val relativeX = (x - screenSizeLocation[0]) / uiScale
+                    val percentage = relativeX.coerceIn(0f, screenSizeSeekBar.width.toFloat()) / screenSizeSeekBar.width
+                    val newProgress = (percentage * screenSizeSeekBar.max).toInt()
+
+                    // Update screen size
+                    screenSizeSeekBar.progress = newProgress
+                    
+                    // Save preference
+                    context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putInt("uiScaleProgress", newProgress)
+                        .apply()
+
+                    // Apply scale: 25% (0.25) to 100% (1.0)
+                    val scale = 0.25f + (newProgress / 100f) * 0.75f
+                    updateUiScale(scale)
+
+                    // Visual feedback
+                    screenSizeSeekBar.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        screenSizeSeekBar.isPressed = false
+                    }, 100)
+                    return
+                }
+
+                // Check if click is on help button
+                if (helpButton != null &&
+                    x >= helpLocation[0] && x <= helpLocation[0] + (helpButton.width * uiScale) &&
+                    y >= helpLocation[1] && y <= helpLocation[1] + (helpButton.height * uiScale)) {
+
+                    // Visual feedback
+                    helpButton.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        helpButton.isPressed = false
+                        // Show help dialog
+                        showHelpDialog()
+                    }, 100)
+                    return
+                }
+
                 // Check if click is on close button
                 if (closeButton != null &&
-                    x >= closeLocation[0] && x <= closeLocation[0] + closeButton.width &&
-                    y >= closeLocation[1] && y <= closeLocation[1] + closeButton.height) {
+                    x >= closeLocation[0] && x <= closeLocation[0] + (closeButton.width * uiScale) &&
+                    y >= closeLocation[1] && y <= closeLocation[1] + (closeButton.height * uiScale)) {
 
                     // Visual feedback
                     closeButton.isPressed = true
@@ -3490,6 +3702,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             Touch at ($x, $y)
             Volume seekbar at (${volumeLocation[0]}, ${volumeLocation[1]}) size ${volumeSeekBar?.width}x${volumeSeekBar?.height}
             Brightness seekbar at (${brightnessLocation[0]}, ${brightnessLocation[1]}) size ${brightnessSeekBar?.width}x${brightnessSeekBar?.height}
+            Smoothness seekbar at (${smoothnessLocation[0]}, ${smoothnessLocation[1]}) size ${smoothnessSeekBar?.width}x${smoothnessSeekBar?.height}
             Close button at (${closeLocation[0]}, ${closeLocation[1]}) size ${closeButton?.width}x${closeButton?.height}
         """.trimIndent())
             }
@@ -3632,13 +3845,53 @@ class DualWebViewGroup @JvmOverloads constructor(
         showDialog("Prompt", message, true, defaultValue, { text -> onConfirm(text ?: "") }, onCancel)
     }
 
+    fun showHelpDialog() {
+        val helpMessage = """
+            TOUCH GESTURES:
+            • Single Tap: Click links, buttons, and focus text fields.
+            • Double Tap: Swiftly go back to the previous page.
+            • Triple Tap: Open the Navigation Menu (Forward, Refresh, Bookmarks, Home).
+            
+            ANCHORED MODE (Anchor Icon):
+            • Screen stays fixed in space relative to the world.
+            • Ideal for reading or watching videos without display drift.
+            • Smoothness Setting: Controls how "rigidly" the screen follows tracking updates. Lower values are more reactive, while higher values provide a smoother, dampened feel.
+            
+            NON-ANCHORED MODE (Crossed Anchor):
+            • The screen is "locked" to your head movement.
+            • Display moves naturally as you look around.
+            • Cursor follows your center of gaze.
+            
+            SCROLL MODE (Eye Icon):
+            • Hides all UI bars for an immersive browsing experience.
+            • Swipe gestures allow you to scroll long pages.
+            • Restore UI: Tap the transparent "Show" button in the bottom right.
+            
+            SETTINGS & UTILITIES:
+            • Volume & Brightness: Real-time sliders in this menu.
+            • UI Scale: Adjust the size of the entire interface for comfort.
+            • Zoom (+/-): Change the webpage content zoom level.
+            • Bookmarks: Quick access to your favorite sites.
+        """.trimIndent()
+        
+        showDialog(
+            title = "TapLink Browser Features & Gestures",
+            message = helpMessage,
+            hasInput = false,
+            confirmLabel = null,
+            dismissOnAnyClick = true
+        )
+    }
+
     private fun showDialog(
         title: String,
         message: String,
         hasInput: Boolean,
         defaultValue: String? = null,
         onConfirm: ((String?) -> Unit)? = null,
-        onCancel: (() -> Unit)? = null
+        onCancel: (() -> Unit)? = null,
+        confirmLabel: String? = "OK",
+        dismissOnAnyClick: Boolean = false
     ) {
         dialogContainer.removeAllViews()
         
@@ -3685,6 +3938,9 @@ class DualWebViewGroup @JvmOverloads constructor(
             text = message
             textSize = 16f
             setTextColor(Color.parseColor("#DDDDDD"))
+            maxLines = 15
+            isVerticalScrollBarEnabled = true
+            movementMethod = ScrollingMovementMethod.getInstance()
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -3740,8 +3996,12 @@ class DualWebViewGroup @JvmOverloads constructor(
         if (onCancel != null) {
             val cancelButton = Button(context).apply {
                 text = "Cancel"
+                textSize = 16f
                 setTextColor(Color.parseColor("#AAAAAA"))
                 setBackgroundColor(Color.TRANSPARENT)
+                setPadding(24.dp(), 12.dp(), 24.dp(), 12.dp())
+                minWidth = 64.dp()
+                minHeight = 48.dp()
                 setOnClickListener {
                     onCancel()
                     hideDialog()
@@ -3750,21 +4010,36 @@ class DualWebViewGroup @JvmOverloads constructor(
             buttonContainer.addView(cancelButton)
         }
 
-        val confirmButton = Button(context).apply {
-            text = "OK"
-            setTextColor(Color.parseColor("#4488FF"))
-            setBackgroundColor(Color.TRANSPARENT)
-            setOnClickListener {
-                onConfirm?.invoke(inputField?.text?.toString())
-                hideDialog()
+        if (confirmLabel != null) {
+            val confirmButton = Button(context).apply {
+                text = confirmLabel
+                textSize = 16f
+                setTextColor(Color.parseColor("#4488FF"))
+                setBackgroundColor(Color.TRANSPARENT)
+                setPadding(24.dp(), 12.dp(), 24.dp(), 12.dp())
+                minWidth = 64.dp()
+                minHeight = 48.dp()
+                setOnClickListener {
+                    onConfirm?.invoke(inputField?.text?.toString())
+                    hideDialog()
+                }
             }
+            buttonContainer.addView(confirmButton)
         }
-        buttonContainer.addView(confirmButton)
 
         dialogView.addView(buttonContainer)
         dialogContainer.addView(dialogView)
         dialogContainer.visibility = View.VISIBLE
         dialogContainer.bringToFront()
+        
+        if (dismissOnAnyClick) {
+            val dismissAction = View.OnClickListener { hideDialog() }
+            dialogContainer.setOnClickListener(dismissAction)
+            dialogView.setOnClickListener(dismissAction)
+            // Ensure message view also propagates click or handles it
+            val msgView = dialogView.getChildAt(1) // Title is 0, Message is 1
+            msgView.setOnClickListener(dismissAction)
+        }
         
         // Ensure rendering updates
         post {
