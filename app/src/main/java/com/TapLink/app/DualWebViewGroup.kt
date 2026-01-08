@@ -392,6 +392,10 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Set the background of the entire DualWebViewGroup to black
         setBackgroundColor(Color.BLACK)
 
+        // Ensure the left eye (Activity Window) uses the same pixel format as the right eye (SurfaceView)
+        // This ensures consistent color saturation between both eyes.
+        (context as? Activity)?.window?.setFormat(PixelFormat.RGBA_8888)
+
 
 
         fullScreenOverlayContainer.setOnTouchListener { _, event ->
