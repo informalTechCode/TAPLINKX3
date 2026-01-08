@@ -128,6 +128,58 @@
         android:paddingLeft="8dp"
         android:paddingRight="8dp"/>
 
+    <TextView
+        android:id="@+id/lblHorizontalPos"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Horizontal Position"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:layout_marginBottom="8dp"
+        android:visibility="gone"/>
+
+    <SeekBar
+        android:id="@+id/horizontalPosSeekBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="40dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="8dp"
+        android:max="100"
+        android:progress="50"
+        android:progressTint="#FFFFFF"
+        android:thumbTint="#FFFFFF"
+        android:background="@drawable/nav_button_background"
+        android:paddingLeft="8dp"
+        android:paddingRight="8dp"
+        android:visibility="gone"/>
+
+    <TextView
+        android:id="@+id/lblVerticalPos"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Vertical Position"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:layout_marginBottom="8dp"
+        android:visibility="gone"/>
+
+    <SeekBar
+        android:id="@+id/verticalPosSeekBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="40dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="8dp"
+        android:max="100"
+        android:progress="50"
+        android:progressTint="#FFFFFF"
+        android:thumbTint="#FFFFFF"
+        android:background="@drawable/nav_button_background"
+        android:paddingLeft="8dp"
+        android:paddingRight="8dp"
+        android:visibility="gone"/>
+
     <Button
         android:id="@+id/btnCloseSettings"
         android:layout_width="wrap_content"
