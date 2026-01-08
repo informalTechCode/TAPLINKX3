@@ -368,11 +368,21 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var isScreenMasked = false
     private var isHoveringMaskToggle = false
-    private var maskOverlay: View = View(context).apply {
+    private var maskOverlay: FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.BLACK)
         visibility = View.GONE
         elevation = 1000f  // Put it above everything except cursors
+        isClickable = true
+        isFocusable = true
     }
+
+    // Mask mode UI elements
+    private lateinit var maskMediaControlsContainer: LinearLayout
+    private lateinit var btnMaskPlay: ImageButton
+    private lateinit var btnMaskPause: ImageButton
+    private lateinit var btnMaskPrev: ImageButton
+    private lateinit var btnMaskNext: ImageButton
+    private lateinit var btnMaskUnmask: ImageButton
 
 
 
@@ -571,6 +581,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         //addView(leftNavigationBar)
 
 
+
+        setupMaskOverlayUI()
 
         // Add the container to the main view
         //addView(leftEyeUIContainer)
@@ -2048,6 +2060,11 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         fullScreenOverlayContainer.measure(
             MeasureSpec.makeMeasureSpec(640, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(heightSize, MeasureSpec.EXACTLY)
+        )
+
+        maskOverlay.measure(
+            MeasureSpec.makeMeasureSpec(widthSize, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(heightSize, MeasureSpec.EXACTLY)
         )
 
@@ -4096,6 +4113,99 @@ class DualWebViewGroup @JvmOverloads constructor(
         dialogContainer.getLocationOnScreen(loc)
         return x >= loc[0] && x <= loc[0] + dialogContainer.width &&
                y >= loc[1] && y <= loc[1] + dialogContainer.height
+    }
+
+    private fun setupMaskOverlayUI() {
+        val halfWidth = 640 // Logical width
+
+        // Unmask button (Bottom Right)
+        btnMaskUnmask = ImageButton(context).apply {
+            setImageResource(R.drawable.ic_visibility_on)
+            setBackgroundColor(Color.TRANSPARENT)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setPadding(8, 8, 8, 8)
+            setOnClickListener {
+                unmaskScreen()
+            }
+        }
+        val unmaskParams = FrameLayout.LayoutParams(40, 40).apply {
+            gravity = Gravity.BOTTOM or Gravity.END
+            rightMargin = 8
+            bottomMargin = 8
+        }
+        maskOverlay.addView(btnMaskUnmask, unmaskParams)
+
+        // Media Controls Container (Bottom Center)
+        maskMediaControlsContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.TRANSPARENT)
+            visibility = View.GONE // Hidden by default until media detected
+        }
+        val controlsParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            40
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            bottomMargin = 8
+        }
+        maskOverlay.addView(maskMediaControlsContainer, controlsParams)
+
+        // Controls
+        btnMaskPrev = createMediaButton(R.drawable.ic_media_skip_previous) {
+            webView.evaluateJavascript("document.querySelector('video, audio').currentTime -= 10;", null)
+        }
+        btnMaskPlay = createMediaButton(R.drawable.ic_media_play) {
+            webView.evaluateJavascript("document.querySelector('video, audio').play();", null)
+        }
+        btnMaskPause = createMediaButton(R.drawable.ic_media_pause) {
+            webView.evaluateJavascript("document.querySelector('video, audio').pause();", null)
+        }
+        btnMaskNext = createMediaButton(R.drawable.ic_media_skip_next) {
+            webView.evaluateJavascript("document.querySelector('video, audio').currentTime += 10;", null)
+        }
+
+        btnMaskPause.visibility = View.GONE // Initially show Play
+
+        maskMediaControlsContainer.addView(btnMaskPrev)
+        maskMediaControlsContainer.addView(btnMaskPlay)
+        maskMediaControlsContainer.addView(btnMaskPause)
+        maskMediaControlsContainer.addView(btnMaskNext)
+    }
+
+    private fun createMediaButton(iconRes: Int, onClick: () -> Unit): ImageButton {
+        return ImageButton(context).apply {
+            setImageResource(iconRes)
+            setBackgroundColor(Color.TRANSPARENT)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setPadding(8, 8, 8, 8)
+            layoutParams = LinearLayout.LayoutParams(40, 40).apply {
+                leftMargin = 4
+                rightMargin = 4
+            }
+            setOnClickListener { onClick() }
+        }
+    }
+
+    fun updateMediaState(isPlaying: Boolean) {
+        post {
+            if (isPlaying) {
+                btnMaskPlay.visibility = View.GONE
+                btnMaskPause.visibility = View.VISIBLE
+                maskMediaControlsContainer.visibility = View.VISIBLE
+            } else {
+                btnMaskPlay.visibility = View.VISIBLE
+                btnMaskPause.visibility = View.GONE
+                // Keep controls visible if we know media exists
+                maskMediaControlsContainer.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    fun hideMediaControls() {
+        post {
+            maskMediaControlsContainer.visibility = View.GONE
+        }
     }
 
 }

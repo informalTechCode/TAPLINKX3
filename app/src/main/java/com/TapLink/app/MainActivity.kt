@@ -227,6 +227,13 @@ class MainActivity : AppCompatActivity(),
                 }
             }
         }
+
+        @JavascriptInterface
+        fun onMediaPlaying(isPlaying: Boolean) {
+             activity.runOnUiThread {
+                 activity.dualWebViewGroup.updateMediaState(isPlaying)
+             }
+        }
     }
 
 
@@ -2996,6 +3003,46 @@ class MainActivity : AppCompatActivity(),
                     if (url != null && !url.startsWith("about:blank")) {
                         view?.visibility = View.VISIBLE
                         injectJavaScriptForInputFocus()
+
+                        // Inject media listeners
+                        view?.evaluateJavascript("""
+                            (function() {
+                                function attachMediaListeners() {
+                                    const mediaElements = document.querySelectorAll('video, audio');
+                                    mediaElements.forEach(media => {
+                                        if (media.dataset.taplinkListening) return;
+                                        media.dataset.taplinkListening = 'true';
+
+                                        media.addEventListener('play', () => {
+                                            if (window.Android) window.Android.onMediaPlaying(true);
+                                        });
+                                        media.addEventListener('pause', () => {
+                                            if (window.Android) window.Android.onMediaPlaying(false);
+                                        });
+                                        media.addEventListener('ended', () => {
+                                            if (window.Android) window.Android.onMediaPlaying(false);
+                                        });
+                                    });
+                                }
+
+                                // Run initially
+                                attachMediaListeners();
+
+                                // Check initial state
+                                const existingMedia = document.querySelectorAll('video, audio');
+                                existingMedia.forEach(media => {
+                                    if (!media.paused && !media.ended) {
+                                        if (window.Android) window.Android.onMediaPlaying(true);
+                                    }
+                                });
+
+                                // Watch for new media elements
+                                const observer = new MutationObserver((mutations) => {
+                                    attachMediaListeners();
+                                });
+                                observer.observe(document.body, { childList: true, subtree: true });
+                            })();
+                        """, null)
                     }
                 }
 
