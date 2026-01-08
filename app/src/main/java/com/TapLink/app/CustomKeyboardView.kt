@@ -16,8 +16,11 @@ import android.widget.LinearLayout
 import androidx.core.view.children
 import kotlin.math.abs
 import android.view.ViewConfiguration
+import android.util.Log
+import com.TapLinkX3.app.BuildConfig
+import com.TapLinkX3.app.R
 
-private const val DEBUG_TOUCH = BuildConfig.DEBUG
+private val DEBUG_TOUCH = BuildConfig.DEBUG
 private const val TAG_TOUCH = "TouchDebug"
 class CustomKeyboardView @JvmOverloads constructor(
     context: Context,
@@ -260,8 +263,8 @@ class CustomKeyboardView @JvmOverloads constructor(
         Log.d("KeyboardDebug", "Processing click for button: $buttonLabel")
 
         if (button.isAttachedToWindow) {
-            // Provide immediate visual feedback when the view hierarchy is still intact
-            button.setBackgroundColor(Color.GRAY)
+            // Provide immediate visual feedback (Light Blue for click)
+            button.setBackgroundColor(Color.parseColor("#88BBFF"))
         }
 
         postDelayed({
@@ -507,7 +510,7 @@ class CustomKeyboardView @JvmOverloads constructor(
             // In anchored mode, we only care about hover
             keys.forEach { button ->
                 if (button == hoveredKey) {
-                    button.setBackgroundColor(Color.GRAY)
+                    button.setBackgroundColor(Color.parseColor("#4488FF"))
                     button.setTextColor(Color.WHITE)
                 } else {
                     button.setBackgroundColor(Color.DKGRAY)
@@ -524,11 +527,11 @@ class CustomKeyboardView @JvmOverloads constructor(
         keys.forEach { button ->
             when {
                 button == hoveredKey -> {
-                    button.setBackgroundColor(Color.GRAY)
+                    button.setBackgroundColor(Color.parseColor("#4488FF"))
                     button.setTextColor(Color.WHITE)
                 }
                 button == focusedKey -> {
-                    button.setBackgroundColor(Color.DKGRAY) // Removed blue highlight
+                    button.setBackgroundColor(Color.GRAY) // Use light gray for focus in non-anchored mode
                     button.setTextColor(Color.WHITE)
                 }
                 else -> {

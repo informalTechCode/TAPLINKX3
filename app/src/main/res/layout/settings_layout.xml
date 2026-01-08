@@ -226,6 +226,20 @@
             android:paddingRight="8dp"
             android:visibility="visible"/>
 
+        <Button
+            android:id="@+id/btnResetPosition"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginTop="8dp"
+            android:text="Reset"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/nav_button_background"
+            android:padding="8dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="visible"/>
+
     </LinearLayout>
 
 </LinearLayout>
