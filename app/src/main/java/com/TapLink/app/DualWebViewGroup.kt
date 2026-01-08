@@ -280,6 +280,8 @@ class DualWebViewGroup @JvmOverloads constructor(
     
     // UI scale factor (0.5 to 1.0) - controlled by screen size slider
     var uiScale = 1.0f
+    private var uiPositionXProgress = 50
+    private var uiPositionYProgress = 50
 
     private val fullScreenHiddenViews: List<View> by lazy {
         listOf(
@@ -328,9 +330,59 @@ class DualWebViewGroup @JvmOverloads constructor(
         
         // Notify listener to refresh cursor scale visually
         listener?.onCursorPositionChanged(lastCursorX, lastCursorY, true)
+
+        if (!isAnchored) {
+            applyUiPositionOffsets()
+        }
         
         requestLayout()
         invalidate()
+    }
+
+    private fun applyUiPositionOffsets() {
+        if (isAnchored) return
+
+        val parentWidth = leftEyeClipParent.width
+        val parentHeight = leftEyeClipParent.height
+        if (parentWidth == 0 || parentHeight == 0) return
+
+        val scaledWidth = leftEyeUIContainer.width * uiScale
+        val scaledHeight = leftEyeUIContainer.height * uiScale
+
+        val maxOffsetX = ((parentWidth - scaledWidth) / 2f).coerceAtLeast(0f)
+        val maxOffsetY = ((parentHeight - scaledHeight) / 2f).coerceAtLeast(0f)
+
+        val normalizedX = (uiPositionXProgress - 50) / 50f
+        val normalizedY = (uiPositionYProgress - 50) / 50f
+
+        val offsetX = maxOffsetX * normalizedX
+        val offsetY = maxOffsetY * normalizedY
+
+        _translationX = offsetX
+        _translationY = offsetY
+
+        leftEyeUIContainer.translationX = offsetX
+        leftEyeUIContainer.translationY = offsetY
+
+        if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
+            fullScreenOverlayContainer.translationX = offsetX
+            fullScreenOverlayContainer.translationY = offsetY
+        }
+    }
+
+    private fun updatePositionSlidersVisibility(menu: View, scaleProgress: Int) {
+        val horizontalLabel = menu.findViewById<TextView>(R.id.horizontalPositionLabel)
+        val horizontalSeekBar = menu.findViewById<SeekBar>(R.id.horizontalPositionSeekBar)
+        val verticalLabel = menu.findViewById<TextView>(R.id.verticalPositionLabel)
+        val verticalSeekBar = menu.findViewById<SeekBar>(R.id.verticalPositionSeekBar)
+
+        val shouldShow = !isAnchored && scaleProgress < 100
+        val visibility = if (shouldShow) View.VISIBLE else View.GONE
+
+        horizontalLabel?.visibility = visibility
+        horizontalSeekBar?.visibility = visibility
+        verticalLabel?.visibility = visibility
+        verticalSeekBar?.visibility = visibility
     }
 
     // Function to update the cursor positions and visibility
@@ -779,7 +831,11 @@ class DualWebViewGroup @JvmOverloads constructor(
             val savedScaleProgress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
                 .getInt("uiScaleProgress", 100)
             val savedScale = 0.35f + (savedScaleProgress / 100f) * 0.65f
+            val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+            uiPositionXProgress = prefs.getInt("uiPositionXProgress", 50)
+            uiPositionYProgress = prefs.getInt("uiPositionYProgress", 50)
             updateUiScale(savedScale)
+            applyUiPositionOffsets()
         }
 
     }
@@ -3021,11 +3077,17 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Use unbarred anchor icon when anchored
         leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)?.setImageResource(R.drawable.ic_anchor)
         tripleClickMenu?.updateAnchorButtonState(true)
+
+        settingsMenu?.let { menu ->
+            val scaleProgress = menu.findViewById<SeekBar>(R.id.screenSizeSeekBar)?.progress ?: 100
+            updatePositionSlidersVisibility(menu, scaleProgress)
+        }
     }
 
     fun stopAnchoring() {
         isAnchored = false
         resetPositions()
+        post { applyUiPositionOffsets() }
 
         // Re-enable touch handling on toggle bar buttons
         // Logic removed as buttons are no longer disabled
@@ -3043,6 +3105,11 @@ class DualWebViewGroup @JvmOverloads constructor(
         tripleClickMenu?.updateAnchorButtonState(false)
         webView.visibility = View.VISIBLE
         rightEyeView.visibility = View.VISIBLE
+
+        settingsMenu?.let { menu ->
+            val scaleProgress = menu.findViewById<SeekBar>(R.id.screenSizeSeekBar)?.progress ?: 100
+            updatePositionSlidersVisibility(menu, scaleProgress)
+        }
 
         post {
             startRefreshing()
@@ -3483,13 +3550,21 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             // Initialize screen size seekbar
             val screenSizeSeekBar = menu.findViewById<SeekBar>(R.id.screenSizeSeekBar)
-            val savedScaleProgress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-                .getInt("uiScaleProgress", 100)
+            val sharedPrefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+            val savedScaleProgress = sharedPrefs.getInt("uiScaleProgress", 100)
             screenSizeSeekBar?.progress = savedScaleProgress
+
+            val horizontalPositionSeekBar = menu.findViewById<SeekBar>(R.id.horizontalPositionSeekBar)
+            val verticalPositionSeekBar = menu.findViewById<SeekBar>(R.id.verticalPositionSeekBar)
+            uiPositionXProgress = sharedPrefs.getInt("uiPositionXProgress", 50)
+            uiPositionYProgress = sharedPrefs.getInt("uiPositionYProgress", 50)
+            horizontalPositionSeekBar?.progress = uiPositionXProgress
+            verticalPositionSeekBar?.progress = uiPositionYProgress
             
             // Apply initial scale
             val initialScale = 0.25f + (savedScaleProgress / 100f) * 0.75f
             updateUiScale(initialScale)
+            updatePositionSlidersVisibility(menu, savedScaleProgress)
         }
 
         // Toggle visibility state
@@ -3540,6 +3615,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             val brightnessSeekBar = menu.findViewById<SeekBar>(R.id.brightnessSeekBar)
             val smoothnessSeekBar = menu.findViewById<SeekBar>(R.id.smoothnessSeekBar)
             val screenSizeSeekBar = menu.findViewById<SeekBar>(R.id.screenSizeSeekBar)
+            val horizontalPositionSeekBar = menu.findViewById<SeekBar>(R.id.horizontalPositionSeekBar)
+            val verticalPositionSeekBar = menu.findViewById<SeekBar>(R.id.verticalPositionSeekBar)
             val closeButton = menu.findViewById<Button>(R.id.btnCloseSettings)
             val helpButton = menu.findViewById<ImageButton>(R.id.btnHelp)
 
@@ -3548,6 +3625,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             val brightnessLocation = IntArray(2)
             val smoothnessLocation = IntArray(2)
             val screenSizeLocation = IntArray(2)
+            val horizontalPositionLocation = IntArray(2)
+            val verticalPositionLocation = IntArray(2)
             val closeLocation = IntArray(2)
             val helpLocation = IntArray(2)
 
@@ -3558,6 +3637,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             brightnessSeekBar?.getLocationOnScreen(brightnessLocation)
             smoothnessSeekBar?.getLocationOnScreen(smoothnessLocation)
             screenSizeSeekBar?.getLocationOnScreen(screenSizeLocation)
+            horizontalPositionSeekBar?.getLocationOnScreen(horizontalPositionLocation)
+            verticalPositionSeekBar?.getLocationOnScreen(verticalPositionLocation)
             closeButton?.getLocationOnScreen(closeLocation)
             helpButton?.getLocationOnScreen(helpLocation)
 
@@ -3670,11 +3751,66 @@ class DualWebViewGroup @JvmOverloads constructor(
                     // Apply scale: 35% (0.35) to 100% (1.0)
                     val scale = 0.35f + (newProgress / 100f) * 0.65f
                     updateUiScale(scale)
+                    updatePositionSlidersVisibility(menu, newProgress)
 
                     // Visual feedback
                     screenSizeSeekBar.isPressed = true
                     Handler(Looper.getMainLooper()).postDelayed({
                         screenSizeSeekBar.isPressed = false
+                    }, 100)
+                    return
+                }
+
+                // Check if click is on horizontal position seekbar
+                if (horizontalPositionSeekBar != null &&
+                    horizontalPositionSeekBar.visibility == View.VISIBLE &&
+                    x >= horizontalPositionLocation[0] && x <= horizontalPositionLocation[0] + (horizontalPositionSeekBar.width * uiScale) &&
+                    y >= horizontalPositionLocation[1] && y <= horizontalPositionLocation[1] + (horizontalPositionSeekBar.height * uiScale)) {
+
+                    val relativeX = (x - horizontalPositionLocation[0]) / uiScale
+                    val percentage = relativeX.coerceIn(0f, horizontalPositionSeekBar.width.toFloat()) / horizontalPositionSeekBar.width
+                    val newProgress = (percentage * horizontalPositionSeekBar.max).toInt()
+
+                    horizontalPositionSeekBar.progress = newProgress
+                    uiPositionXProgress = newProgress
+
+                    context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putInt("uiPositionXProgress", newProgress)
+                        .apply()
+
+                    applyUiPositionOffsets()
+
+                    horizontalPositionSeekBar.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        horizontalPositionSeekBar.isPressed = false
+                    }, 100)
+                    return
+                }
+
+                // Check if click is on vertical position seekbar
+                if (verticalPositionSeekBar != null &&
+                    verticalPositionSeekBar.visibility == View.VISIBLE &&
+                    x >= verticalPositionLocation[0] && x <= verticalPositionLocation[0] + (verticalPositionSeekBar.width * uiScale) &&
+                    y >= verticalPositionLocation[1] && y <= verticalPositionLocation[1] + (verticalPositionSeekBar.height * uiScale)) {
+
+                    val relativeX = (x - verticalPositionLocation[0]) / uiScale
+                    val percentage = relativeX.coerceIn(0f, verticalPositionSeekBar.width.toFloat()) / verticalPositionSeekBar.width
+                    val newProgress = (percentage * verticalPositionSeekBar.max).toInt()
+
+                    verticalPositionSeekBar.progress = newProgress
+                    uiPositionYProgress = newProgress
+
+                    context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putInt("uiPositionYProgress", newProgress)
+                        .apply()
+
+                    applyUiPositionOffsets()
+
+                    verticalPositionSeekBar.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        verticalPositionSeekBar.isPressed = false
                     }, 100)
                     return
                 }
