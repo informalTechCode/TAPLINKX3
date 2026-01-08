@@ -3532,7 +3532,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val showPosSliders = !isAnchored && initialScale < 0.99f
             val visibility = if (showPosSliders) View.VISIBLE else View.GONE
 
-            menu.findViewById<View>(R.id.positionSettingsContainer)?.visibility = visibility
+            menu.findViewById<View>(R.id.settingsPositionLayout)?.visibility = visibility
 
             menu.findViewById<SeekBar>(R.id.horizontalPosSeekBar)?.apply {
                 progress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
@@ -3734,7 +3734,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     val showPosSliders = !isAnchored && scale < 0.99f
                     val visibility = if (showPosSliders) View.VISIBLE else View.GONE
 
-                    menu.findViewById<View>(R.id.positionSettingsContainer)?.visibility = visibility
+                    menu.findViewById<View>(R.id.settingsPositionLayout)?.visibility = visibility
 
                     // Recalculate translation based on new scale
                     updateUiTranslation()

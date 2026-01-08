@@ -151,7 +151,7 @@
 
     <!-- Right Column (Position Settings) -->
     <LinearLayout
-        android:id="@+id/positionSettingsContainer"
+        android:id="@+id/settingsPositionLayout"
         android:layout_width="300dp"
         android:layout_height="wrap_content"
         android:orientation="vertical"
