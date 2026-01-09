@@ -1062,8 +1062,8 @@ class MainActivity : AppCompatActivity(),
         sensorManager  = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
 
-        // Load preferences
-        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        // Load preferences (use TapLinkPrefs for settings that are saved there)
+        val prefs = getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
         smoothnessLevel = prefs.getInt("anchorSmoothness", 80)
         updateSmoothnessFactors(smoothnessLevel)
         
