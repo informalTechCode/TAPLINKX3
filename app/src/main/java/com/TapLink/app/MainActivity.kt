@@ -1780,28 +1780,59 @@ class MainActivity : AppCompatActivity(),
                     override fun onResults(results: Bundle?) {
                         results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.let { matches ->
                             if (matches.isNotEmpty()) {
-                                // Insert the recognized text into the search box
-                                webView.evaluateJavascript("""
-                                (function() {
-                                    var searchInput = document.querySelector('input[name="q"]');
-                                    if (searchInput) {
-                                        searchInput.value = '${matches[0]}';
-                                        searchInput.form.submit();
+                                val text = matches[0]
+                                runOnUiThread {
+                                    onShowKeyboardForEdit(text)
+                                    // Handle inserting text based on what input is focused
+                                    val editFieldVisible = dualWebViewGroup.urlEditText.visibility == View.VISIBLE
+
+                                    when {
+                                        dualWebViewGroup.isBookmarksExpanded() && !editFieldVisible -> {
+                                            // Handle bookmark menu navigation - maybe search bookmarks?
+                                            // For now just toast or ignore
+                                        }
+                                        editFieldVisible -> {
+                                            // Handle any edit field input (URL or bookmark)
+                                            val currentText = dualWebViewGroup.getCurrentLinkText()
+                                            val cursorPosition = dualWebViewGroup.urlEditText.selectionStart
+
+                                            // Insert the text at cursor position
+                                            val newText = StringBuilder(currentText)
+                                                .insert(cursorPosition, text + " ")
+                                                .toString()
+
+                                            // Set text and move cursor after inserted text
+                                            dualWebViewGroup.setLinkText(newText, cursorPosition + text.length + 1)
+                                        }
+                                        dualWebViewGroup.getDialogInput() != null -> {
+                                            val input = dualWebViewGroup.getDialogInput()!!
+                                            val currentText = input.text.toString()
+                                            val cursorPosition = input.selectionStart
+                                            val newText = StringBuilder(currentText).insert(cursorPosition, text + " ").toString()
+                                            input.setText(newText)
+                                            input.setSelection(cursorPosition + text.length + 1)
+                                        }
+                                        else -> {
+                                            sendTextToWebView(text + " ")
+                                        }
                                     }
-                                })();
-                            """.trimIndent(), null)
+                                }
                             }
                         }
                     }
 
                     // Implement other RecognitionListener methods with empty bodies
-                    override fun onReadyForSpeech(params: Bundle?) {}
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        Log.d("SpeechRecognition", "Ready for speech")
+                        dualWebViewGroup.showToast("Listening...")
+                    }
                     override fun onBeginningOfSpeech() {}
                     override fun onRmsChanged(rmsdB: Float) {}
                     override fun onBufferReceived(buffer: ByteArray?) {}
                     override fun onEndOfSpeech() {}
                     override fun onError(error: Int) {
                         Log.e("SpeechRecognition", "Error: $error")
+                        dualWebViewGroup.showToast("Voice Error: $error")
                     }
                     override fun onPartialResults(partialResults: Bundle?) {}
                     override fun onEvent(eventType: Int, params: Bundle?) {}
@@ -1973,6 +2004,27 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
+    override fun onMicrophonePressed() {
+        runOnUiThread {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                 requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSIONS_REQUEST_CODE)
+                 return@runOnUiThread
+            }
+
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            }
+
+            try {
+                speechRecognizer?.startListening(intent)
+            } catch (e: Exception) {
+                Log.e("SpeechRecognition", "Error starting listening", e)
+                dualWebViewGroup.showToast("Error starting voice recognition")
+            }
+        }
+    }
+
     private fun moveCursor(offset: Int) {
         val focusedView = currentFocus
         if (focusedView != null) {
@@ -2093,10 +2145,22 @@ class MainActivity : AppCompatActivity(),
     }
 
     private fun sendCharacterToWebView(character: String) {
+        sendTextToWebView(character)
+    }
+
+    private fun sendTextToWebView(text: String) {
         if (dualWebViewGroup.isUrlEditing()) {
-            sendCharacterToLinkEditText(character)
+            // For now only supports single character for link editing in current impl,
+            // but we can loop if needed or assume sendCharacterToLinkEditText works for chars.
+            // But this method is generic.
+            // If text is longer than 1 char, we should handle it.
+            // The existing sendCharacterToLinkEditText handles single char.
+            // Let's iterate if it's multiple chars or just insert if we make a sendTextToLinkEditText
+            text.forEach { char ->
+                sendCharacterToLinkEditText(char.toString())
+            }
         } else {
-            //Log.d("InputDebug", "Sending character: $character")
+            //Log.d("InputDebug", "Sending text: $text")
             webView.evaluateJavascript("""
         (function() {
             var el = document.activeElement;
@@ -2106,7 +2170,7 @@ class MainActivity : AppCompatActivity(),
             }
             
             // Create a composition event to better simulate natural typing
-            function simulateNaturalInput(element, char) {
+            function simulateNaturalInput(element, text) {
                 // First, create a compositionstart event
                 const compStart = new Event('compositionstart', { bubbles: true });
                 element.dispatchEvent(compStart);
@@ -2116,7 +2180,7 @@ class MainActivity : AppCompatActivity(),
                     bubbles: true,
                     cancelable: true,
                     inputType: 'insertText',
-                    data: char,
+                    data: text,
                     composed: true
                 });
                 
@@ -2128,7 +2192,7 @@ class MainActivity : AppCompatActivity(),
                     bubbles: true,
                     cancelable: true,
                     inputType: 'insertText',
-                    data: char
+                    data: text
                 });
                 element.dispatchEvent(beforeInputEvent);
                 
@@ -2139,13 +2203,13 @@ class MainActivity : AppCompatActivity(),
                     
                     // Use execCommand for more natural insertion
                     if (document.execCommand) {
-                        document.execCommand('insertText', false, char);
+                        document.execCommand('insertText', false, text);
                     } else {
                         // Fallback: try to preserve cursor position
                         const start = element.selectionStart;
                         const end = element.selectionEnd;
                         element.value = originalValue.slice(0, start) + 
-                                      char + 
+                                      text +
                                       originalValue.slice(end);
                     }
                 }
@@ -2168,7 +2232,7 @@ class MainActivity : AppCompatActivity(),
                 };
             }
             
-            return JSON.stringify(simulateNaturalInput(el, '$character'));
+            return JSON.stringify(simulateNaturalInput(el, ${JSONObject.quote(text)}));
         })();
         """) { result ->
                 Log.d("InputDebug", "JavaScript result: $result")

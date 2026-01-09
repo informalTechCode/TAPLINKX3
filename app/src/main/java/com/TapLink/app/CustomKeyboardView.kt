@@ -107,6 +107,7 @@ class CustomKeyboardView @JvmOverloads constructor(
         fun onClearPressed()
         fun onMoveCursorLeft()
         fun onMoveCursorRight()
+        fun onMicrophonePressed()
     }
 
     private var listener: OnKeyboardActionListener? = null
@@ -310,6 +311,10 @@ class CustomKeyboardView @JvmOverloads constructor(
                     Log.d("KeyboardDebug", "Handling clear")
                     listener?.onClearPressed()
                 }
+                R.id.btn_mic -> {
+                    Log.d("KeyboardDebug", "Handling microphone")
+                    listener?.onMicrophonePressed()
+                }
                 R.id.button_left_dynamic -> handleDynamicButtonClick(button.id)
                 else -> {
                     // Check for arrow keys mapped to buttons in symbols mode
@@ -492,7 +497,8 @@ class CustomKeyboardView @JvmOverloads constructor(
         R.id.btn_switch,
         R.id.btn_caps,
         R.id.btn_clear,
-        R.id.button_left_dynamic
+        R.id.button_left_dynamic,
+        R.id.btn_mic
     )
     private val touchSlop by lazy { ViewConfiguration.get(context).scaledTouchSlop }
 

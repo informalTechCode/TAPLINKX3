@@ -222,12 +222,19 @@
             android:text="123"
             android:layout_weight="1"/>
 
+        <!-- Mic key -->
+        <Button
+            android:id="@+id/btn_mic"
+            style="@style/KeyboardButton"
+            android:text="Mic"
+            android:layout_weight="1"/>
+
         <!-- Space key -->
         <Button
             android:id="@+id/btn_space"
             style="@style/KeyboardButton"
             android:text="Space"
-            android:layout_weight="4"/>
+            android:layout_weight="3"/>
 
         <!-- Left Dynamic (@) key -->
         <Button
