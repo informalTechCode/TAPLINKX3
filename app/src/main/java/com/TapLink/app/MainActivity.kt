@@ -227,14 +227,8 @@ class MainActivity : AppCompatActivity(),
                 }
             }
         }
-
-        @JavascriptInterface
-        fun onMediaPlaying(isPlaying: Boolean) {
-             activity.runOnUiThread {
-                 activity.dualWebViewGroup.updateMediaState(isPlaying)
-             }
-        }
     }
+
 
 
 
@@ -672,19 +666,8 @@ class MainActivity : AppCompatActivity(),
                 if (tapCount < 2) {
                     Log.d("TouchDebug", "checkpoint4")
 
-                    if (dualWebViewGroup.isScreenMasked()) {
-                        // Restore pre-mask cursor state
-                        if (preMaskCursorState) {
-                            isCursorVisible = true
-                            lastCursorX = preMaskCursorX
-                            lastCursorY = preMaskCursorY
-                            cursorLeftView.visibility = View.VISIBLE
-                            cursorRightView.visibility = View.VISIBLE
-                            refreshCursor(true)
-                        }
-                        dualWebViewGroup.unmaskScreen()
-                        return true
-                    }
+                    // When masked, don't consume the tap - let it reach the unmask button and media controls
+                    // The mask overlay itself will block touches to web content
 
                     Log.d("TouchDebug", "checkpoint5")
 
@@ -2351,6 +2334,12 @@ class MainActivity : AppCompatActivity(),
             interactionY = visualY + groupLocation[1]
         }
 
+        // Intercept touches for mask overlay buttons when screen is masked
+        if (dualWebViewGroup.isScreenMasked()) {
+            dualWebViewGroup.dispatchMaskOverlayTouch(interactionX, interactionY)
+            return
+        }
+
         // Intercept touches for dialogs
         if (dualWebViewGroup.isDialogAction(interactionX, interactionY)) {
              val dialogContainer = dualWebViewGroup.dialogContainer
@@ -3007,43 +2996,86 @@ class MainActivity : AppCompatActivity(),
                         view?.visibility = View.VISIBLE
                         injectJavaScriptForInputFocus()
 
-                        // Inject media listeners
+                        // Inject media listeners with enhanced YouTube support
                         view?.evaluateJavascript("""
                             (function() {
+                                console.log('[TapLink] Media detection script starting...');
+                                let lastPlayingState = false;
+                                
+                                function notifyMediaState(isPlaying) {
+                                    if (lastPlayingState !== isPlaying) {
+                                        console.log('[TapLink] Media state changed:', isPlaying);
+                                        lastPlayingState = isPlaying;
+                                        if (window.Android) {
+                                            window.Android.onMediaPlaying(isPlaying);
+                                        } else {
+                                            console.error('[TapLink] Android interface not available!');
+                                        }
+                                    }
+                                }
+                                
+                                function checkMediaState() {
+                                    // Check all video and audio elements
+                                    const mediaElements = document.querySelectorAll('video, audio');
+                                    let isAnyPlaying = false;
+                                    
+                                    mediaElements.forEach(media => {
+                                        if (!media.paused && !media.ended && media.readyState > 2) {
+                                            isAnyPlaying = true;
+                                        }
+                                    });
+                                    
+                                    notifyMediaState(isAnyPlaying);
+                                    return isAnyPlaying;
+                                }
+                                
                                 function attachMediaListeners() {
                                     const mediaElements = document.querySelectorAll('video, audio');
-                                    mediaElements.forEach(media => {
+                                    console.log('[TapLink] Found', mediaElements.length, 'media elements');
+                                    
+                                    mediaElements.forEach((media, index) => {
                                         if (media.dataset.taplinkListening) return;
                                         media.dataset.taplinkListening = 'true';
-
+                                        
+                                        console.log('[TapLink] Attaching listeners to media element', index, media.tagName);
+                                        
                                         media.addEventListener('play', () => {
-                                            if (window.Android) window.Android.onMediaPlaying(true);
+                                            console.log('[TapLink] Play event');
+                                            notifyMediaState(true);
+                                        });
+                                        media.addEventListener('playing', () => {
+                                            console.log('[TapLink] Playing event');
+                                            notifyMediaState(true);
                                         });
                                         media.addEventListener('pause', () => {
-                                            if (window.Android) window.Android.onMediaPlaying(false);
+                                            console.log('[TapLink] Pause event');
+                                            checkMediaState();
                                         });
                                         media.addEventListener('ended', () => {
-                                            if (window.Android) window.Android.onMediaPlaying(false);
+                                            console.log('[TapLink] Ended event');
+                                            checkMediaState();
                                         });
                                     });
                                 }
-
+                                
                                 // Run initially
                                 attachMediaListeners();
-
-                                // Check initial state
-                                const existingMedia = document.querySelectorAll('video, audio');
-                                existingMedia.forEach(media => {
-                                    if (!media.paused && !media.ended) {
-                                        if (window.Android) window.Android.onMediaPlaying(true);
-                                    }
-                                });
-
-                                // Watch for new media elements
+                                checkMediaState();
+                                
+                                // Watch for new media elements (YouTube loads videos dynamically)
                                 const observer = new MutationObserver((mutations) => {
                                     attachMediaListeners();
+                                    checkMediaState();
                                 });
                                 observer.observe(document.body, { childList: true, subtree: true });
+                                
+                                // Poll every second to catch state changes we might miss
+                                // (Some sites don't properly fire events)
+                                setInterval(() => {
+                                    checkMediaState();
+                                }, 1000);
+                                
+                                console.log('[TapLink] Media detection script initialized');
                             })();
                         """, null)
                     }
@@ -3321,6 +3353,26 @@ class MainActivity : AppCompatActivity(),
                 if (!activity.isKeyboardVisible) {
                     Log.d("InputDebug", "Input focus confirmed via JavaScript")
                     activity.showCustomKeyboard()
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun onMediaPlaying(isPlaying: Boolean) {
+            Log.d("MediaControls", "onMediaPlaying called: isPlaying=$isPlaying")
+            activity.runOnUiThread {
+                Log.d("MediaControls", "Updating media state in DualWebViewGroup")
+                activity.dualWebViewGroup.updateMediaState(isPlaying)
+            }
+        }
+
+        @JavascriptInterface
+        fun onMediaDetected(hasMedia: Boolean) {
+            Log.d("MediaControls", "onMediaDetected called: hasMedia=$hasMedia")
+            activity.runOnUiThread {
+                if (!hasMedia) {
+                    Log.d("MediaControls", "Hiding media controls")
+                    activity.dualWebViewGroup.hideMediaControls()
                 }
             }
         }
