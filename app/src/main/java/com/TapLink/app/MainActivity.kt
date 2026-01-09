@@ -4023,7 +4023,9 @@ class MainActivity : AppCompatActivity(),
         val visualX = 320f + (x - 320f) * scale + transX
         val visualY = 240f + (y - 240f) * scale + transY
 
-        // Left screen cursor
+        // Left screen cursor - pivot at top-left so scaling happens from cursor tip
+        cursorLeftView.pivotX = 0f
+        cursorLeftView.pivotY = 0f
         cursorLeftView.x = visualX
         cursorLeftView.y = visualY
         cursorLeftView.scaleX = scale
@@ -4031,6 +4033,8 @@ class MainActivity : AppCompatActivity(),
         cursorLeftView.visibility = if (isVisible) View.VISIBLE else View.GONE
 
         // Right screen cursor, offset by 640 pixels to appear on the right screen
+        cursorRightView.pivotX = 0f
+        cursorRightView.pivotY = 0f
         cursorRightView.x = visualX + 640
         cursorRightView.y = visualY
         cursorRightView.scaleX = scale

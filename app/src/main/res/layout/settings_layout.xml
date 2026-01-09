@@ -65,8 +65,8 @@
             android:progressTint="#FFFFFF"
             android:thumbTint="#FFFFFF"
             android:background="@drawable/nav_button_background"
-            android:paddingLeft="8dp"
-            android:paddingRight="8dp"/>
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"/>
 
         <TextView
             android:layout_width="wrap_content"
@@ -86,8 +86,8 @@
             android:progressTint="#FFFFFF"
             android:thumbTint="#FFFFFF"
             android:background="@drawable/nav_button_background"
-            android:paddingLeft="8dp"
-            android:paddingRight="8dp"/>
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"/>
 
         <TextView
             android:layout_width="wrap_content"
@@ -109,8 +109,8 @@
             android:progressTint="#FFFFFF"
             android:thumbTint="#FFFFFF"
             android:background="@drawable/nav_button_background"
-            android:paddingLeft="8dp"
-            android:paddingRight="8dp"/>
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"/>
 
         <TextView
             android:layout_width="wrap_content"
@@ -132,8 +132,21 @@
             android:progressTint="#FFFFFF"
             android:thumbTint="#FFFFFF"
             android:background="@drawable/nav_button_background"
-            android:paddingLeft="8dp"
-            android:paddingRight="8dp"/>
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"/>
+
+        <Button
+            android:id="@+id/btnResetScreenSize"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginBottom="8dp"
+            android:text="Reset to 100%"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/nav_button_background"
+            android:padding="8dp"
+            android:clickable="true"
+            android:focusable="true"/>
 
         <Button
             android:id="@+id/btnCloseSettings"
@@ -196,8 +209,8 @@
             android:progressTint="#FFFFFF"
             android:thumbTint="#FFFFFF"
             android:background="@drawable/nav_button_background"
-            android:paddingLeft="8dp"
-            android:paddingRight="8dp"
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"
             android:visibility="visible"/>
 
         <TextView
@@ -222,8 +235,8 @@
             android:progressTint="#FFFFFF"
             android:thumbTint="#FFFFFF"
             android:background="@drawable/nav_button_background"
-            android:paddingLeft="8dp"
-            android:paddingRight="8dp"
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"
             android:visibility="visible"/>
 
         <Button

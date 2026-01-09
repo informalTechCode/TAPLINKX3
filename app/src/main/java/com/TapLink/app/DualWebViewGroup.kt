@@ -2706,6 +2706,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     R.id.brightnessSeekBar,
                     R.id.smoothnessSeekBar,
                     R.id.screenSizeSeekBar,
+                    R.id.btnResetScreenSize,
                     R.id.horizontalPosSeekBar,
                     R.id.verticalPosSeekBar,
                     R.id.btnResetPosition,
@@ -2824,6 +2825,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     R.id.brightnessSeekBar,
                     R.id.smoothnessSeekBar,
                     R.id.screenSizeSeekBar,
+                    R.id.btnResetScreenSize,
                     R.id.horizontalPosSeekBar,
                     R.id.verticalPosSeekBar,
                     R.id.btnResetPosition,
@@ -3638,7 +3640,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             updateUiScale(initialScale)
 
             // Initialize position sliders
-            val showPosSliders = initialScale < 0.99f
+            val showPosSliders = !isAnchored && initialScale < 0.99f
             val visibility = if (showPosSliders) View.VISIBLE else View.GONE
 
             menu.findViewById<View>(R.id.settingsPositionLayout)?.visibility = visibility
@@ -3707,6 +3709,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val closeButton = menu.findViewById<Button>(R.id.btnCloseSettings)
             val helpButton = menu.findViewById<ImageButton>(R.id.btnHelp)
             val resetButton = menu.findViewById<Button>(R.id.btnResetPosition)
+            val resetScreenSizeButton = menu.findViewById<Button>(R.id.btnResetScreenSize)
 
             // Get screen locations
             val volumeLocation = IntArray(2)
@@ -3718,6 +3721,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val closeLocation = IntArray(2)
             val helpLocation = IntArray(2)
             val resetLocation = IntArray(2)
+            val resetScreenSizeLocation = IntArray(2)
 
             val menuLocation = IntArray(2)
             menu.getLocationOnScreen(menuLocation)
@@ -3731,6 +3735,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             closeButton?.getLocationOnScreen(closeLocation)
             helpButton?.getLocationOnScreen(helpLocation)
             resetButton?.getLocationOnScreen(resetLocation)
+            resetScreenSizeButton?.getLocationOnScreen(resetScreenSizeLocation)
 
             if (x >= menuLocation[0] && x <= menuLocation[0] + (menu.width * uiScale) &&
                 y >= menuLocation[1] && y <= menuLocation[1] + (menu.height * uiScale)) {
@@ -3827,7 +3832,12 @@ class DualWebViewGroup @JvmOverloads constructor(
                     // Calculate relative position on seekbar
                     val relativeX = (x - screenSizeLocation[0]) / uiScale
                     val percentage = relativeX.coerceIn(0f, screenSizeSeekBar.width.toFloat()) / screenSizeSeekBar.width
-                    val newProgress = (percentage * screenSizeSeekBar.max).toInt()
+                    var newProgress = (percentage * screenSizeSeekBar.max).toInt()
+                    
+                    // Snap to 100% when close (>= 95%)
+                    if (newProgress >= 95) {
+                        newProgress = 100
+                    }
 
                     // Update screen size
                     screenSizeSeekBar.progress = newProgress
@@ -3843,21 +3853,94 @@ class DualWebViewGroup @JvmOverloads constructor(
                     updateUiScale(scale)
 
                     // Update visibility of position sliders
-                    val showPosSliders = scale < 0.99f
-                    val visibility = if (showPosSliders) View.VISIBLE else View.GONE
-
-                    menu.findViewById<View>(R.id.settingsPositionLayout)?.visibility = visibility
+                    val showPosSliders = !isAnchored && scale < 0.99f
+                    val posLayout = menu.findViewById<View>(R.id.settingsPositionLayout)
+                    val newVisibility = if (showPosSliders) View.VISIBLE else View.GONE
+                    
+                    if (posLayout?.visibility != newVisibility) {
+                        posLayout?.visibility = newVisibility
+                        
+                        // Force complete remeasure with UNSPECIFIED to allow width changes
+                        menu.measure(
+                            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
+                            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+                        )
+                        menu.layout(
+                            menu.left,
+                            menu.top,
+                            menu.left + menu.measuredWidth,
+                            menu.top + menu.measuredHeight
+                        )
+                        
+                        // Invalidate to redraw
+                        menu.invalidate()
+                        
+                        // Also request layout on parent to ensure proper positioning
+                        (menu.parent as? View)?.requestLayout()
+                    }
 
                     // Recalculate translation based on new scale
                     updateUiTranslation()
-
-                    // Force layout of settings menu to adjust for visibility changes
-                    menu.requestLayout()
 
                     // Visual feedback
                     screenSizeSeekBar.isPressed = true
                     Handler(Looper.getMainLooper()).postDelayed({
                         screenSizeSeekBar.isPressed = false
+                    }, 100)
+                    return
+                }
+
+                // Check if click is on reset screen size button
+                if (resetScreenSizeButton != null &&
+                    x >= resetScreenSizeLocation[0] && x <= resetScreenSizeLocation[0] + (resetScreenSizeButton.width * uiScale) &&
+                    y >= resetScreenSizeLocation[1] && y <= resetScreenSizeLocation[1] + (resetScreenSizeButton.height * uiScale)) {
+
+                    // Reset screen size to 100%
+                    screenSizeSeekBar?.progress = 100
+
+                    context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putInt("uiScaleProgress", 100)
+                        .putInt("uiTransXProgress", 50)
+                        .putInt("uiTransYProgress", 50)
+                        .apply()
+
+                    // Apply full scale
+                    updateUiScale(1.0f)
+
+                    // Hide position sliders and remeasure
+                    val posLayout = menu.findViewById<View>(R.id.settingsPositionLayout)
+                    if (posLayout?.visibility != View.GONE) {
+                        posLayout?.visibility = View.GONE
+                        
+                        // Force complete remeasure with UNSPECIFIED to allow width changes
+                        menu.measure(
+                            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
+                            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+                        )
+                        menu.layout(
+                            menu.left,
+                            menu.top,
+                            menu.left + menu.measuredWidth,
+                            menu.top + menu.measuredHeight
+                        )
+                        
+                        // Invalidate to redraw
+                        menu.invalidate()
+                        
+                        // Also request layout on parent to ensure proper positioning
+                        (menu.parent as? View)?.requestLayout()
+                    }
+
+                    // Reset position to center
+                    horizontalPosSeekBar?.progress = 50
+                    verticalPosSeekBar?.progress = 50
+                    updateUiTranslation()
+
+                    // Visual feedback
+                    resetScreenSizeButton.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        resetScreenSizeButton.isPressed = false
                     }, 100)
                     return
                 }
