@@ -3638,7 +3638,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             updateUiScale(initialScale)
 
             // Initialize position sliders
-            val showPosSliders = !isAnchored && initialScale < 0.99f
+            val showPosSliders = initialScale < 0.99f
             val visibility = if (showPosSliders) View.VISIBLE else View.GONE
 
             menu.findViewById<View>(R.id.settingsPositionLayout)?.visibility = visibility
@@ -3843,7 +3843,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     updateUiScale(scale)
 
                     // Update visibility of position sliders
-                    val showPosSliders = !isAnchored && scale < 0.99f
+                    val showPosSliders = scale < 0.99f
                     val visibility = if (showPosSliders) View.VISIBLE else View.GONE
 
                     menu.findViewById<View>(R.id.settingsPositionLayout)?.visibility = visibility
