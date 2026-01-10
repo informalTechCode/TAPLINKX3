@@ -144,6 +144,7 @@ class CustomKeyboardView @JvmOverloads constructor(
             //Log.d("KeyboardDebug", "Starting keyboard initialization")
             initializeKeys()
             findHideButton()
+            findMicButton()
             updateKeyFocus()
 
             updateCapsButtonText()
@@ -535,6 +536,9 @@ class CustomKeyboardView @JvmOverloads constructor(
     fun updateKeyFocus() {
         // In both modes, only highlight the hovered key (cursor-based)
         // No default "focused" key should be highlighted
+        val micState = if (isMicActive) "Active" else "Inactive"
+        // Log.d("KeyboardDebug", "Updating key focus. Mic: $micState, Hovered: ${hoveredKey?.text}")
+        
         keys.forEach { button ->
             if (button == micButton && isMicActive) {
                 // Active mic gets priority over hover
@@ -543,9 +547,15 @@ class CustomKeyboardView @JvmOverloads constructor(
             } else if (button == hoveredKey) {
                 button.setBackgroundColor(Color.parseColor("#4488FF"))
                 button.setTextColor(Color.WHITE)
+                if (button == micButton) {
+                     Log.d("KeyboardDebug", "Setting Mic to BLUE (Hovered). isMicActive=$isMicActive")
+                }
             } else {
                 button.setBackgroundColor(Color.DKGRAY)
                 button.setTextColor(Color.WHITE)
+                if (button == micButton) {
+                     Log.d("KeyboardDebug", "Setting Mic to GRAY. hoveredKey=${hoveredKey?.text}, isMicActive=$isMicActive")
+                }
             }
             button.invalidate()
         }
@@ -819,33 +829,77 @@ class CustomKeyboardView @JvmOverloads constructor(
     }
 
     private fun getKeyAtScreenPosition(screenX: Float, screenY: Float, uiScale: Float): Button? {
-        // Use global screen coordinates to find the key
-        // This avoids issues with relative layout offsets and coordinate drift
-        val location = IntArray(2)
+        val kvLocation = IntArray(2)
+        this.getLocationOnScreen(kvLocation)
+        
+        // Transform Global Cursor -> Local Keyboard Coordinates
+        val localCursorX = (screenX - kvLocation[0]) / uiScale
+        val localCursorY = (screenY - kvLocation[1]) / uiScale
+        
+        val shouldLog = false 
+
+        if (shouldLog) {
+            Log.d("HoverDebug", "=== getKeyAtScreenPosition Local($localCursorX,$localCursorY) ===")
+        }
+
+        var bestCandidate: Button? = null
+        var bestDist = Float.MAX_VALUE
+
+        // Fixed tolerance in Layout Pixels (consistent across all devices/scales)
+        // 20px is roughly the size of a finger tap variance
+        val tolerance = 20f
 
         for (button in keys) {
             if (button.visibility != View.VISIBLE) continue
 
-            button.getLocationOnScreen(location)
-            val left = location[0]
-            val top = location[1]
-            val width = button.width * uiScale
-            val height = button.height * uiScale
+            // Calculate Button's exact position relative to CustomKeyboardView
+            // Hierarchy: CustomKeyboardView -> verticalLL -> horizontalRow -> Button
+            val row = button.parent as? ViewGroup ?: continue
+            val mainLayout = row.parent as? ViewGroup ?: continue
+            
+            // localX = button.left + row.left + mainLayout.left
+            // Note: mainLayout is the vertical LinearLayout child of CustomKeyboardView.
+            // CustomKeyboardView (FrameLayout/ViewGroup) -> mainLayout -> row -> button.
+            // If mainLayout.parent is CustomKeyboardView, then mainLayout.left is relative to CustomKeyboardView.
+            // Just summing them up is correct.
+            val btnLeft = (button.left + row.left + mainLayout.left).toFloat()
+            val btnTop = (button.top + row.top + mainLayout.top).toFloat()
+            
+            val btnRight = btnLeft + button.width
+            val btnBottom = btnTop + button.height
 
-            if (button.text.toString().contains("Mic") || button.text.toString().contains("Space")) {
-                // Log debug for bottom row keys
-                // Verify if screenX is anywhere near this button (within 100px) to reduce spam
-                if (screenX >= left - 100 && screenX <= left + width + 100 &&
-                    screenY >= top - 100 && screenY <= top + height + 100) {
-                     Log.d("HoverDebug", "Checking ${button.text}: ScreenX=$screenX, Left=$left, Right=${left+width}, Hit=${screenX >= left && screenX <= left+width}")
-                }
-            }
-
-            if (screenX >= left && screenX <= left + width &&
-                screenY >= top && screenY <= top + height) {
+            // --- PASS 1: Strict Hit ---
+            if (localCursorX >= btnLeft && localCursorX < btnRight &&
+                localCursorY >= btnTop && localCursorY < btnBottom) {
+                if (shouldLog) Log.d("HoverDebug", "HIT (Strict): ${button.text}")
                 return button
             }
+
+            // --- PASS 2: Bounding Box Distance (Fuzzy) ---
+            
+            // Vertical Check (Row Priority)
+            val dy = kotlin.math.max(0f, kotlin.math.max(btnTop - localCursorY, localCursorY - btnBottom))
+            
+            if (dy > 5f) {
+                continue
+            }
+
+            // Horizontal Distance
+            val dx = kotlin.math.max(0f, kotlin.math.max(btnLeft - localCursorX, localCursorX - btnRight))
+            
+            val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+
+            if (dist < tolerance && dist < bestDist) {
+                bestDist = dist
+                bestCandidate = button
+            }
         }
+        
+        if (bestCandidate != null) {
+            if (shouldLog) Log.d("HoverDebug", "HIT (BoundingBox): ${bestCandidate.text} dist=$bestDist")
+            return bestCandidate
+        }
+
         return null
     }
 

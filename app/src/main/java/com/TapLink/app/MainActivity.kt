@@ -183,7 +183,7 @@ class MainActivity : AppCompatActivity(),
     private var pendingPermissionRequest: PermissionRequest? = null
     private var audioManager: AudioManager? = null
     private var speechRecognizer: SpeechRecognizer? = null
-    private var voskRecognizer: VoskSpeechRecognizer? = null
+    private var sherpaRecognizer: SherpaSpeechRecognizer? = null
     private lateinit var cameraManager: CameraManager
     private var cameraDevice: CameraDevice? = null
     private var imageReader: ImageReader? = null
@@ -440,6 +440,9 @@ class MainActivity : AppCompatActivity(),
         } else {
             dualWebViewGroup.stopAnchoring()
         }
+
+        // Initialize Sherpa-onnx model on startup
+        initializeSherpaRecognizer()
 
         tripleClickMenu = TripleClickMenu(this).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -2036,7 +2039,7 @@ class MainActivity : AppCompatActivity(),
     }
 
     private var isListeningForSpeech = false
-    private var isVoskInitialized = false
+    private var isSherpaInitialized = false
 
     override fun onMicrophonePressed() {
         Log.d("SpeechRecognition", "onMicrophonePressed called, isListening: $isListeningForSpeech")
@@ -2047,83 +2050,91 @@ class MainActivity : AppCompatActivity(),
                  return@runOnUiThread
             }
 
-            // Use Vosk for offline speech recognition
-            if (voskRecognizer == null) {
-                initializeVoskRecognizer()
+            // Use Sherpa-onnx for offline speech recognition
+            if (sherpaRecognizer == null) {
+                initializeSherpaRecognizer()
             }
             
-            // If Vosk is still initializing model, show message
-            if (!isVoskInitialized) {
-                dualWebViewGroup.showToast("Loading speech model...")
+            // If Sherpa is still initializing model, show message
+            if (!isSherpaInitialized) {
+                dualWebViewGroup.showToast("Initializing speech model, please wait...")
                 return@runOnUiThread
             }
 
-            // Toggle listening state
-            if (isListeningForSpeech) {
-                Log.d("SpeechRecognition", "Stopping Vosk recognition")
-                voskRecognizer?.stopListening()
-                isListeningForSpeech = false
+            if (sherpaRecognizer?.isListening() == true) {
+                // Stop listening
+                Log.d("SpeechRecognition", "Stopping Sherpa recognition")
+                sherpaRecognizer?.stopListening()
+                dualWebViewGroup.showToast("Voice command stopped")
             } else {
-                Log.d("SpeechRecognition", "Starting Vosk recognition")
-                voskRecognizer?.startListening()
+                // Start listening
+                Log.d("SpeechRecognition", "Starting Sherpa recognition")
+                sherpaRecognizer?.startListening()
+                dualWebViewGroup.showToast("Listening...")
             }
         }
     }
     
-    private fun initializeVoskRecognizer() {
-        Log.d("SpeechRecognition", "Initializing Vosk recognizer...")
+    private fun initializeSherpaRecognizer() {
+        if (sherpaRecognizer != null) return
         
-        voskRecognizer = VoskSpeechRecognizer(this).apply {
-            setListener(object : VoskSpeechRecognizer.VoskListener {
+        Log.d("SpeechRecognition", "Initializing Sherpa recognizer...")
+        
+        sherpaRecognizer = SherpaSpeechRecognizer(this).apply {
+            setListener(object : SherpaSpeechRecognizer.SpeechListener {
                 override fun onResult(text: String) {
-                    Log.d("SpeechRecognition", "Vosk result: $text")
-                    runOnUiThread {
-                        handleVoiceResult(text)
+                    if (text.isNotBlank()) {
+                        Log.d("SpeechRecognition", "Sherpa result: $text")
+                        runOnUiThread {
+                            handleVoiceResult(text)
+                        }
                     }
                 }
-                
+
                 override fun onPartialResult(text: String) {
-                    Log.d("SpeechRecognition", "Vosk partial: $text")
-                    // Could show partial results if desired
+                    if (text.isNotBlank()) {
+                        Log.d("SpeechRecognition", "Sherpa partial: $text")
+                    }
                 }
-                
+
                 override fun onError(message: String) {
-                    Log.e("SpeechRecognition", "Vosk error: $message")
+                    Log.e("SpeechRecognition", "Sherpa error: $message")
                     runOnUiThread {
-                        isListeningForSpeech = false
-                        keyboardView?.setMicActive(false)
-                        dualWebViewGroup.showToast(message)
+                        dualWebViewGroup.showToast("Voice Error: $message")
+                        if (message.contains("Microphone")) {
+                            isSherpaInitialized = false
+                        }
                     }
                 }
-                
+
                 override fun onListening() {
-                    Log.d("SpeechRecognition", "Vosk listening")
+                    Log.d("SpeechRecognition", "Sherpa listening")
                     runOnUiThread {
-                        isListeningForSpeech = true
-                        keyboardView?.setMicActive(true)
-                        dualWebViewGroup.showToast("Listening...")
+                         isListeningForSpeech = true
+                         keyboardView?.setMicActive(true)
                     }
                 }
-                
+
                 override fun onDone() {
-                    Log.d("SpeechRecognition", "Vosk done")
-                    runOnUiThread {
-                        isListeningForSpeech = false
-                        keyboardView?.setMicActive(false)
-                    }
+                     Log.d("SpeechRecognition", "Sherpa done")
+                     runOnUiThread {
+                         isListeningForSpeech = false
+                         keyboardView?.setMicActive(false)
+                     }
                 }
             })
             
-            // Initialize the model
+            // Load model immediately
             initModel { success ->
                 runOnUiThread {
                     if (success) {
-                        Log.d("SpeechRecognition", "Vosk model loaded successfully")
-                        isVoskInitialized = true
+                        Log.d("SpeechRecognition", "Sherpa model loaded successfully")
+                        isSherpaInitialized = true
                         dualWebViewGroup.showToast("Voice ready")
                     } else {
-                        Log.e("SpeechRecognition", "Failed to load Vosk model")
-                        dualWebViewGroup.showToast("Voice model not available")
+                        Log.e("SpeechRecognition", "Failed to load Sherpa model")
+                        dualWebViewGroup.showToast("Failed to load speech model")
+                        isSherpaInitialized = false
                     }
                 }
             }
@@ -2164,7 +2175,7 @@ class MainActivity : AppCompatActivity(),
         }
         
         // Stop listening after getting a result
-        voskRecognizer?.stopListening()
+        sherpaRecognizer?.stopListening()
         isListeningForSpeech = false
     }
 

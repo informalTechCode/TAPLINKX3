@@ -17,6 +17,11 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    aaptOptions {
+        noCompress("onnx")
+        noCompress("txt") // for tokens.txt
+    }
+
 
 
     buildTypes {
@@ -78,7 +83,7 @@ dependencies {
 
     implementation("com.google.code.gson:gson:2.10.1")
 
-    // Vosk offline speech recognition
-    implementation("com.alphacephei:vosk-android:0.3.47")
+    // Sherpa-onnx offline speech recognition (local AAR)
+    implementation(files("libs/sherpa-onnx.aar"))
 
 }
