@@ -536,7 +536,7 @@ class CustomKeyboardView @JvmOverloads constructor(
     fun updateKeyFocus() {
         // In both modes, only highlight the hovered key (cursor-based)
         // No default "focused" key should be highlighted
-        val micState = if (isMicActive) "Active" else "Inactive"
+
         // Log.d("KeyboardDebug", "Updating key focus. Mic: $micState, Hovered: ${hoveredKey?.text}")
         
         keys.forEach { button ->
