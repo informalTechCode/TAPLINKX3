@@ -497,10 +497,15 @@ class MainActivity : AppCompatActivity(),
             Duration: ${e.eventTime - e.downTime}ms
         """.trimIndent())
 
-
-
                 // Store the down event for potential tap
                 potentialTapEvent = MotionEvent.obtain(e)
+
+                // Prevent tap counting if keyboard is visible
+                if (isKeyboardVisible) {
+                    tapCount = 1 // Reset to 1 just to be safe, but don't increment for triple tap
+                    lastTapTime = System.currentTimeMillis()
+                    return true
+                }
 
                 val currentTime = System.currentTimeMillis()
                 if (currentTime - lastTapTime > TRIPLE_TAP_TIMEOUT) {
@@ -738,6 +743,12 @@ class MainActivity : AppCompatActivity(),
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
+                // Prevent double tap back navigation if keyboard is visible
+                if (isKeyboardVisible) {
+                    Log.d("DoubleTapDebug", "Double tap ignored because keyboard is visible")
+                    return true // Consume the event so it doesn't propagate
+                }
+                
                 val isInScrollMode = dualWebViewGroup.isInScrollMode()
                 Log.d(
                     "DoubleTapDebug",
