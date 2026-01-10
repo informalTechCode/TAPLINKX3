@@ -183,6 +183,7 @@ class MainActivity : AppCompatActivity(),
     private var pendingPermissionRequest: PermissionRequest? = null
     private var audioManager: AudioManager? = null
     private var speechRecognizer: SpeechRecognizer? = null
+    private var voskRecognizer: VoskSpeechRecognizer? = null
     private lateinit var cameraManager: CameraManager
     private var cameraDevice: CameraDevice? = null
     private var imageReader: ImageReader? = null
@@ -1067,9 +1068,8 @@ class MainActivity : AppCompatActivity(),
         smoothnessLevel = prefs.getInt("anchorSmoothness", 80)
         updateSmoothnessFactors(smoothnessLevel)
         
-        // Load saved anchored mode state (default to true on first run)
-        isAnchored = prefs.getBoolean("isAnchored", true)
-        Log.d("AnchorDebug", "Loading saved anchored state: $isAnchored")
+        // Note: isAnchored is already loaded earlier from BrowserPrefs (line 432)
+        Log.d("AnchorDebug", "Anchored state (loaded earlier): $isAnchored")
 
         // After initializing webView and dualWebViewGroup but before loadInitialPage()
         // Set initial cursor position
@@ -1774,10 +1774,19 @@ class MainActivity : AppCompatActivity(),
 
     private fun initializeSpeechRecognition() {
         // Check if speech recognition is available
-        if (SpeechRecognizer.isRecognitionAvailable(this)) {
+        val isAvailable = SpeechRecognizer.isRecognitionAvailable(this)
+        Log.d("SpeechRecognition", "Recognition available: $isAvailable")
+        
+        if (!isAvailable) {
+            Log.w("SpeechRecognition", "Speech recognition not available on this device")
+            return
+        }
+        
+        try {
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
                 setRecognitionListener(object : RecognitionListener {
                     override fun onResults(results: Bundle?) {
+                        isListeningForSpeech = false
                         results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.let { matches ->
                             if (matches.isNotEmpty()) {
                                 val text = matches[0]
@@ -1826,18 +1835,40 @@ class MainActivity : AppCompatActivity(),
                         Log.d("SpeechRecognition", "Ready for speech")
                         dualWebViewGroup.showToast("Listening...")
                     }
-                    override fun onBeginningOfSpeech() {}
+                    override fun onBeginningOfSpeech() {
+                        Log.d("SpeechRecognition", "Speech started")
+                    }
                     override fun onRmsChanged(rmsdB: Float) {}
                     override fun onBufferReceived(buffer: ByteArray?) {}
-                    override fun onEndOfSpeech() {}
+                    override fun onEndOfSpeech() {
+                        Log.d("SpeechRecognition", "Speech ended")
+                        isListeningForSpeech = false
+                    }
                     override fun onError(error: Int) {
-                        Log.e("SpeechRecognition", "Error: $error")
-                        dualWebViewGroup.showToast("Voice Error: $error")
+                        isListeningForSpeech = false
+                        val errorMsg = when (error) {
+                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
+                            SpeechRecognizer.ERROR_NETWORK -> "Network error"
+                            SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
+                            SpeechRecognizer.ERROR_SERVER -> "Server error"
+                            SpeechRecognizer.ERROR_CLIENT -> "Speech service unavailable"
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected"
+                            SpeechRecognizer.ERROR_NO_MATCH -> "No match found"
+                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognizer busy"
+                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Permission denied"
+                            else -> "Error: $error"
+                        }
+                        Log.e("SpeechRecognition", "Error: $error ($errorMsg)")
+                        dualWebViewGroup.showToast(errorMsg)
                     }
                     override fun onPartialResults(partialResults: Bundle?) {}
                     override fun onEvent(eventType: Int, params: Bundle?) {}
                 })
             }
+            Log.d("SpeechRecognition", "SpeechRecognizer created successfully")
+        } catch (e: Exception) {
+            Log.e("SpeechRecognition", "Failed to create SpeechRecognizer", e)
+            speechRecognizer = null
         }
     }
 
@@ -2004,25 +2035,137 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
+    private var isListeningForSpeech = false
+    private var isVoskInitialized = false
+
     override fun onMicrophonePressed() {
+        Log.d("SpeechRecognition", "onMicrophonePressed called, isListening: $isListeningForSpeech")
         runOnUiThread {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                 Log.d("SpeechRecognition", "Requesting audio permission")
                  requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSIONS_REQUEST_CODE)
                  return@runOnUiThread
             }
 
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            // Use Vosk for offline speech recognition
+            if (voskRecognizer == null) {
+                initializeVoskRecognizer()
+            }
+            
+            // If Vosk is still initializing model, show message
+            if (!isVoskInitialized) {
+                dualWebViewGroup.showToast("Loading speech model...")
+                return@runOnUiThread
             }
 
-            try {
-                speechRecognizer?.startListening(intent)
-            } catch (e: Exception) {
-                Log.e("SpeechRecognition", "Error starting listening", e)
-                dualWebViewGroup.showToast("Error starting voice recognition")
+            // Toggle listening state
+            if (isListeningForSpeech) {
+                Log.d("SpeechRecognition", "Stopping Vosk recognition")
+                voskRecognizer?.stopListening()
+                isListeningForSpeech = false
+            } else {
+                Log.d("SpeechRecognition", "Starting Vosk recognition")
+                voskRecognizer?.startListening()
             }
         }
+    }
+    
+    private fun initializeVoskRecognizer() {
+        Log.d("SpeechRecognition", "Initializing Vosk recognizer...")
+        
+        voskRecognizer = VoskSpeechRecognizer(this).apply {
+            setListener(object : VoskSpeechRecognizer.VoskListener {
+                override fun onResult(text: String) {
+                    Log.d("SpeechRecognition", "Vosk result: $text")
+                    runOnUiThread {
+                        handleVoiceResult(text)
+                    }
+                }
+                
+                override fun onPartialResult(text: String) {
+                    Log.d("SpeechRecognition", "Vosk partial: $text")
+                    // Could show partial results if desired
+                }
+                
+                override fun onError(message: String) {
+                    Log.e("SpeechRecognition", "Vosk error: $message")
+                    runOnUiThread {
+                        isListeningForSpeech = false
+                        keyboardView?.setMicActive(false)
+                        dualWebViewGroup.showToast(message)
+                    }
+                }
+                
+                override fun onListening() {
+                    Log.d("SpeechRecognition", "Vosk listening")
+                    runOnUiThread {
+                        isListeningForSpeech = true
+                        keyboardView?.setMicActive(true)
+                        dualWebViewGroup.showToast("Listening...")
+                    }
+                }
+                
+                override fun onDone() {
+                    Log.d("SpeechRecognition", "Vosk done")
+                    runOnUiThread {
+                        isListeningForSpeech = false
+                        keyboardView?.setMicActive(false)
+                    }
+                }
+            })
+            
+            // Initialize the model
+            initModel { success ->
+                runOnUiThread {
+                    if (success) {
+                        Log.d("SpeechRecognition", "Vosk model loaded successfully")
+                        isVoskInitialized = true
+                        dualWebViewGroup.showToast("Voice ready")
+                    } else {
+                        Log.e("SpeechRecognition", "Failed to load Vosk model")
+                        dualWebViewGroup.showToast("Voice model not available")
+                    }
+                }
+            }
+        }
+    }
+    
+    private fun handleVoiceResult(text: String) {
+        if (text.isBlank()) return
+        
+        onShowKeyboardForEdit(text)
+        val editFieldVisible = dualWebViewGroup.urlEditText.visibility == View.VISIBLE
+
+        when {
+            dualWebViewGroup.isBookmarksExpanded() && !editFieldVisible -> {
+                // Handle bookmark menu navigation - maybe search bookmarks?
+                // For now just ignore
+            }
+            editFieldVisible -> {
+                // Handle URL/bookmark edit field input
+                val currentText = dualWebViewGroup.getCurrentLinkText()
+                val cursorPosition = dualWebViewGroup.urlEditText.selectionStart.coerceAtLeast(0)
+                val newText = StringBuilder(currentText)
+                    .insert(cursorPosition, text + " ")
+                    .toString()
+                dualWebViewGroup.setLinkText(newText, cursorPosition + text.length + 1)
+            }
+            dualWebViewGroup.getDialogInput() != null -> {
+                val input = dualWebViewGroup.getDialogInput()!!
+                val currentText = input.text.toString()
+                val cursorPosition = input.selectionStart.coerceAtLeast(0)
+                val newText = StringBuilder(currentText).insert(cursorPosition, text + " ").toString()
+                input.setText(newText)
+                input.setSelection((cursorPosition + text.length + 1).coerceAtMost(newText.length))
+            }
+            else -> {
+                sendTextToWebView(text + " ")
+            }
+        }
+        
+        // Stop listening after getting a result
+        voskRecognizer?.stopListening()
+        isListeningForSpeech = false
     }
 
     private fun moveCursor(offset: Int) {
@@ -2465,7 +2608,10 @@ class MainActivity : AppCompatActivity(),
 
         // Hit test for custom keyboard
         if (isKeyboardVisible) {
-            if (dualWebViewGroup.isPointInKeyboard(interactionX, interactionY)) {
+            // In non-anchored mode, taps are handled directly in DualWebViewGroup.onTouchEvent
+            // to eliminate double-clicks and reduce latency.
+            // Only dispatch from here if we are in anchored mode.
+            if (isAnchored && dualWebViewGroup.isPointInKeyboard(interactionX, interactionY)) {
                 dualWebViewGroup.dispatchKeyboardTap(interactionX, interactionY)
                 return
             }

@@ -97,7 +97,9 @@ class CustomKeyboardView @JvmOverloads constructor(
 
     private var isSyncing: Boolean = false
 
-    private var hideButton: Button? = null  // Add if not already present
+    private var hideButton: Button? = null
+    private var micButton: Button? = null
+    private var isMicActive = false
 
     interface OnKeyboardActionListener {
         fun onKeyPressed(key: String)
@@ -177,6 +179,25 @@ class CustomKeyboardView @JvmOverloads constructor(
         val key = getKeyAtPosition(x, y)
         if (hoveredKey != key) {
             hoveredKey = key
+            updateKeyFocus()
+        }
+    }
+    
+    fun updateHoverScreen(screenX: Float, screenY: Float, uiScale: Float) {
+        if (screenX < 0 || screenY < 0) {
+            clearHover()
+            return
+        }
+        val key = getKeyAtScreenPosition(screenX, screenY, uiScale)
+        if (hoveredKey != key) {
+            hoveredKey = key
+            updateKeyFocus()
+        }
+    }
+
+    fun clearHover() {
+        if (hoveredKey != null) {
+            hoveredKey = null
             updateKeyFocus()
         }
     }
@@ -512,38 +533,19 @@ class CustomKeyboardView @JvmOverloads constructor(
 
 
     fun updateKeyFocus() {
-        if (isAnchoredMode) {
-            // In anchored mode, we only care about hover
-            keys.forEach { button ->
-                if (button == hoveredKey) {
-                    button.setBackgroundColor(Color.parseColor("#4488FF"))
-                    button.setTextColor(Color.WHITE)
-                } else {
-                    button.setBackgroundColor(Color.DKGRAY)
-                    button.setTextColor(Color.WHITE)
-                }
-                button.invalidate()
-            }
-            return
-        }
-
-        // Non-anchored mode: use both focus and hover
-        val focusedKey = getFocusedKey()
-        
+        // In both modes, only highlight the hovered key (cursor-based)
+        // No default "focused" key should be highlighted
         keys.forEach { button ->
-            when {
-                button == hoveredKey -> {
-                    button.setBackgroundColor(Color.parseColor("#4488FF"))
-                    button.setTextColor(Color.WHITE)
-                }
-                button == focusedKey -> {
-                    button.setBackgroundColor(Color.GRAY) // Use light gray for focus in non-anchored mode
-                    button.setTextColor(Color.WHITE)
-                }
-                else -> {
-                    button.setBackgroundColor(Color.DKGRAY)
-                    button.setTextColor(Color.WHITE)
-                }
+            if (button == micButton && isMicActive) {
+                // Active mic gets priority over hover
+                button.setBackgroundColor(Color.GREEN)
+                button.setTextColor(Color.BLACK)
+            } else if (button == hoveredKey) {
+                button.setBackgroundColor(Color.parseColor("#4488FF"))
+                button.setTextColor(Color.WHITE)
+            } else {
+                button.setBackgroundColor(Color.DKGRAY)
+                button.setTextColor(Color.WHITE)
             }
             button.invalidate()
         }
@@ -559,37 +561,34 @@ class CustomKeyboardView @JvmOverloads constructor(
     private fun findHideButton() {
         hideButton = keys.find { it.id == R.id.btn_hide }
 
+        // Just find the button reference but DON'T set focus to it
+        // Initial focus should stay at row 0, column 0 (first letter key)
         if (hideButton != null) {
-            // Find its position
-            var foundRow = 0
-            var foundCol = 0
-
-            // Get the keyboard container
-            if (childCount > 0) {
-                val keyboard = getChildAt(0) as? LinearLayout
-                if (keyboard != null) {
-                    outerLoop@ for (i in 0 until keyboard.childCount) {
-                        val row = keyboard.getChildAt(i) as? LinearLayout
-                        if (row != null) {
-                            for (j in 0 until row.childCount) {
-                                if (row.getChildAt(j)?.id == R.id.btn_hide) {
-                                    foundRow = i
-                                    foundCol = j
-                                    break@outerLoop
-                                }
-                            }
-                        }
-                    }
-
-                    currentRow = foundRow
-                    currentColumn = foundCol
-                    //Log.d("KeyboardDebug", "Found hide button at row: $currentRow, col: $currentColumn")
-                }
-            } else {
-                Log.d("KeyboardDebug", "Hide button not found - no keyboard container")
-            }
-        } else {
+            Log.d("KeyboardDebug", "Found hide button")
             Log.d("KeyboardDebug", "Hide button not found in keys list")
+        }
+    }
+
+    private fun findMicButton() {
+        // Try to find by ID first
+        micButton = keys.find { it.id == R.id.btn_mic }
+        
+        // If not found by ID, try checking text (if it uses icon text or similar)
+        if (micButton == null) {
+             micButton = keys.find { it.text.toString().contains("Mic", ignoreCase = true) } 
+        }
+
+        if (micButton != null) {
+            Log.d("KeyboardDebug", "Found mic button: ${micButton?.text}")
+        } else {
+            Log.d("KeyboardDebug", "Mic button not found in keys list")
+        }
+    }
+    
+    fun setMicActive(active: Boolean) {
+        if (isMicActive != active) {
+            isMicActive = active
+            updateKeyFocus()
         }
     }
 
@@ -819,6 +818,37 @@ class CustomKeyboardView @JvmOverloads constructor(
         }
     }
 
+    private fun getKeyAtScreenPosition(screenX: Float, screenY: Float, uiScale: Float): Button? {
+        // Use global screen coordinates to find the key
+        // This avoids issues with relative layout offsets and coordinate drift
+        val location = IntArray(2)
+
+        for (button in keys) {
+            if (button.visibility != View.VISIBLE) continue
+
+            button.getLocationOnScreen(location)
+            val left = location[0]
+            val top = location[1]
+            val width = button.width * uiScale
+            val height = button.height * uiScale
+
+            if (button.text.toString().contains("Mic") || button.text.toString().contains("Space")) {
+                // Log debug for bottom row keys
+                // Verify if screenX is anywhere near this button (within 100px) to reduce spam
+                if (screenX >= left - 100 && screenX <= left + width + 100 &&
+                    screenY >= top - 100 && screenY <= top + height + 100) {
+                     Log.d("HoverDebug", "Checking ${button.text}: ScreenX=$screenX, Left=$left, Right=${left+width}, Hit=${screenX >= left && screenX <= left+width}")
+                }
+            }
+
+            if (screenX >= left && screenX <= left + width &&
+                screenY >= top && screenY <= top + height) {
+                return button
+            }
+        }
+        return null
+    }
+
     private fun getKeyAtPosition(x: Float, y: Float): Button? {
         Log.d("KeyboardDebug", "getKeyAtPosition called with ($x, $y)")
 
@@ -841,29 +871,19 @@ class CustomKeyboardView @JvmOverloads constructor(
             val rX = kX - row.x
             val rY = kY - row.y
 
-            if (rY < -10f || rY > row.height + 10f) continue
-
-            var closestButton: Button? = null
-            var minDistance = Float.MAX_VALUE
+            // Strict bounds check for Y (with small tolerance for touch slop if needed, but 0 is safer for hover)
+            if (rY < 0 || rY > row.height) continue
 
             for (j in 0 until row.childCount) {
                 val button = row.getChildAt(j) as? Button ?: continue
                 if (button.visibility != View.VISIBLE) continue
 
-                if (rY >= -10f && rY <= row.height + 10f) {
-                    val buttonCenterX = (button.left + button.right) / 2f
-                    val distance = abs(rX - buttonCenterX)
-                    
-                    if (distance < minDistance) {
-                        minDistance = distance
-                        closestButton = button
-                    }
+                // Strict bounds check for X
+                // Check if the relative X position is within this button's horizontal bounds
+                if (rX >= button.left && rX <= button.right) {
+                     Log.d("KeyboardDebug", "Found button by bounds: ${button.text}")
+                     return button
                 }
-            }
-            
-            if (closestButton != null && minDistance < 100f) {
-                Log.d("KeyboardDebug", "Found matching button by proximity: ${closestButton.text}")
-                return closestButton
             }
         }
 
@@ -935,7 +955,9 @@ class CustomKeyboardView @JvmOverloads constructor(
         super.onVisibilityChanged(changedView, visibility)
         if (visibility == View.VISIBLE) {
             post {
+                clearHover()  // Reset hover state when keyboard appears
                 findHideButton()
+                findMicButton()
                 updateKeyFocus()
             }
         }

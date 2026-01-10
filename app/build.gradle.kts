@@ -78,4 +78,7 @@ dependencies {
 
     implementation("com.google.code.gson:gson:2.10.1")
 
+    // Vosk offline speech recognition
+    implementation("com.alphacephei:vosk-android:0.3.47")
+
 }
