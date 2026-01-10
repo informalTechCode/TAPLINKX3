@@ -17,6 +17,11 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    aaptOptions {
+        noCompress("onnx")
+        noCompress("txt") // for tokens.txt
+    }
+
 
 
     buildTypes {
@@ -77,5 +82,8 @@ dependencies {
     implementation("com.google.android.exoplayer:exoplayer:2.18.7")
 
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // Sherpa-onnx offline speech recognition (local AAR)
+    implementation(files("libs/sherpa-onnx.aar"))
 
 }

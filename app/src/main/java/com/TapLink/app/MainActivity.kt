@@ -183,6 +183,7 @@ class MainActivity : AppCompatActivity(),
     private var pendingPermissionRequest: PermissionRequest? = null
     private var audioManager: AudioManager? = null
     private var speechRecognizer: SpeechRecognizer? = null
+    private var sherpaRecognizer: SherpaSpeechRecognizer? = null
     private lateinit var cameraManager: CameraManager
     private var cameraDevice: CameraDevice? = null
     private var imageReader: ImageReader? = null
@@ -439,6 +440,9 @@ class MainActivity : AppCompatActivity(),
         } else {
             dualWebViewGroup.stopAnchoring()
         }
+
+        // Initialize Sherpa-onnx model on startup
+        initializeSherpaRecognizer()
 
         tripleClickMenu = TripleClickMenu(this).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -1078,9 +1082,8 @@ class MainActivity : AppCompatActivity(),
         smoothnessLevel = prefs.getInt("anchorSmoothness", 80)
         updateSmoothnessFactors(smoothnessLevel)
         
-        // Load saved anchored mode state (default to true on first run)
-        isAnchored = prefs.getBoolean("isAnchored", true)
-        Log.d("AnchorDebug", "Loading saved anchored state: $isAnchored")
+        // Note: isAnchored is already loaded earlier from BrowserPrefs (line 432)
+        Log.d("AnchorDebug", "Anchored state (loaded earlier): $isAnchored")
 
         // After initializing webView and dualWebViewGroup but before loadInitialPage()
         // Set initial cursor position
@@ -1785,39 +1788,101 @@ class MainActivity : AppCompatActivity(),
 
     private fun initializeSpeechRecognition() {
         // Check if speech recognition is available
-        if (SpeechRecognizer.isRecognitionAvailable(this)) {
+        val isAvailable = SpeechRecognizer.isRecognitionAvailable(this)
+        Log.d("SpeechRecognition", "Recognition available: $isAvailable")
+        
+        if (!isAvailable) {
+            Log.w("SpeechRecognition", "Speech recognition not available on this device")
+            return
+        }
+        
+        try {
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
                 setRecognitionListener(object : RecognitionListener {
                     override fun onResults(results: Bundle?) {
+                        isListeningForSpeech = false
                         results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.let { matches ->
                             if (matches.isNotEmpty()) {
-                                // Insert the recognized text into the search box
-                                webView.evaluateJavascript("""
-                                (function() {
-                                    var searchInput = document.querySelector('input[name="q"]');
-                                    if (searchInput) {
-                                        searchInput.value = '${matches[0]}';
-                                        searchInput.form.submit();
+                                val text = matches[0]
+                                runOnUiThread {
+                                    onShowKeyboardForEdit(text)
+                                    // Handle inserting text based on what input is focused
+                                    val editFieldVisible = dualWebViewGroup.urlEditText.visibility == View.VISIBLE
+
+                                    when {
+                                        dualWebViewGroup.isBookmarksExpanded() && !editFieldVisible -> {
+                                            // Handle bookmark menu navigation - maybe search bookmarks?
+                                            // For now just toast or ignore
+                                        }
+                                        editFieldVisible -> {
+                                            // Handle any edit field input (URL or bookmark)
+                                            val currentText = dualWebViewGroup.getCurrentLinkText()
+                                            val cursorPosition = dualWebViewGroup.urlEditText.selectionStart
+
+                                            // Insert the text at cursor position
+                                            val newText = StringBuilder(currentText)
+                                                .insert(cursorPosition, text + " ")
+                                                .toString()
+
+                                            // Set text and move cursor after inserted text
+                                            dualWebViewGroup.setLinkText(newText, cursorPosition + text.length + 1)
+                                        }
+                                        dualWebViewGroup.getDialogInput() != null -> {
+                                            val input = dualWebViewGroup.getDialogInput()!!
+                                            val currentText = input.text.toString()
+                                            val cursorPosition = input.selectionStart
+                                            val newText = StringBuilder(currentText).insert(cursorPosition, text + " ").toString()
+                                            input.setText(newText)
+                                            input.setSelection(cursorPosition + text.length + 1)
+                                        }
+                                        else -> {
+                                            sendTextToWebView(text + " ")
+                                        }
                                     }
-                                })();
-                            """.trimIndent(), null)
+                                }
                             }
                         }
                     }
 
                     // Implement other RecognitionListener methods with empty bodies
-                    override fun onReadyForSpeech(params: Bundle?) {}
-                    override fun onBeginningOfSpeech() {}
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        Log.d("SpeechRecognition", "Ready for speech")
+                        dualWebViewGroup.showToast("Listening...")
+                    }
+                    override fun onBeginningOfSpeech() {
+                        Log.d("SpeechRecognition", "Speech started")
+                    }
                     override fun onRmsChanged(rmsdB: Float) {}
                     override fun onBufferReceived(buffer: ByteArray?) {}
-                    override fun onEndOfSpeech() {}
+                    override fun onEndOfSpeech() {
+                        Log.d("SpeechRecognition", "Speech ended")
+                        isListeningForSpeech = false
+                    }
                     override fun onError(error: Int) {
-                        Log.e("SpeechRecognition", "Error: $error")
+                        isListeningForSpeech = false
+                        val errorMsg = when (error) {
+                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
+                            SpeechRecognizer.ERROR_NETWORK -> "Network error"
+                            SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
+                            SpeechRecognizer.ERROR_SERVER -> "Server error"
+                            SpeechRecognizer.ERROR_CLIENT -> "Speech service unavailable"
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected"
+                            SpeechRecognizer.ERROR_NO_MATCH -> "No match found"
+                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognizer busy"
+                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Permission denied"
+                            else -> "Error: $error"
+                        }
+                        Log.e("SpeechRecognition", "Error: $error ($errorMsg)")
+                        dualWebViewGroup.showToast(errorMsg)
                     }
                     override fun onPartialResults(partialResults: Bundle?) {}
                     override fun onEvent(eventType: Int, params: Bundle?) {}
                 })
             }
+            Log.d("SpeechRecognition", "SpeechRecognizer created successfully")
+        } catch (e: Exception) {
+            Log.e("SpeechRecognition", "Failed to create SpeechRecognizer", e)
+            speechRecognizer = null
         }
     }
 
@@ -1984,6 +2049,147 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
+    private var isListeningForSpeech = false
+    private var isSherpaInitialized = false
+
+    override fun onMicrophonePressed() {
+        Log.d("SpeechRecognition", "onMicrophonePressed called, isListening: $isListeningForSpeech")
+        runOnUiThread {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                 Log.d("SpeechRecognition", "Requesting audio permission")
+                 requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSIONS_REQUEST_CODE)
+                 return@runOnUiThread
+            }
+
+            // Use Sherpa-onnx for offline speech recognition
+            if (sherpaRecognizer == null) {
+                initializeSherpaRecognizer()
+            }
+            
+            // If Sherpa is still initializing model, show message
+            if (!isSherpaInitialized) {
+                dualWebViewGroup.showToast("Initializing speech model, please wait...")
+                return@runOnUiThread
+            }
+
+            if (sherpaRecognizer?.isListening() == true) {
+                // Stop listening
+                Log.d("SpeechRecognition", "Stopping Sherpa recognition")
+                sherpaRecognizer?.stopListening()
+                dualWebViewGroup.showToast("Voice command stopped")
+            } else {
+                // Start listening
+                Log.d("SpeechRecognition", "Starting Sherpa recognition")
+                sherpaRecognizer?.startListening()
+                dualWebViewGroup.showToast("Listening...")
+            }
+        }
+    }
+    
+    private fun initializeSherpaRecognizer() {
+        if (sherpaRecognizer != null) return
+        
+        Log.d("SpeechRecognition", "Initializing Sherpa recognizer...")
+        
+        sherpaRecognizer = SherpaSpeechRecognizer(this).apply {
+            setListener(object : SherpaSpeechRecognizer.SpeechListener {
+                override fun onResult(text: String) {
+                    if (text.isNotBlank()) {
+                        Log.d("SpeechRecognition", "Sherpa result: $text")
+                        runOnUiThread {
+                            handleVoiceResult(text)
+                        }
+                    }
+                }
+
+                override fun onPartialResult(text: String) {
+                    if (text.isNotBlank()) {
+                        Log.d("SpeechRecognition", "Sherpa partial: $text")
+                    }
+                }
+
+                override fun onError(message: String) {
+                    Log.e("SpeechRecognition", "Sherpa error: $message")
+                    runOnUiThread {
+                        dualWebViewGroup.showToast("Voice Error: $message")
+                        if (message.contains("Microphone")) {
+                            isSherpaInitialized = false
+                        }
+                    }
+                }
+
+                override fun onListening() {
+                    Log.d("SpeechRecognition", "Sherpa listening")
+                    runOnUiThread {
+                         isListeningForSpeech = true
+                         keyboardView?.setMicActive(true)
+                    }
+                }
+
+                override fun onDone() {
+                     Log.d("SpeechRecognition", "Sherpa done")
+                     runOnUiThread {
+                         isListeningForSpeech = false
+                         keyboardView?.setMicActive(false)
+                     }
+                }
+            })
+            
+            // Load model immediately
+            initModel { success ->
+                runOnUiThread {
+                    if (success) {
+                        Log.d("SpeechRecognition", "Sherpa model loaded successfully")
+                        isSherpaInitialized = true
+                        dualWebViewGroup.showToast("Voice ready")
+                    } else {
+                        Log.e("SpeechRecognition", "Failed to load Sherpa model")
+                        dualWebViewGroup.showToast("Failed to load speech model")
+                        isSherpaInitialized = false
+                    }
+                }
+            }
+        }
+    }
+    
+    private fun handleVoiceResult(text: String) {
+        if (text.isBlank()) return
+        
+        onShowKeyboardForEdit(text)
+        val editFieldVisible = dualWebViewGroup.urlEditText.visibility == View.VISIBLE
+
+        when {
+            dualWebViewGroup.isBookmarksExpanded() && !editFieldVisible -> {
+                // Handle bookmark menu navigation - maybe search bookmarks?
+                // For now just ignore
+            }
+            editFieldVisible -> {
+                // Handle URL/bookmark edit field input
+                val currentText = dualWebViewGroup.getCurrentLinkText()
+                val cursorPosition = dualWebViewGroup.urlEditText.selectionStart.coerceAtLeast(0)
+                val newText = StringBuilder(currentText)
+                    .insert(cursorPosition, text + " ")
+                    .toString()
+                dualWebViewGroup.setLinkText(newText, cursorPosition + text.length + 1)
+            }
+            dualWebViewGroup.getDialogInput() != null -> {
+                val input = dualWebViewGroup.getDialogInput()!!
+                val currentText = input.text.toString()
+                val cursorPosition = input.selectionStart.coerceAtLeast(0)
+                val newText = StringBuilder(currentText).insert(cursorPosition, text + " ").toString()
+                input.setText(newText)
+                input.setSelection((cursorPosition + text.length + 1).coerceAtMost(newText.length))
+            }
+            else -> {
+                sendTextToWebView(text + " ")
+            }
+        }
+        
+        // Stop listening after getting a result
+        sherpaRecognizer?.stopListening()
+        isListeningForSpeech = false
+    }
+
     private fun moveCursor(offset: Int) {
         val focusedView = currentFocus
         if (focusedView != null) {
@@ -2104,10 +2310,22 @@ class MainActivity : AppCompatActivity(),
     }
 
     private fun sendCharacterToWebView(character: String) {
+        sendTextToWebView(character)
+    }
+
+    private fun sendTextToWebView(text: String) {
         if (dualWebViewGroup.isUrlEditing()) {
-            sendCharacterToLinkEditText(character)
+            // For now only supports single character for link editing in current impl,
+            // but we can loop if needed or assume sendCharacterToLinkEditText works for chars.
+            // But this method is generic.
+            // If text is longer than 1 char, we should handle it.
+            // The existing sendCharacterToLinkEditText handles single char.
+            // Let's iterate if it's multiple chars or just insert if we make a sendTextToLinkEditText
+            text.forEach { char ->
+                sendCharacterToLinkEditText(char.toString())
+            }
         } else {
-            //Log.d("InputDebug", "Sending character: $character")
+            //Log.d("InputDebug", "Sending text: $text")
             webView.evaluateJavascript("""
         (function() {
             var el = document.activeElement;
@@ -2117,7 +2335,7 @@ class MainActivity : AppCompatActivity(),
             }
             
             // Create a composition event to better simulate natural typing
-            function simulateNaturalInput(element, char) {
+            function simulateNaturalInput(element, text) {
                 // First, create a compositionstart event
                 const compStart = new Event('compositionstart', { bubbles: true });
                 element.dispatchEvent(compStart);
@@ -2127,7 +2345,7 @@ class MainActivity : AppCompatActivity(),
                     bubbles: true,
                     cancelable: true,
                     inputType: 'insertText',
-                    data: char,
+                    data: text,
                     composed: true
                 });
                 
@@ -2139,7 +2357,7 @@ class MainActivity : AppCompatActivity(),
                     bubbles: true,
                     cancelable: true,
                     inputType: 'insertText',
-                    data: char
+                    data: text
                 });
                 element.dispatchEvent(beforeInputEvent);
                 
@@ -2150,13 +2368,13 @@ class MainActivity : AppCompatActivity(),
                     
                     // Use execCommand for more natural insertion
                     if (document.execCommand) {
-                        document.execCommand('insertText', false, char);
+                        document.execCommand('insertText', false, text);
                     } else {
                         // Fallback: try to preserve cursor position
                         const start = element.selectionStart;
                         const end = element.selectionEnd;
                         element.value = originalValue.slice(0, start) + 
-                                      char + 
+                                      text +
                                       originalValue.slice(end);
                     }
                 }
@@ -2179,7 +2397,7 @@ class MainActivity : AppCompatActivity(),
                 };
             }
             
-            return JSON.stringify(simulateNaturalInput(el, '$character'));
+            return JSON.stringify(simulateNaturalInput(el, ${JSONObject.quote(text)}));
         })();
         """) { result ->
                 Log.d("InputDebug", "JavaScript result: $result")
@@ -2412,7 +2630,10 @@ class MainActivity : AppCompatActivity(),
 
         // Hit test for custom keyboard
         if (isKeyboardVisible) {
-            if (dualWebViewGroup.isPointInKeyboard(interactionX, interactionY)) {
+            // In non-anchored mode, taps are handled directly in DualWebViewGroup.onTouchEvent
+            // to eliminate double-clicks and reduce latency.
+            // Only dispatch from here if we are in anchored mode.
+            if (isAnchored && dualWebViewGroup.isPointInKeyboard(interactionX, interactionY)) {
                 dualWebViewGroup.dispatchKeyboardTap(interactionX, interactionY)
                 return
             }

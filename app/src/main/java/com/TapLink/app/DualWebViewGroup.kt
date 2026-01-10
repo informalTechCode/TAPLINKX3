@@ -59,6 +59,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
     
     val dialogContainer: FrameLayout = FrameLayout(context).apply {
+        layoutParams = FrameLayout.LayoutParams(640, 480)  // Full left eye size
         setBackgroundColor(Color.parseColor("#CC000000")) // Semi-transparent black
         visibility = View.GONE
         isClickable = true
@@ -2668,6 +2669,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 navButton.left.isHovered = true
                 navButton.right.isHovered = true
                 Log.d("HoverDebug", "Hovering over nav button: $name")
+                customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
                 return  // Found the hovered button, stop checking
             }
         }
@@ -2694,6 +2696,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 setHoverFlag()
                 clearNavigationButtonStates()
                 Log.d("HoverDebug", "Hovering over toggle button: $name")
+                customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
                 return  // Found the hovered button, stop checking
             }
         }
@@ -2718,6 +2721,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     if (isOver(view)) {
                         view?.isHovered = true
                         Log.d("HoverDebug", "Hovering over settings element: $id")
+                        customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
                         return // Found the hovered element, stop checking
                     }
                 }
@@ -2736,6 +2740,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                         if (isOver(button)) {
                             button.isHovered = true
                             Log.d("HoverDebug", "Hovering over dialog button: $i")
+                            customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
                             return
                         }
                     }
@@ -2750,36 +2755,14 @@ class DualWebViewGroup @JvmOverloads constructor(
                 val uiLocation = IntArray(2)
                 leftEyeUIContainer.getLocationOnScreen(uiLocation)
 
-                val translatedX = screenX - uiLocation[0]
-                val translatedY = screenY - uiLocation[1]
-
-                val localX: Float
-                val localY: Float
-
-                if (isAnchored) {
-                    val rotationRad = Math.toRadians(leftEyeUIContainer.rotation.toDouble())
-                    val cos = Math.cos(rotationRad).toFloat()
-                    val sin = Math.sin(rotationRad).toFloat()
-                    localX = (translatedX * cos + translatedY * sin) / uiScale
-                    localY = (-translatedX * sin + translatedY * cos) / uiScale
-                } else {
-                    localX = translatedX / uiScale
-                    localY = translatedY / uiScale
-                }
-
-                // Check if the logical point is within the keyboard's logical bounds
-                if (localX >= keyboardContainer.left && localX <= keyboardContainer.right &&
-                    localY >= keyboardContainer.top && localY <= keyboardContainer.bottom) {
-                    
-                    val innerX = localX - keyboardContainer.left
-                    val innerY = localY - keyboardContainer.top
-                    
-                    kbView.updateHover(innerX, innerY)
-                    return // Found hovered keyboard, stop checking
-                } else {
-                    // Not over keyboard, clear its hover
-                    kbView.updateHover(-1f, -1f)
-                }
+                // Use screen coordinates for keyboard hit testing to avoid drift
+                // Pass raw screenX/screenY and let CustomKeyboardView check against actual screen positions
+                kbView.updateHoverScreen(screenX, screenY, uiScale)
+                
+                // We don't return here because updateHoverScreen will internally check if a key was hit.
+                // However, we should check if a key WAS hit to know if we should "consume" the hover event.
+                // For now, if the keyboard is visible, we let it process.
+                return // Stop checking after keyboard processing
             }
         }
     }
@@ -2855,7 +2838,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         clearNavigationButtonStates()
         
         // Clear keyboard hover
-        customKeyboard?.updateHover(-1f, -1f)
+        customKeyboard?.updateHoverScreen(-1f, -1f, 1f)
     }
 
 
@@ -4479,6 +4462,85 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
     }
 
+    private var toastHandler: Handler? = Handler(Looper.getMainLooper())
+    private var toastRunnable: Runnable? = null
+
+    /**
+     * Shows a toast message that renders in both eyes.
+     * @param message The message to display
+     * @param durationMs How long to show the toast (default 2000ms)
+     */
+    fun showToast(message: String, durationMs: Long = 2000L) {
+        Log.d("Toast", "showToast called with message: $message")
+        // Ensure we're on the UI thread
+        post {
+            Log.d("Toast", "Inside post block, creating toast view")
+            // Cancel any existing toast
+            toastRunnable?.let { toastHandler?.removeCallbacks(it) }
+            dialogContainer.removeAllViews()
+
+            val padding = 16.dp()
+            val toastView = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    gravity = Gravity.CENTER
+                }
+                setPadding(padding * 2, padding, padding * 2, padding)
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#E0303030"))  // Semi-transparent dark
+                    cornerRadius = 24f
+                }
+                elevation = 100f
+            }
+
+            val messageView = TextView(context).apply {
+                text = message
+                textSize = 16f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+            }
+            toastView.addView(messageView)
+
+            // Use a transparent scrim for toast (unlike dialogs which block interaction)
+            dialogContainer.setBackgroundColor(Color.TRANSPARENT)
+            dialogContainer.addView(toastView)
+            dialogContainer.visibility = View.VISIBLE
+            dialogContainer.bringToFront()
+            dialogContainer.isClickable = false  // Allow clicks to pass through
+
+            Log.d("Toast", "Toast view added, dialogContainer visible: ${dialogContainer.visibility == View.VISIBLE}, child count: ${dialogContainer.childCount}")
+
+            // Ensure rendering updates
+            requestLayout()
+            invalidate()
+            startRefreshing()
+
+            // Auto-dismiss after duration
+            toastRunnable = Runnable {
+                hideToast()
+            }
+            toastHandler?.postDelayed(toastRunnable!!, durationMs)
+        }
+    }
+
+    private fun hideToast() {
+        dialogContainer.visibility = View.GONE
+        dialogContainer.removeAllViews()
+        // Restore dialog container background for future dialogs
+        dialogContainer.setBackgroundColor(Color.parseColor("#CC000000"))
+        dialogContainer.isClickable = true
+        
+        post {
+            requestLayout()
+            invalidate()
+            startRefreshing()
+        }
+    }
+
     // Helper method to get the current dialog input if any
     fun getDialogInput(): EditText? {
          if (dialogContainer.visibility != View.VISIBLE) return null
@@ -4500,7 +4562,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     private fun setupMaskOverlayUI() {
-        val halfWidth = 640 // Logical width
+
 
         // Unmask button (Bottom Right)
         btnMaskUnmask = ImageButton(context).apply {
