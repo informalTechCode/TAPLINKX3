@@ -627,10 +627,10 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Add the container to the main view
         //addView(leftEyeUIContainer)
 
-        // Set background colors to black
+        // Set background styles - use gradient drawables for modern look
         setBackgroundColor(Color.BLACK)
-        leftNavigationBar.setBackgroundColor(Color.BLACK)
-        leftToggleBar.setBackgroundColor(Color.BLACK)
+        leftNavigationBar.background = ContextCompat.getDrawable(context, R.drawable.nav_bar_background)
+        leftToggleBar.background = ContextCompat.getDrawable(context, R.drawable.toggle_bar_background)
 
 
 
@@ -1523,7 +1523,12 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         val width = r - l
         val height = b - t
-        val halfWidth = width / 2
+        
+        // Hardcoded eye resolution - 640x480 per eye
+        val eyeWidth = 640
+        val eyeHeight = 480
+        val halfWidth = eyeWidth  // Each eye is 640px wide
+        
         val toggleBarWidth = 40
         val navBarHeight = 40
         // Use actual measured height of keyboard if visible, otherwise default
@@ -1563,39 +1568,39 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Calculate available content height based on keyboard visibility
         val contentHeight = if (keyboardContainer.visibility == View.VISIBLE) {
-            height - keyboardHeight
+            eyeHeight - keyboardHeight
         } else {
-            height - navBarHeight
+            eyeHeight - navBarHeight
         }
 
-        // Layout the clip parent
+        // Layout the clip parent - hardcoded 640x480
         leftEyeClipParent.layout(
             0,  // After toggle bar
             0,
-            640,  // Fixed width for left eye
-            height
+            eyeWidth,  // Fixed width for left eye
+            eyeHeight
         )
 
         fullScreenOverlayContainer.layout(
             0,  // Relative to leftEyeClipParent
             0,
             halfWidth,  // 640px width (matches clip parent)
-            height
+            eyeHeight
         )
 
 
         // Position SurfaceView exactly like WebView but offset horizontally for right eye
         rightEyeView.layout(
-            halfWidth,
+            eyeWidth,
             0,
-            width ,
-            height
+            eyeWidth * 2,
+            eyeHeight
         )
 
 
 
-        // Layout toggle bar - make sure it's tall enough for all buttons
-        leftToggleBar.layout(0, 0, toggleBarWidth, 596)
+        // Layout toggle bar - height is eyeHeight minus navBarHeight (480 - 40 = 440)
+        leftToggleBar.layout(0, 0, toggleBarWidth, eyeHeight - navBarHeight)
 //            Log.d("ToggleBarDebug", """
 //        Toggle Bar Layout:
 //        Visibility: ${leftToggleBar.visibility}
@@ -1605,8 +1610,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 //        Parent: ${leftToggleBar.parent?.javaClass?.simpleName}
 //    """.trimIndent())
 
-        val keyboardY = height - keyboardHeight
-        keyboardContainer.layout(toggleBarWidth, keyboardY, toggleBarWidth + keyboardWidth, height)
+        val keyboardY = eyeHeight - keyboardHeight
+        keyboardContainer.layout(toggleBarWidth, keyboardY, toggleBarWidth + keyboardWidth, eyeHeight)
 
         // Position ProgressBar - at bottom in scroll mode, above nav bar otherwise
         val progressBarHeight = 4
@@ -1617,8 +1622,8 @@ class DualWebViewGroup @JvmOverloads constructor(
                 MeasureSpec.makeMeasureSpec(progressBarHeight, MeasureSpec.EXACTLY)
             )
             if (progressBar.visibility == View.VISIBLE) {
-                val pbY = height - progressBarHeight
-                progressBar.layout(0, pbY, halfWidth, height)
+                val pbY = eyeHeight - progressBarHeight
+                progressBar.layout(0, pbY, halfWidth, eyeHeight)
                 progressBar.bringToFront()
             } else {
                 progressBar.layout(0, 0, 0, 0)
@@ -1630,7 +1635,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 MeasureSpec.makeMeasureSpec(progressBarHeight, MeasureSpec.EXACTLY)
             )
             if (progressBar.visibility == View.VISIBLE) {
-                val pbY = height - navBarHeight - progressBarHeight
+                val pbY = eyeHeight - navBarHeight - progressBarHeight
                 progressBar.layout(toggleBarWidth, pbY, halfWidth, pbY + progressBarHeight)
             } else {
                 progressBar.layout(0, 0, 0, 0)
@@ -1648,7 +1653,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             } else {
                 toggleBarWidth
             }
-            keyboardContainer.layout(kbLeft, keyboardY, kbLeft + keyboardWidth, height)
+            keyboardContainer.layout(kbLeft, keyboardY, kbLeft + keyboardWidth, eyeHeight)
 
             // Hide navigation bars
             leftNavigationBar.visibility = View.GONE
@@ -1702,7 +1707,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             //Log.d("EditFieldDebug", "Skipping edit field positioning - conditions not met")
 
             // Hide keyboard containers
-            keyboardContainer.layout(toggleBarWidth, height, toggleBarWidth + keyboardWidth, height + keyboardHeight)
+            keyboardContainer.layout(toggleBarWidth, eyeHeight, toggleBarWidth + keyboardWidth, eyeHeight + keyboardHeight)
 
             // Position bookmarks when keyboard is not visible
             if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
@@ -1710,13 +1715,13 @@ class DualWebViewGroup @JvmOverloads constructor(
                     toggleBarWidth,
                     168,
                     toggleBarWidth + 480,
-                    height
+                    eyeHeight - navBarHeight
                 )
             }
 
-            // Show and position navigation bars
+            // Show and position navigation bars - hardcoded to bottom of 480px eye
             leftNavigationBar.visibility = View.VISIBLE
-            leftNavigationBar.layout(0, height - navBarHeight, halfWidth, height)
+            leftNavigationBar.layout(0, eyeHeight - navBarHeight, halfWidth, eyeHeight)
         }
 
         // Update bitmap capture when layout changes

@@ -3,7 +3,7 @@
     android:layout_width="40dp"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#202020"
+    android:background="@drawable/toggle_bar_background"
     android:paddingTop="0dp"
     android:paddingBottom="8dp"
     android:clipChildren="true"

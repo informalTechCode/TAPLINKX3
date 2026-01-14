@@ -1,27 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Pressed state - accent glow effect -->
     <item android:state_pressed="true">
-        <shape android:shape="rectangle">
-            <solid android:color="#505050" />
-            <corners android:radius="4dp" />
-        </shape>
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="#4069F0AE"/>
+                    <corners android:radius="10dp"/>
+                </shape>
+            </item>
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="#3569F0AE"/>
+                    <corners android:radius="10dp"/>
+                    <stroke android:width="1dp" android:color="#69F0AE"/>
+                </shape>
+            </item>
+        </layer-list>
     </item>
+
+    <!-- Hovered state - glowing accent border -->
     <item android:state_hovered="true">
-        <shape android:shape="rectangle">
-            <solid android:color="#4488FF" />
-            <corners android:radius="4dp" />
-        </shape>
+        <layer-list>
+            <!-- Outer glow simulation -->
+            <item android:left="0dp" android:top="0dp" android:right="0dp" android:bottom="0dp">
+                <shape android:shape="rectangle">
+                    <solid android:color="#2082B1FF"/>
+                    <corners android:radius="12dp"/>
+                </shape>
+            </item>
+            <!-- Main button shape -->
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="#2582B1FF"/>
+                    <corners android:radius="10dp"/>
+                    <stroke android:width="1.5dp" android:color="#82B1FF"/>
+                </shape>
+            </item>
+        </layer-list>
     </item>
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="@android:color/transparent" />
-            <corners android:radius="4dp" />
-        </shape>
-    </item>
-    <!-- Add greyed out state -->
+
+    <!-- Disabled state -->
     <item android:state_enabled="false">
         <shape android:shape="rectangle">
-            <solid android:color="#404040" />
-            <corners android:radius="4dp" />
+            <solid android:color="#25FFFFFF"/>
+            <corners android:radius="10dp"/>
         </shape>
+    </item>
+
+    <!-- Default state - subtle glass effect -->
+    <item>
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="#10FFFFFF"/>
+                    <corners android:radius="10dp"/>
+                </shape>
+            </item>
+            <!-- Subtle top highlight for depth -->
+            <item android:bottom="20dp">
+                <shape android:shape="rectangle">
+                    <gradient
+                        android:angle="270"
+                        android:startColor="#08FFFFFF"
+                        android:endColor="#00FFFFFF"/>
+                    <corners android:topLeftRadius="10dp" android:topRightRadius="10dp"
+                        android:bottomLeftRadius="0dp" android:bottomRightRadius="0dp"/>
+                </shape>
+            </item>
+        </layer-list>
     </item>
 </selector>

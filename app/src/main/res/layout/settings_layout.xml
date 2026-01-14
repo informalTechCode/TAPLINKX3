@@ -4,8 +4,8 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:background="#202020"
-    android:padding="12dp"
+    android:background="@drawable/settings_background"
+    android:padding="16dp"
     android:elevation="1000dp">
 
     <!-- Left Column (Standard Settings) -->
