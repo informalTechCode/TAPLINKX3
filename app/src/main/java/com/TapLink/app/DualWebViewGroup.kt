@@ -2710,6 +2710,11 @@ class DualWebViewGroup @JvmOverloads constructor(
                     R.id.smoothnessSeekBar,
                     R.id.screenSizeSeekBar,
                     R.id.btnResetScreenSize,
+                    R.id.fontSizeSeekBar,
+                    R.id.btnColorWhite,
+                    R.id.btnColorGray,
+                    R.id.btnColorAccent,
+                    R.id.btnColorYellow,
                     R.id.horizontalPosSeekBar,
                     R.id.verticalPosSeekBar,
                     R.id.btnResetPosition,
@@ -2809,6 +2814,11 @@ class DualWebViewGroup @JvmOverloads constructor(
                     R.id.smoothnessSeekBar,
                     R.id.screenSizeSeekBar,
                     R.id.btnResetScreenSize,
+                    R.id.fontSizeSeekBar,
+                    R.id.btnColorWhite,
+                    R.id.btnColorGray,
+                    R.id.btnColorAccent,
+                    R.id.btnColorYellow,
                     R.id.horizontalPosSeekBar,
                     R.id.verticalPosSeekBar,
                     R.id.btnResetPosition,
@@ -3637,6 +3647,31 @@ class DualWebViewGroup @JvmOverloads constructor(
                 progress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
                     .getInt("uiTransYProgress", 50)
             }
+
+            // Initialize font size seekbar (50% = 50, 100% = 100, 200% = 200, slider is 0-150 mapping to 50-200%)
+            val fontSizeSeekBar = menu.findViewById<SeekBar>(R.id.fontSizeSeekBar)
+            val savedFontSize = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                .getInt("webFontSize", 50) // Default 50 = 100%
+            fontSizeSeekBar?.progress = savedFontSize
+            
+            // Initialize color buttons with visual background indicators
+            menu.findViewById<Button>(R.id.btnColorWhite)?.apply {
+                setBackgroundColor(0xFFFFFFFF.toInt())
+            }
+            menu.findViewById<Button>(R.id.btnColorGray)?.apply {
+                setBackgroundColor(0xFF9DB3D1.toInt())
+            }
+            menu.findViewById<Button>(R.id.btnColorAccent)?.apply {
+                setBackgroundColor(0xFF69F0AE.toInt())
+            }
+            menu.findViewById<Button>(R.id.btnColorYellow)?.apply {
+                setBackgroundColor(0xFFFFD54F.toInt())
+            }
+            
+            // Apply saved font settings
+            val savedTextColor = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                .getString("webTextColor", null)
+            applyWebFontSettings(savedFontSize, savedTextColor)
         }
 
         // Toggle visibility state
@@ -3693,6 +3728,11 @@ class DualWebViewGroup @JvmOverloads constructor(
             val helpButton = menu.findViewById<ImageButton>(R.id.btnHelp)
             val resetButton = menu.findViewById<Button>(R.id.btnResetPosition)
             val resetScreenSizeButton = menu.findViewById<Button>(R.id.btnResetScreenSize)
+            val fontSizeSeekBar = menu.findViewById<SeekBar>(R.id.fontSizeSeekBar)
+            val colorWhiteButton = menu.findViewById<Button>(R.id.btnColorWhite)
+            val colorGrayButton = menu.findViewById<Button>(R.id.btnColorGray)
+            val colorAccentButton = menu.findViewById<Button>(R.id.btnColorAccent)
+            val colorYellowButton = menu.findViewById<Button>(R.id.btnColorYellow)
 
             // Get screen locations
             val volumeLocation = IntArray(2)
@@ -3705,6 +3745,11 @@ class DualWebViewGroup @JvmOverloads constructor(
             val helpLocation = IntArray(2)
             val resetLocation = IntArray(2)
             val resetScreenSizeLocation = IntArray(2)
+            val fontSizeLocation = IntArray(2)
+            val colorWhiteLocation = IntArray(2)
+            val colorGrayLocation = IntArray(2)
+            val colorAccentLocation = IntArray(2)
+            val colorYellowLocation = IntArray(2)
 
             val menuLocation = IntArray(2)
             menu.getLocationOnScreen(menuLocation)
@@ -3719,6 +3764,11 @@ class DualWebViewGroup @JvmOverloads constructor(
             helpButton?.getLocationOnScreen(helpLocation)
             resetButton?.getLocationOnScreen(resetLocation)
             resetScreenSizeButton?.getLocationOnScreen(resetScreenSizeLocation)
+            fontSizeSeekBar?.getLocationOnScreen(fontSizeLocation)
+            colorWhiteButton?.getLocationOnScreen(colorWhiteLocation)
+            colorGrayButton?.getLocationOnScreen(colorGrayLocation)
+            colorAccentButton?.getLocationOnScreen(colorAccentLocation)
+            colorYellowButton?.getLocationOnScreen(colorYellowLocation)
 
             if (x >= menuLocation[0] && x <= menuLocation[0] + (menu.width * uiScale) &&
                 y >= menuLocation[1] && y <= menuLocation[1] + (menu.height * uiScale)) {
@@ -4018,6 +4068,90 @@ class DualWebViewGroup @JvmOverloads constructor(
                     return
                 }
 
+                // Check if click is on font size seekbar
+                if (fontSizeSeekBar != null &&
+                    x >= fontSizeLocation[0] && x <= fontSizeLocation[0] + (fontSizeSeekBar.width * uiScale) &&
+                    y >= fontSizeLocation[1] && y <= fontSizeLocation[1] + (fontSizeSeekBar.height * uiScale)) {
+
+                    // Calculate relative position on seekbar
+                    val relativeX = (x - fontSizeLocation[0]) / uiScale
+                    val percentage = relativeX.coerceIn(0f, fontSizeSeekBar.width.toFloat()) / fontSizeSeekBar.width
+                    val newProgress = (percentage * fontSizeSeekBar.max).toInt()
+
+                    // Update font size
+                    fontSizeSeekBar.progress = newProgress
+                    
+                    // Save preference
+                    context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putInt("webFontSize", newProgress)
+                        .apply()
+                    
+                    // Apply to WebView
+                    val savedTextColor = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .getString("webTextColor", null)
+                    applyWebFontSettings(newProgress, savedTextColor)
+
+                    // Visual feedback
+                    fontSizeSeekBar.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        fontSizeSeekBar.isPressed = false
+                    }, 100)
+                    return
+                }
+
+                // Check if click is on white color button
+                if (colorWhiteButton != null &&
+                    x >= colorWhiteLocation[0] && x <= colorWhiteLocation[0] + (colorWhiteButton.width * uiScale) &&
+                    y >= colorWhiteLocation[1] && y <= colorWhiteLocation[1] + (colorWhiteButton.height * uiScale)) {
+
+                    applyTextColor("#FFFFFF")
+                    colorWhiteButton.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        colorWhiteButton.isPressed = false
+                    }, 100)
+                    return
+                }
+
+                // Check if click is on gray color button
+                if (colorGrayButton != null &&
+                    x >= colorGrayLocation[0] && x <= colorGrayLocation[0] + (colorGrayButton.width * uiScale) &&
+                    y >= colorGrayLocation[1] && y <= colorGrayLocation[1] + (colorGrayButton.height * uiScale)) {
+
+                    applyTextColor("#9DB3D1")
+                    colorGrayButton.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        colorGrayButton.isPressed = false
+                    }, 100)
+                    return
+                }
+
+                // Check if click is on accent color button
+                if (colorAccentButton != null &&
+                    x >= colorAccentLocation[0] && x <= colorAccentLocation[0] + (colorAccentButton.width * uiScale) &&
+                    y >= colorAccentLocation[1] && y <= colorAccentLocation[1] + (colorAccentButton.height * uiScale)) {
+
+                    applyTextColor("#69F0AE")
+                    colorAccentButton.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        colorAccentButton.isPressed = false
+                    }, 100)
+                    return
+                }
+
+                // Check if click is on yellow color button
+                if (colorYellowButton != null &&
+                    x >= colorYellowLocation[0] && x <= colorYellowLocation[0] + (colorYellowButton.width * uiScale) &&
+                    y >= colorYellowLocation[1] && y <= colorYellowLocation[1] + (colorYellowButton.height * uiScale)) {
+
+                    applyTextColor("#FFD54F")
+                    colorYellowButton.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        colorYellowButton.isPressed = false
+                    }, 100)
+                    return
+                }
+
                 // Check if click is on close button
                 if (closeButton != null &&
                     x >= closeLocation[0] && x <= closeLocation[0] + (closeButton.width * uiScale) &&
@@ -4058,6 +4192,64 @@ class DualWebViewGroup @JvmOverloads constructor(
         audioManager.playSoundEffect(AudioManager.FX_KEY_CLICK) // Play a standard click sound
     }
 
+    /**
+     * Apply font size and text color settings to the WebView via JavaScript injection.
+     * @param fontSizeProgress Slider progress (0-150) which maps to 50%-200% font size
+     * @param textColor Optional hex color string (e.g., "#FFFFFF")
+     */
+    private fun applyWebFontSettings(fontSizeProgress: Int, textColor: String?) {
+        // Map progress 0-150 to font size 50%-200%
+        val fontSizePercent = 50 + fontSizeProgress
+        
+        val colorCss = if (textColor != null) {
+            "body, body *, p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th { color: $textColor !important; }"
+        } else {
+            ""
+        }
+        
+        val js = """
+            (function() {
+                var styleId = 'taplink-font-settings';
+                var existingStyle = document.getElementById(styleId);
+                if (existingStyle) {
+                    existingStyle.remove();
+                }
+                var style = document.createElement('style');
+                style.id = styleId;
+                style.textContent = 'html { font-size: ${fontSizePercent}% !important; } $colorCss';
+                document.head.appendChild(style);
+            })();
+        """.trimIndent()
+        
+        webView.evaluateJavascript(js, null)
+    }
+
+    /**
+     * Apply text color to webpage and save preference.
+     * @param colorHex Hex color string (e.g., "#FFFFFF")
+     */
+    private fun applyTextColor(colorHex: String) {
+        // Save preference
+        context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+            .edit()
+            .putString("webTextColor", colorHex)
+            .apply()
+        
+        // Get current font size and apply both settings
+        val fontSizeProgress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+            .getInt("webFontSize", 50)
+        applyWebFontSettings(fontSizeProgress, colorHex)
+    }
+
+    /**
+     * Re-apply saved font settings to the WebView. Called when a new page loads.
+     */
+    fun reapplyWebFontSettings() {
+        val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+        val fontSizeProgress = prefs.getInt("webFontSize", 50)
+        val textColor = prefs.getString("webTextColor", null)
+        applyWebFontSettings(fontSizeProgress, textColor)
+    }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()

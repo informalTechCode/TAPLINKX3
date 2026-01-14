@@ -3227,6 +3227,9 @@ class MainActivity : AppCompatActivity(),
                     if (url != null && !url.startsWith("about:blank")) {
                         view?.visibility = View.VISIBLE
                         injectJavaScriptForInputFocus()
+                        
+                        // Re-apply saved font settings to new page
+                        dualWebViewGroup.reapplyWebFontSettings()
 
                         // Inject media listeners with enhanced YouTube support
                         view?.evaluateJavascript("""
