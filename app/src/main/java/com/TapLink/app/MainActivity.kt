@@ -62,6 +62,11 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.provider.Settings
+import android.widget.Toast
+import androidx.core.app.NotificationManagerCompat
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.asin
@@ -356,6 +361,21 @@ class MainActivity : AppCompatActivity(),
 
     private var pendingTouchHandler: Handler? = null
     private var pendingTouchRunnable: Runnable? = null
+
+    private val notificationReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == NotificationService.ACTION_NOTIFICATION_POSTED) {
+                val packageName = intent.getStringExtra(NotificationService.EXTRA_PACKAGE)
+                val title = intent.getStringExtra(NotificationService.EXTRA_TITLE)
+                val text = intent.getStringExtra(NotificationService.EXTRA_TEXT)
+
+                Log.d("MainActivity", "Received notification from $packageName: $title - $text")
+                
+                // Show a toast or update UI with the notification
+                Toast.makeText(context, "Notification: $title - $text", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
 
     init {
@@ -1035,6 +1055,9 @@ class MainActivity : AppCompatActivity(),
 
                 // Log focus state
                 Log.d("WebViewDebug", "WebView focus state: ${view?.isFocused}")
+                
+                // Update scrollbar visibility based on new content
+                dualWebViewGroup.updateScrollBarsVisibility()
             }
 
             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
@@ -1155,6 +1178,13 @@ class MainActivity : AppCompatActivity(),
 
     override fun onPause() {
         super.onPause()
+        
+        try {
+            unregisterReceiver(notificationReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Receiver not registered
+        }
+
         if (isAnchored) {
             // Just unregister the sensor listener to save resources
             sensorManager.unregisterListener(sensorEventListener)
@@ -1163,6 +1193,20 @@ class MainActivity : AppCompatActivity(),
 
     override fun onResume() {
         super.onResume()
+
+        // Register notification receiver
+        val filter = IntentFilter(NotificationService.ACTION_NOTIFICATION_POSTED)
+        registerReceiver(notificationReceiver, filter)
+
+        // Check for notification listener permission
+        if (!isNotificationListenerEnabled()) {
+             // On glasses, we can't reliably open the settings screen.
+             // Just inform the user they need to run the ADB command.
+             Toast.makeText(this, "Run: adb shell cmd notification allow_listener com.TapLinkX3.app/com.TapLink.app.NotificationService", Toast.LENGTH_LONG).show()
+             Log.e("MainActivity", "Notification permission missing. Run: adb shell cmd notification allow_listener com.TapLinkX3.app/com.TapLink.app.NotificationService")
+        }
+
+
         if (isAnchored) {
             // Re-register the sensor listener
             rotationSensor?.let { sensor ->
@@ -4537,7 +4581,6 @@ class MainActivity : AppCompatActivity(),
 
         // Keep JavaScript enabled and go back
         webView.goBack()
-
         webView.invalidate()
         dualWebViewGroup.invalidate()
     }
@@ -4546,6 +4589,13 @@ class MainActivity : AppCompatActivity(),
         finish()
     }
 
+
+
+    private fun isNotificationListenerEnabled(): Boolean {
+        val packageName = packageName
+        val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+        return flat?.contains(packageName) == true
+    }
     override fun onDestroy() {
         super.onDestroy()
         cameraDevice?.close()

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.graphics.drawable.GradientDrawable
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Typeface
 import android.util.AttributeSet
 import android.util.Log
 import android.view.Gravity
@@ -11,9 +12,11 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.UUID
@@ -172,27 +175,61 @@ class BookmarksView @JvmOverloads constructor(
             LayoutParams.MATCH_PARENT,
             LayoutParams.WRAP_CONTENT
         ).apply {
-            setMargins(8, 8, 8, 8)
+            setMargins(16, 12, 16, 12)
         }
-        setBackgroundColor(Color.parseColor("#303030"))
+        background = GradientDrawable().apply {
+            setColor(Color.parseColor("#20FFFFFF"))
+            cornerRadius = 12f
+        }
         setTextColor(Color.WHITE)
+        setHintTextColor(Color.parseColor("#80FFFFFF"))
+        setPadding(16, 12, 16, 12)
         visibility = View.GONE
     }
 
+    // Modern color palette
+    private val colorBackground = Color.parseColor("#E80B0F1A")
+    private val colorItemDefault = Color.parseColor("#15FFFFFF")
+    private val colorItemSelected = Color.parseColor("#3582B1FF")
+    private val colorAccent = Color.parseColor("#82B1FF")
+    private val colorAccentGreen = Color.parseColor("#69F0AE")
+    private val colorTextPrimary = Color.WHITE
+    private val colorTextSecondary = Color.parseColor("#B0FFFFFF")
+    private val colorDanger = Color.parseColor("#FF5252")
 
+    // Header view for the dialog
+    private val headerView = LinearLayout(context).apply {
+        orientation = HORIZONTAL
+        layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+        setPadding(16, 16, 16, 8)
+        gravity = Gravity.CENTER_VERTICAL
+
+        val titleText = TextView(context).apply {
+            text = "Bookmarks"
+            textSize = 18f
+            setTextColor(Color.WHITE)
+            setTypeface(null, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
+        }
+        addView(titleText)
+    }
 
     init {
         orientation = VERTICAL
-        setBackgroundColor(Color.parseColor("#202020"))
-        elevation = 16f
+        background = ContextCompat.getDrawable(context, R.drawable.bookmarks_background)
+        elevation = 24f
+        setPadding(8, 8, 8, 8)
+
+        // Add header
+        addView(headerView)
 
         scrollContainer.apply {
             layoutParams = LayoutParams(
                 LayoutParams.MATCH_PARENT,
-                320
+                280
             )
             isVerticalScrollBarEnabled = true
-            setBackgroundColor(Color.parseColor("#202020"))  // Add explicit background
+            isScrollbarFadingEnabled = false
         }
 
         bookmarksList.apply {
@@ -201,8 +238,7 @@ class BookmarksView @JvmOverloads constructor(
                 LayoutParams.MATCH_PARENT,
                 LayoutParams.WRAP_CONTENT
             )
-            setPadding(8, 8, 8, 8)
-            setBackgroundColor(Color.parseColor("#202020"))  // Add explicit background
+            setPadding(8, 4, 8, 8)
         }
 
         scrollContainer.addView(bookmarksList)
@@ -267,28 +303,40 @@ class BookmarksView @JvmOverloads constructor(
     private fun addBookmarkView(entry: BookmarkEntry) {
         val rowLayout = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 48).apply {
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 52).apply {
                 setMargins(4, 4, 4, 4)
             }
             gravity = Gravity.CENTER_VERTICAL
             tag = entry.id
+            setPadding(8, 0, 8, 0)
 
-            // Set initial background
+            // Set initial modern background
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#303030"))
-                cornerRadius = 4f
+                setColor(colorItemDefault)
+                cornerRadius = 12f
             }
         }
 
-        // Home/Set Home Button
-        val homeButton = TextView(context).apply {
-            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_home, 0, 0, 0)
+        // Home/Set Home Button with modern styling
+        val homeButton = LinearLayout(context).apply {
+            layoutParams = LinearLayout.LayoutParams(44, 44).apply {
+                setMargins(4, 0, 8, 0)
+                gravity = Gravity.CENTER_VERTICAL
+            }
             gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(48, LayoutParams.MATCH_PARENT)
+            background = GradientDrawable().apply {
+                setColor(if (entry.isHome) Color.parseColor("#2069F0AE") else Color.TRANSPARENT)
+                cornerRadius = 8f
+            }
             tag = ViewAction(ActionType.SET_HOME, entry.id, entry.url)
 
-            // Visual indication if it is already home
-            alpha = if (entry.isHome) 1.0f else 0.5f
+            val homeIcon = ImageView(context).apply {
+                setImageResource(R.drawable.ic_home)
+                layoutParams = LinearLayout.LayoutParams(28, 28)
+                alpha = if (entry.isHome) 1.0f else 0.4f
+                setColorFilter(if (entry.isHome) colorAccentGreen else colorTextPrimary)
+            }
+            addView(homeIcon)
 
             setOnClickListener {
                 handleSetAsHome(entry.id)
@@ -297,12 +345,18 @@ class BookmarksView @JvmOverloads constructor(
 
         val urlView = TextView(context).apply {
             text = entry.url
-            textSize = 16f
-            setTextColor(Color.WHITE)
+                .replace("https://", "")
+                .replace("http://", "")
+                .replace("www.", "")
+                .trimEnd('/')
+            textSize = 14f
+            setTextColor(colorTextPrimary)
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(16, 0, 0, 0)
+            setPadding(8, 0, 8, 0)
             layoutParams = LinearLayout.LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
             tag = ViewAction(ActionType.OPEN, entry.id, entry.url)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
         }
 
         rowLayout.addView(homeButton)
@@ -312,13 +366,25 @@ class BookmarksView @JvmOverloads constructor(
 
         // Only add delete button if not home
         if (!entry.isHome) {
-            val deleteButton = TextView(context).apply {
-                text = "X"
-                textSize = 16f
-                setTextColor(Color.RED)
+            val deleteButton = LinearLayout(context).apply {
+                layoutParams = LinearLayout.LayoutParams(40, 40).apply {
+                    setMargins(4, 0, 4, 0)
+                    gravity = Gravity.CENTER_VERTICAL
+                }
                 gravity = Gravity.CENTER
-                layoutParams = LinearLayout.LayoutParams(48, LayoutParams.MATCH_PARENT)
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#15FF5252"))
+                    cornerRadius = 8f
+                }
                 tag = ViewAction(ActionType.DELETE, entry.id)
+
+                val closeIcon = TextView(context).apply {
+                    text = "✕"
+                    textSize = 14f
+                    setTextColor(colorDanger)
+                    gravity = Gravity.CENTER
+                }
+                addView(closeIcon)
 
                 setOnClickListener {
                     handleDeleteBookmark(entry.id)
@@ -428,30 +494,62 @@ class BookmarksView @JvmOverloads constructor(
 
 
     private fun addSpecialButton(text: String, position: Int) {
-        val buttonView = TextView(context).apply {
-            this.text = text
-            textSize = if (text == "+") 24f else 16f
-            setTextColor(Color.WHITE)
+        val isAddButton = text == "+"
+        val isCloseButton = text == "Close"
+
+        val buttonView = LinearLayout(context).apply {
+            orientation = HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(16, 12, 16, 12)
 
             layoutParams = LayoutParams(
                 LayoutParams.MATCH_PARENT,
-                48
+                52
             ).apply {
-                setMargins(4, 4, 4, 4)
+                setMargins(4, if (isAddButton) 8 else 4, 4, 4)
             }
 
-            tag = if (text == "+") {
+            tag = if (isAddButton) {
                 ViewAction(ActionType.NEW)
             } else {
                 ViewAction(ActionType.CLOSE)
             }
 
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#303030"))
-                cornerRadius = 4f
+                when {
+                    isAddButton -> {
+                        setColor(Color.parseColor("#2069F0AE"))
+                        setStroke(1, colorAccentGreen)
+                    }
+                    isCloseButton -> {
+                        setColor(Color.parseColor("#20FFFFFF"))
+                    }
+                    else -> {
+                        setColor(colorItemDefault)
+                    }
+                }
+                cornerRadius = 12f
             }
+
+            // Icon for the button
+            val iconView = TextView(context).apply {
+                this.text = if (isAddButton) "+" else ""
+                textSize = if (isAddButton) 20f else 0f
+                setTextColor(colorAccentGreen)
+                gravity = Gravity.CENTER
+                if (isAddButton) setPadding(0, 0, 8, 0)
+            }
+
+            // Label text
+            val labelView = TextView(context).apply {
+                this.text = if (isAddButton) "Add Bookmark" else "Close"
+                textSize = 14f
+                setTextColor(if (isAddButton) colorAccentGreen else colorTextSecondary)
+                gravity = Gravity.CENTER
+            }
+
+            if (isAddButton) addView(iconView)
+            addView(labelView)
         }
 
         bookmarksList.addView(buttonView)
@@ -466,12 +564,14 @@ class BookmarksView @JvmOverloads constructor(
         val paddingBottom = view.paddingBottom
 
         view.background = GradientDrawable().apply {
-            setColor(if (isSelected) {
-                Color.parseColor("#0066cc")
+            if (isSelected) {
+                setColor(colorItemSelected)
+                setStroke(2, colorAccent)
             } else {
-                Color.parseColor("#303030")
-            })
-            cornerRadius = 4f
+                setColor(colorItemDefault)
+                setStroke(0, Color.TRANSPARENT)
+            }
+            cornerRadius = 12f
         }
 
         view.setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom)
@@ -703,7 +803,7 @@ class BookmarksView @JvmOverloads constructor(
 
             // Force layout measurement before making visible
             measure(
-                MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(420, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
             )
             layout(left, top, left + measuredWidth, top + measuredHeight)
@@ -729,7 +829,7 @@ class BookmarksView @JvmOverloads constructor(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(
-            MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(420, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(400, MeasureSpec.AT_MOST)
         )
     }

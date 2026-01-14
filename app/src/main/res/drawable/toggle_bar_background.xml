@@ -2,17 +2,7 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     
-    <!-- Subtle gradient from dark to slightly lighter (top to bottom) -->
-    <gradient
-        android:angle="0"
-        android:startColor="#0A0F1A"
-        android:centerColor="#0D1320"
-        android:endColor="#121A2E"
-        android:type="linear"/>
-    
-    <!-- Subtle right border for depth -->
-    <stroke
-        android:width="0.5dp"
-        android:color="#18FFFFFF"/>
+    <!-- Solid black background - see-through in AR glasses -->
+    <solid android:color="#000000"/>
     
 </shape>

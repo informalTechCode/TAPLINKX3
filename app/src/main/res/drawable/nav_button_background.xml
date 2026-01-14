@@ -1,73 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Pressed state - accent glow effect -->
+    <!-- Pressed state - simple highlight -->
     <item android:state_pressed="true">
-        <layer-list>
-            <item>
-                <shape android:shape="rectangle">
-                    <solid android:color="#4069F0AE"/>
-                    <corners android:radius="10dp"/>
-                </shape>
-            </item>
-            <item>
-                <shape android:shape="rectangle">
-                    <solid android:color="#3569F0AE"/>
-                    <corners android:radius="10dp"/>
-                    <stroke android:width="1dp" android:color="#69F0AE"/>
-                </shape>
-            </item>
-        </layer-list>
-    </item>
-
-    <!-- Hovered state - glowing accent border -->
-    <item android:state_hovered="true">
-        <layer-list>
-            <!-- Outer glow simulation -->
-            <item android:left="0dp" android:top="0dp" android:right="0dp" android:bottom="0dp">
-                <shape android:shape="rectangle">
-                    <solid android:color="#2082B1FF"/>
-                    <corners android:radius="12dp"/>
-                </shape>
-            </item>
-            <!-- Main button shape -->
-            <item>
-                <shape android:shape="rectangle">
-                    <solid android:color="#2582B1FF"/>
-                    <corners android:radius="10dp"/>
-                    <stroke android:width="1.5dp" android:color="#82B1FF"/>
-                </shape>
-            </item>
-        </layer-list>
-    </item>
-
-    <!-- Disabled state -->
-    <item android:state_enabled="false">
         <shape android:shape="rectangle">
-            <solid android:color="#25FFFFFF"/>
-            <corners android:radius="10dp"/>
+            <solid android:color="#4069F0AE"/>
         </shape>
     </item>
 
-    <!-- Default state - subtle glass effect -->
+    <!-- Hovered state - subtle blue highlight -->
+    <item android:state_hovered="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#3082B1FF"/>
+        </shape>
+    </item>
+
+    <!-- Default state - transparent (see-through on AR display) -->
     <item>
-        <layer-list>
-            <item>
-                <shape android:shape="rectangle">
-                    <solid android:color="#10FFFFFF"/>
-                    <corners android:radius="10dp"/>
-                </shape>
-            </item>
-            <!-- Subtle top highlight for depth -->
-            <item android:bottom="20dp">
-                <shape android:shape="rectangle">
-                    <gradient
-                        android:angle="270"
-                        android:startColor="#08FFFFFF"
-                        android:endColor="#00FFFFFF"/>
-                    <corners android:topLeftRadius="10dp" android:topRightRadius="10dp"
-                        android:bottomLeftRadius="0dp" android:bottomRightRadius="0dp"/>
-                </shape>
-            </item>
-        </layer-list>
+        <shape android:shape="rectangle">
+            <solid android:color="#00000000"/>
+        </shape>
     </item>
 </selector>

@@ -52,7 +52,17 @@ class DualWebViewGroup @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : ViewGroup(context, attrs, defStyleAttr) {
 
-    private val webView: WebView = WebView(context)
+    // Custom WebView to expose protected scroll methods
+    private inner class InternalWebView(context: Context) : WebView(context) {
+        fun getHorizontalScrollRange() = super.computeHorizontalScrollRange()
+        fun getHorizontalScrollExtent() = super.computeHorizontalScrollExtent()
+        fun getHorizontalScrollOffset() = super.computeHorizontalScrollOffset()
+        fun getVerticalScrollRange() = super.computeVerticalScrollRange()
+        fun getVerticalScrollExtent() = super.computeVerticalScrollExtent()
+        fun getVerticalScrollOffset() = super.computeVerticalScrollOffset()
+    }
+
+    private val webView = InternalWebView(context)
     private val rightEyeView: SurfaceView = SurfaceView(context)
     val keyboardContainer: FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.TRANSPARENT)
@@ -80,8 +90,8 @@ class DualWebViewGroup @JvmOverloads constructor(
     private lateinit var leftSystemInfoView: SystemInfoView
 
     lateinit var leftNavigationBar: View
-    private val verticalBarSize = 480 - 40
-    private val nButtons    = 9
+    private val verticalBarSize = 480 - 30
+    private val nButtons    = 7
     private val buttonHeight = verticalBarSize / nButtons
     private val buttonFeedbackDuration = 200L
     var lastCursorX = 0f
@@ -140,11 +150,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var isBookmarkEditing = false
 
-    private var isHoveringScrollUp = false
-    private var isHoveringScrollLeft = false
-    private var isHoveringScrollRight = false
-    private var isHoveringScrollDown = false
-    private val scrollAmount = 50 // Horizontal scroll distance for arrow buttons
     private val verticalScrollFraction = 0.25f // Scroll vertically by 25% of the viewport per tap
 
     private var isHoveringZoomIn = false
@@ -329,6 +334,9 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         updateUiTranslation()
         
+        // Update scroll bar visibility based on scale and anchor mode
+        updateScrollBarsVisibility()
+        
         // Notify listener to refresh cursor scale visually
         listener?.onCursorPositionChanged(lastCursorX, lastCursorY, true)
         
@@ -363,7 +371,190 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         fullScreenOverlayContainer.translationX = transX
         fullScreenOverlayContainer.translationY = transY
+
+        // Update scroll bar thumb positions
+        updateScrollBarThumbs(xProgress, yProgress)
     }
+
+    private fun isWebViewScrollEnabled(): Boolean {
+        // Use WebView scrolling if Anchored OR if in Non-Anchored mode with full scale (no panning needed)
+        return isAnchored || uiScale >= 0.99f
+    }
+
+    private fun scrollPageHorizontal(delta: Int) {
+        if (isWebViewScrollEnabled()) {
+            // Scroll the WebView content
+            val scrollAmount = delta * 15 // Increase sensitivity
+            webView.scrollBy(scrollAmount, 0)
+            updateScrollBarThumbs(0, 0) // Update thumbs immediately
+        } else {
+            // Pan the viewport
+            val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+            val currentProgress = prefs.getInt("uiTransXProgress", 50)
+            val newProgress = (currentProgress + delta).coerceIn(0, 100)
+
+            prefs.edit().putInt("uiTransXProgress", newProgress).apply()
+            updateUiTranslation()
+        }
+    }
+
+    private fun scrollPageVertical(delta: Int) {
+        if (isWebViewScrollEnabled()) {
+            // Scroll the WebView content
+            val scrollAmount = delta * 15 // Increase sensitivity
+            webView.scrollBy(0, scrollAmount)
+            updateScrollBarThumbs(0, 0) // Update thumbs immediately
+        } else {
+            // Pan the viewport
+            val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+            val currentProgress = prefs.getInt("uiTransYProgress", 50)
+            val newProgress = (currentProgress + delta).coerceIn(0, 100)
+
+            prefs.edit().putInt("uiTransYProgress", newProgress).apply()
+            updateUiTranslation()
+        }
+    }
+
+    private fun updateScrollBarThumbs(xProgress: Int, yProgress: Int) {
+        if (isWebViewScrollEnabled()) {
+            // Update Horizontal Thumb based on WebView scroll
+            val hTrackWidth = (horizontalScrollBar.getChildAt(1) as? FrameLayout)?.width ?: 0
+            if (hTrackWidth > 0) {
+                val thumbWidth = 60
+                val maxMargin = hTrackWidth - thumbWidth
+                // Calculate ratio: scrollX / (contentWidth - viewportWidth)
+                // Since we can't easily get full content width without computeHorizontalScrollRange (protected),
+                // we'll rely on an approximation or need to subclass WebView. 
+                // For now, let's try using the standard range approximation if possible, or just skip if we can't get it.
+                // Actually, we can use computeHorizontalScrollRange via reflection or just use scrollX/ArbitraryLargeNumber if needed,
+                // but simpler is to use `webView.scrollX` relative to estimated width.
+                // Let's defer exact horizontal proportion calculation or use a safe fallback.
+                
+                // Using standard view methods available on WebView (which is a View)
+                val range = webView.getHorizontalScrollRange()
+                val extent = webView.getHorizontalScrollExtent()
+                val offset = webView.getHorizontalScrollOffset()
+                
+                if (range > extent) {
+                    val ratio = offset.toFloat() / (range - extent).toFloat()
+                    val hMargin = (ratio * maxMargin).toInt().coerceIn(0, maxMargin)
+                    
+                    (hScrollThumb.layoutParams as? FrameLayout.LayoutParams)?.let {
+                        it.leftMargin = hMargin
+                        hScrollThumb.layoutParams = it
+                    }
+                }
+            }
+
+            // Update Vertical Thumb based on WebView scroll
+            val vTrackHeight = (verticalScrollBar.getChildAt(1) as? FrameLayout)?.height ?: 0
+            if (vTrackHeight > 0) {
+                val thumbHeight = 60
+                val maxMargin = vTrackHeight - thumbHeight
+                
+                val range = webView.getVerticalScrollRange()
+                val extent = webView.getVerticalScrollExtent()
+                val offset = webView.getVerticalScrollOffset()
+
+                if (range > extent) {
+                    val ratio = offset.toFloat() / (range - extent).toFloat()
+                    val vMargin = (ratio * maxMargin).toInt().coerceIn(0, maxMargin)
+                    
+                    (vScrollThumb.layoutParams as? FrameLayout.LayoutParams)?.let {
+                        it.topMargin = vMargin
+                        vScrollThumb.layoutParams = it
+                    }
+                }
+            }
+        } else {
+            // Existing logic for non-anchored (viewport pan)
+            // Update horizontal thumb position
+            val hTrackWidth = (horizontalScrollBar.getChildAt(1) as? FrameLayout)?.width ?: 0
+            if (hTrackWidth > 0) {
+                val thumbWidth = 60
+                val maxMargin = hTrackWidth - thumbWidth
+                val hMargin = (xProgress / 100f * maxMargin).toInt()
+                (hScrollThumb.layoutParams as? FrameLayout.LayoutParams)?.let {
+                    it.leftMargin = hMargin
+                    hScrollThumb.layoutParams = it
+                }
+            }
+
+            // Update vertical thumb position
+            val vTrackHeight = (verticalScrollBar.getChildAt(1) as? FrameLayout)?.height ?: 0
+            if (vTrackHeight > 0) {
+                val thumbHeight = 60
+                val maxMargin = vTrackHeight - thumbHeight
+                val vMargin = (yProgress / 100f * maxMargin).toInt()
+                (vScrollThumb.layoutParams as? FrameLayout.LayoutParams)?.let {
+                    it.topMargin = vMargin
+                    vScrollThumb.layoutParams = it
+                }
+            }
+        }
+    }
+
+    fun updateScrollBarsVisibility() {
+        if (isAnchored) {
+            horizontalScrollBar.visibility = View.GONE
+            verticalScrollBar.visibility = View.GONE
+            
+            // Reset margins when hidden
+             (webView.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
+                p.rightMargin = 0
+                p.bottomMargin = 0
+                webView.layoutParams = p
+            }
+            return
+        }
+
+        val useWebViewScroll = isWebViewScrollEnabled()
+        
+        val shouldShow = if (useWebViewScroll) {
+             // Show only if scrollable in that direction
+             val canScrollVertically = webView.canScrollVertically(-1) || webView.canScrollVertically(1)
+             val canScrollHorizontally = webView.canScrollHorizontally(-1) || webView.canScrollHorizontally(1)
+             canScrollVertically || canScrollHorizontally
+        } else {
+            // Panning mode: Show if scaled down
+            uiScale < 0.99f
+        }
+
+        if (useWebViewScroll) {
+            val canScrollHorizontally = webView.canScrollHorizontally(-1) || webView.canScrollHorizontally(1)
+            horizontalScrollBar.visibility = if (canScrollHorizontally) View.VISIBLE else View.GONE
+            
+            val canScrollVertically = webView.canScrollVertically(-1) || webView.canScrollVertically(1)
+            verticalScrollBar.visibility = if (canScrollVertically) View.VISIBLE else View.GONE
+            
+            // Adjust WebView margins to make space for scrollbars (side-by-side layout)
+            (webView.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
+                p.rightMargin = if (canScrollVertically) 30 else 0
+                p.bottomMargin = if (canScrollHorizontally) 30 else 0
+                webView.layoutParams = p
+            }
+
+            updateScrollBarThumbs(0, 0)
+        } else {
+            horizontalScrollBar.visibility = if (shouldShow) View.VISIBLE else View.GONE
+            verticalScrollBar.visibility = if (shouldShow) View.VISIBLE else View.GONE
+            
+            // Adjust WebView margins
+             (webView.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
+                p.rightMargin = if (shouldShow) 30 else 0
+                p.bottomMargin = if (shouldShow) 30 else 0
+                webView.layoutParams = p
+            }
+
+            if (shouldShow) {
+                val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                val xProgress = prefs.getInt("uiTransXProgress", 50)
+                val yProgress = prefs.getInt("uiTransYProgress", 50)
+                updateScrollBarThumbs(xProgress, yProgress)
+            }
+        }
+    }
+
 
     // Function to update the cursor positions and visibility
     fun updateCursorPosition(x: Float, y: Float, isVisible: Boolean) {
@@ -436,6 +627,13 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var isInScrollMode = false
     private var settingsScrim: View? = null
 
+    // Scroll bar containers for non-anchored mode
+    private var horizontalScrollBar: LinearLayout
+    private var verticalScrollBar: LinearLayout
+    private var hScrollThumb: View
+    private var vScrollThumb: View
+
+
     init {
 
 
@@ -486,6 +684,14 @@ class DualWebViewGroup @JvmOverloads constructor(
                 keyboardContainer.visibility == View.VISIBLE
             }
             setOnLongClickListener { true }
+
+            // Add scroll listener to update thumbs
+            setOnScrollChangeListener { _, _, _, _, _ ->
+                if (isWebViewScrollEnabled()) {
+                    updateScrollBarThumbs(0, 0)
+                    updateScrollBarsVisibility()
+                }
+            }
         }
 
         // Configure SurfaceView for right eye mirroring
@@ -827,6 +1033,168 @@ class DualWebViewGroup @JvmOverloads constructor(
         addView(rightEyeView)  // Keep right eye view separate
         // maskOverlay now added to leftEyeUIContainer above for proper mirroring
 
+        // Create horizontal scroll bar
+        horizontalScrollBar = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.parseColor("#E0202020")) // More opaque background
+            visibility = View.GONE
+            elevation = 150f
+            isClickable = true // Prevent click propagation
+            isFocusable = true
+
+            // Left arrow button
+            val btnLeft = ImageButton(context).apply {
+                layoutParams = LinearLayout.LayoutParams(30, 30)
+                setImageResource(R.drawable.ic_arrow_left)
+                setBackgroundColor(Color.parseColor("#404040"))
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(6, 6, 6, 6)
+            }
+            addView(btnLeft)
+
+            // Track container with thumb
+            val trackContainer = FrameLayout(context).apply {
+                layoutParams = LinearLayout.LayoutParams(0, 30, 1f)
+                setBackgroundColor(Color.parseColor("#303030"))
+            }
+            hScrollThumb = View(context).apply {
+                layoutParams = FrameLayout.LayoutParams(60, 20).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    leftMargin = 0
+                }
+                setBackgroundColor(Color.parseColor("#808080"))
+            }
+            trackContainer.addView(hScrollThumb)
+            addView(trackContainer)
+
+            // Right arrow button
+            val btnRight = ImageButton(context).apply {
+                layoutParams = LinearLayout.LayoutParams(30, 30)
+                setImageResource(R.drawable.ic_arrow_right)
+                setBackgroundColor(Color.parseColor("#404040"))
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(6, 6, 6, 6)
+            }
+            addView(btnRight)
+
+            // Click handlers
+            btnLeft.setOnClickListener { scrollPageHorizontal(-10) }
+            btnRight.setOnClickListener { scrollPageHorizontal(10) }
+            trackContainer.setOnTouchListener { v, event ->
+                if (event.action == MotionEvent.ACTION_UP) {
+                    val fullWidth = v.width
+                    val thumbWidth = hScrollThumb.width
+                    val clickX = event.x
+                    // Center the thumb on the click
+                    val clickLeft = clickX - thumbWidth / 2
+                    val trackableWidth = fullWidth - thumbWidth
+                    val percent = (clickLeft / trackableWidth).coerceIn(0f, 1f)
+
+                    if (isWebViewScrollEnabled()) {
+                        val range = webView.getHorizontalScrollRange()
+                        val extent = webView.getHorizontalScrollExtent()
+                        if (range > extent) {
+                            val targetX = percent * (range - extent)
+                            webView.scrollTo(targetX.toInt(), webView.scrollY)
+                        }
+                    } else {
+                        val newProgress = (percent * 100).toInt()
+                        val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        prefs.edit().putInt("uiTransXProgress", newProgress).apply()
+                        updateUiTranslation()
+                    }
+                }
+                true
+            }
+        }
+
+        // Create vertical scroll bar
+        verticalScrollBar = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#E0202020")) // More opaque background
+            visibility = View.GONE
+            elevation = 150f
+            isClickable = true // Prevent click propagation
+            isFocusable = true
+
+            // Up arrow button
+            val btnUp = ImageButton(context).apply {
+                layoutParams = LinearLayout.LayoutParams(30, 30)
+                setImageResource(R.drawable.ic_arrow_up)
+                setBackgroundColor(Color.parseColor("#404040"))
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(6, 6, 6, 6)
+            }
+            addView(btnUp)
+
+            // Track container with thumb
+            val trackContainer = FrameLayout(context).apply {
+                layoutParams = LinearLayout.LayoutParams(30, 0, 1f)
+                setBackgroundColor(Color.parseColor("#303030"))
+            }
+            vScrollThumb = View(context).apply {
+                layoutParams = FrameLayout.LayoutParams(20, 60).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    topMargin = 0
+                }
+                setBackgroundColor(Color.parseColor("#808080"))
+            }
+            trackContainer.addView(vScrollThumb)
+            addView(trackContainer)
+
+            // Down arrow button
+            val btnDown = ImageButton(context).apply {
+                layoutParams = LinearLayout.LayoutParams(30, 30)
+                setImageResource(R.drawable.ic_arrow_down)
+                setBackgroundColor(Color.parseColor("#404040"))
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(6, 6, 6, 6)
+            }
+            addView(btnDown)
+
+            // Click handlers
+            btnUp.setOnClickListener { scrollPageVertical(-10) }
+            btnDown.setOnClickListener { scrollPageVertical(10) }
+            trackContainer.setOnTouchListener { v, event ->
+                if (event.action == MotionEvent.ACTION_UP) {
+                    val fullHeight = v.height
+                    val thumbHeight = vScrollThumb.height
+                    val clickY = event.y
+                    // Center the thumb on the click
+                    val clickTop = clickY - thumbHeight / 2
+                    val trackableHeight = fullHeight - thumbHeight
+                    val percent = (clickTop / trackableHeight).coerceIn(0f, 1f)
+
+                    if (isWebViewScrollEnabled()) {
+                        val range = webView.getVerticalScrollRange()
+                        val extent = webView.getVerticalScrollExtent()
+                        if (range > extent) {
+                            val targetY = percent * (range - extent)
+                            webView.scrollTo(webView.scrollX, targetY.toInt())
+                        }
+                    } else {
+                        val newProgress = (percent * 100).toInt()
+                        val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        prefs.edit().putInt("uiTransYProgress", newProgress).apply()
+                        updateUiTranslation()
+                    }
+                }
+                true
+            }
+        }
+
+        // Add scroll bars to UI container
+        leftEyeUIContainer.addView(horizontalScrollBar, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, 30).apply {
+            gravity = Gravity.BOTTOM
+            leftMargin = 0
+            bottomMargin = 30 // Sit on top of the 30px nav bar
+        })
+        leftEyeUIContainer.addView(verticalScrollBar, FrameLayout.LayoutParams(30, FrameLayout.LayoutParams.MATCH_PARENT).apply {
+            gravity = Gravity.END
+            bottomMargin = 30 // End at the nav bar
+        })
+
+
         // Load and apply saved UI scale after view hierarchy is ready
         post {
             val savedScaleProgress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
@@ -867,9 +1235,15 @@ class DualWebViewGroup @JvmOverloads constructor(
                 urlEditText -> "urlEditText"
                 else -> "unknown"
             }
-            Log.d("FullscreenDebug", "  Hiding $name (was ${if (target.visibility == View.VISIBLE) "VISIBLE" else "GONE"})")
-            previousFullScreenVisibility[target] = target.visibility
-            target.visibility = View.GONE
+            
+            // Fix: Don't hide WebView to prevent video freeze
+            if (target == webView) {
+                Log.d("FullscreenDebug", "  Skipping hiding webView to prevent video freeze")
+            } else {
+                Log.d("FullscreenDebug", "  Hiding $name (was ${if (target.visibility == View.VISIBLE) "VISIBLE" else "GONE"})")
+                previousFullScreenVisibility[target] = target.visibility
+                target.visibility = View.GONE
+            }
         }
 
         fullScreenOverlayContainer.visibility = View.VISIBLE
@@ -1396,6 +1770,9 @@ class DualWebViewGroup @JvmOverloads constructor(
                 // Get the current bitmap after potential setup
                 val bitmapToUse = bitmap ?: return
 
+                // Check scrollbar visibility periodically (every frame is fine as checks are cheap)
+                updateScrollBarsVisibility()
+
                 // Force cursor refresh if editing
                 if (isUrlEditing && urlEditText.isFocused) {
                     urlEditText.invalidate()
@@ -1505,24 +1882,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
-        // Ensure toggle bar visibility
-        if (leftToggleBar.measuredWidth == 0 || leftToggleBar.measuredHeight == 0) {
-            leftToggleBar.measure(
-                MeasureSpec.makeMeasureSpec(40, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(596, MeasureSpec.EXACTLY)
-            )
-            // Instead of directly calling layout, let's request layout
-            leftToggleBar.requestLayout()
-            // And make sure it's visible
-            leftToggleBar.visibility = View.VISIBLE
-
-            // Force a layout pass on the container
-            leftEyeUIContainer.requestLayout()
-        }
-
-
-        val width = r - l
-        val height = b - t
         
         // Hardcoded eye resolution - 640x480 per eye
         val eyeWidth = 640
@@ -1530,7 +1889,29 @@ class DualWebViewGroup @JvmOverloads constructor(
         val halfWidth = eyeWidth  // Each eye is 640px wide
         
         val toggleBarWidth = 40
-        val navBarHeight = 40
+        val navBarHeight = 30
+
+        // Ensure toggle bar is measured correctly (40x440)
+        leftToggleBar.measure(
+            MeasureSpec.makeMeasureSpec(toggleBarWidth, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(eyeHeight - navBarHeight, MeasureSpec.EXACTLY)
+        )
+        if (leftToggleBar.visibility != View.VISIBLE) {
+            leftToggleBar.visibility = View.VISIBLE
+        }
+
+        // Ensure navigation bar is measured correctly (640x40)
+        leftNavigationBar.measure(
+            MeasureSpec.makeMeasureSpec(halfWidth, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(navBarHeight, MeasureSpec.EXACTLY)
+        )
+        
+        // Force a layout pass on the container if needed
+        if (leftToggleBar.measuredWidth == 0) {
+             leftEyeUIContainer.requestLayout()
+        }
+
+        val height = b - t
         // Use actual measured height of keyboard if visible, otherwise default
         val keyboardHeight = if (keyboardContainer.measuredHeight > 0) keyboardContainer.measuredHeight else 160
         // Keyboard width is same regardless of mode (matches original keyboard size)
@@ -1542,7 +1923,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         
         if (isInScrollMode) {
             val webViewBottom = if (isKeyboardVisible) {
-                height - keyboardHeight  // Shrink to fit above keyboard
+                eyeHeight - keyboardHeight  // Shrink to fit above keyboard
             } else {
                 480
             }
@@ -1554,7 +1935,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             )
         } else {
             val webViewBottom = if (isKeyboardVisible) {
-                minOf(440, height - keyboardHeight)  // Shrink to fit above keyboard
+                minOf(440, eyeHeight - keyboardHeight)  // Shrink to fit above keyboard
             } else {
                 440
             }
@@ -1739,7 +2120,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftSystemInfoView.visibility = View.VISIBLE
             // Calculate system info bar position
             val infoBarHeight = 24
-            val infoBarY = height - navBarHeight - infoBarHeight  // Position above nav bar
+            val infoBarY = eyeHeight - navBarHeight - infoBarHeight  // Position above nav bar
 
             // First measure the info views to get their width
             leftSystemInfoView.measure(
@@ -1767,7 +2148,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             // Measure the dialog container first if needed
             dialogContainer.measure(
                 MeasureSpec.makeMeasureSpec(dialogWidth, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST)
+                MeasureSpec.makeMeasureSpec(eyeHeight, MeasureSpec.AT_MOST)
             )
             
             val measuredH = dialogContainer.measuredHeight
@@ -1776,9 +2157,9 @@ class DualWebViewGroup @JvmOverloads constructor(
             
             // Calculate available vertical space, respecting the keyboard if it is visible
             val availableHeight = if (keyboardContainer.visibility == View.VISIBLE) {
-                height - keyboardHeight
+                eyeHeight - keyboardHeight
             } else {
-                height
+                eyeHeight
             }
             // Center the dialog within the available space
             val dialogTop = (availableHeight - measuredH) / 2
@@ -1808,6 +2189,39 @@ class DualWebViewGroup @JvmOverloads constructor(
                 btnBottom
             )
             btnShowNavBars.bringToFront()
+        }
+
+        // Layout scroll bars for non-anchored mode
+        if (horizontalScrollBar.visibility == View.VISIBLE) {
+            val hScrollHeight = 16
+            val hScrollY = eyeHeight - navBarHeight - hScrollHeight  // Above nav bar
+            horizontalScrollBar.measure(
+                MeasureSpec.makeMeasureSpec(halfWidth - toggleBarWidth - 20, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(hScrollHeight, MeasureSpec.EXACTLY)
+            )
+            horizontalScrollBar.layout(
+                toggleBarWidth + 10,
+                hScrollY,
+                halfWidth - 10,
+                hScrollY + hScrollHeight
+            )
+        }
+
+        if (verticalScrollBar.visibility == View.VISIBLE) {
+            val vScrollWidth = 16
+            val vScrollRight = halfWidth - 4  // Near right edge
+            val vScrollTop = 40  // Below system info area
+            val vScrollHeight = eyeHeight - navBarHeight - vScrollTop - 20
+            verticalScrollBar.measure(
+                MeasureSpec.makeMeasureSpec(vScrollWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(vScrollHeight, MeasureSpec.EXACTLY)
+            )
+            verticalScrollBar.layout(
+                vScrollRight - vScrollWidth,
+                vScrollTop,
+                vScrollRight,
+                vScrollTop + vScrollHeight
+            )
         }
 
         // Layout the UI container to cover just the left half
@@ -2013,7 +2427,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             return true
         }
 
-        if (isAnchored) {
+        // Skip anchored gesture handling when in scroll mode - touches should go directly to WebView
+        if (isAnchored && !isInScrollMode) {
             var isOverTarget = false
             val (cursorX, cursorY) = getCursorInContainerCoords()
 
@@ -2107,7 +2522,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val widthSize = MeasureSpec.getSize(widthMeasureSpec)
         val heightSize = MeasureSpec.getSize(heightMeasureSpec)
         val halfWidth = widthSize / 2
-        val navBarHeight = 40
+        val navBarHeight = 30
         val toggleBarWidth = 40
         val keyboardWidth = halfWidth - toggleBarWidth
 
@@ -2182,7 +2597,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             return true
         }
 
-        if (isAnchored) {
+        // Skip anchored gesture handling when in scroll mode - touches should go directly to WebView
+        if (isAnchored && !isInScrollMode) {
             // Track velocity for anchored interactions (bookmarks scroll, etc.)
             if (velocityTracker == null) {
                 velocityTracker = android.view.VelocityTracker.obtain()
@@ -2590,25 +3006,6 @@ class DualWebViewGroup @JvmOverloads constructor(
                 )
             }
 
-            R.id.btnScrollUp -> {
-                button?.let { showButtonClickFeedback(it) }
-                scrollViewportByFraction(-1)
-            }
-
-            R.id.btnScrollLeft -> {
-                button?.let { showButtonClickFeedback(it) }
-                webView.evaluateJavascript("window.scrollBy(-50, 0);", null)
-            }
-
-            R.id.btnScrollRight -> {
-                button?.let { showButtonClickFeedback(it) }
-                webView.evaluateJavascript("window.scrollBy(50, 0);", null)
-            }
-
-            R.id.btnScrollDown -> {
-                button?.let { showButtonClickFeedback(it) }
-                scrollViewportByFraction(1)
-            }
 
             R.id.btnMask -> {
                 button?.let { showButtonClickFeedback(it) }
@@ -2686,10 +3083,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             Triple(R.id.btnBookmarks, "Bookmarks") { isHoveringBookmarksMenu = true },
             Triple(R.id.btnZoomOut, "ZoomOut") { isHoveringZoomOut = true },
             Triple(R.id.btnZoomIn, "ZoomIn") { isHoveringZoomIn = true },
-            Triple(R.id.btnScrollUp, "ScrollUp") { isHoveringScrollUp = true },
-            Triple(R.id.btnScrollLeft, "ScrollLeft") { isHoveringScrollLeft = true },
-            Triple(R.id.btnScrollRight, "ScrollRight") { isHoveringScrollRight = true },
-            Triple(R.id.btnScrollDown, "ScrollDown") { isHoveringScrollDown = true },
+
             Triple(R.id.btnMask, "Mask") { isHoveringMaskToggle = true },
             Triple(R.id.btnAnchor, "Anchor") { isHoveringAnchorToggle = true }
         )
@@ -2785,10 +3179,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         isHoveringBookmarksMenu = false
         isHoveringZoomIn        = false
         isHoveringZoomOut       = false
-        isHoveringScrollUp      = false
-        isHoveringScrollLeft    = false
-        isHoveringScrollRight   = false
-        isHoveringScrollDown    = false
+
         isHoveringMaskToggle    = false
         isHoveringAnchorToggle  = false
 
@@ -2799,10 +3190,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             R.id.btnBookmarks,
             R.id.btnZoomIn,
             R.id.btnZoomOut,
-            R.id.btnScrollUp,
-            R.id.btnScrollLeft,
-            R.id.btnScrollRight,
-            R.id.btnScrollDown,
+
             R.id.btnMask,
             R.id.btnAnchor
 
@@ -2890,15 +3278,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
     }
 
-    private fun handleScrollButtonClick(direction: String) {
-        when (direction) {
-            "up" -> scrollViewportByFraction(-1)
-            "down" -> scrollViewportByFraction(1)
-            "left" -> webView.evaluateJavascript("window.scrollBy({ left: -$scrollAmount, behavior: 'smooth' });", null)
-            "right" -> webView.evaluateJavascript("window.scrollBy({ left: $scrollAmount, behavior: 'smooth' });", null)
-            else -> return
-        }
-    }
+
 
 
     fun isNavBarVisible(): Boolean {
@@ -2929,7 +3309,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         val halfWidth = width / 2
         val localX = x % halfWidth
         val toggleBarWidth = 40
-        val smallButtonWidth = toggleBarWidth / 2
 
         Log.d("TouchDebug", """
         handleNavigationClick:
@@ -2962,75 +3341,39 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Handle toggle bar clicks
         if (localX < toggleBarWidth) {
-            // Special handling for zoom buttons (add this section)
-            if (y >= 3*buttonHeight && y < 4*buttonHeight) {  // Y-range for zoom buttons (adjust range as needed)
-                if (localX < smallButtonWidth) {
-                    // Zoom out button
-                    handleLeftMenuAction(R.id.btnZoomOut)
-                    return
-                } else if (localX < 2 * smallButtonWidth) {
-                    // Zoom in button
-                    handleLeftMenuAction(R.id.btnZoomIn)
-                    return
-                }
-            }
-            // Special handling for left/right scroll buttons
-            if (y >= 5*buttonHeight && y < 6*buttonHeight) {  // Y-range for horizontal scroll buttons
-                if (localX < smallButtonWidth) {
-                    // Left scroll button
-                    handleLeftMenuAction(R.id.btnScrollLeft)
-                    return
-                } else if (localX < 2 * smallButtonWidth) {
-                    // Right scroll button
-                    handleLeftMenuAction(R.id.btnScrollRight)
-                    return
-                }
-            }
-
-            // Regular toggle buttons
-            data class ToggleButtonInfo(
-                val id: Int,
-                val name: String,
-                val clickHandler: (ImageButton) -> Unit
+            // Use actual button bounds for click detection - more maintainable than hardcoded Y ranges
+            val toggleBarLocation = IntArray(2)
+            leftToggleBar.getLocationOnScreen(toggleBarLocation)
+            
+            // List of all toggle bar buttons to check
+            val toggleBarButtons = listOf(
+                R.id.btnModeToggle,
+                R.id.btnYouTube,
+                R.id.btnBookmarks,
+                R.id.btnZoomOut,
+                R.id.btnZoomIn,
+                R.id.btnMask,
+                R.id.btnAnchor
             )
-
-            val toggleButtons = mapOf(
-                0f..buttonHeight.toFloat() to ToggleButtonInfo(
-                    R.id.btnModeToggle,
-                    "ModeToggle"
-                ) { button -> handleLeftMenuAction(button.id) },
-                buttonHeight.toFloat()..2*buttonHeight.toFloat() to ToggleButtonInfo(
-                    R.id.btnYouTube,
-                    "Dashboard"
-                ) { button -> handleLeftMenuAction(button.id) },
-                2*buttonHeight.toFloat()..3*buttonHeight.toFloat() to ToggleButtonInfo(
-                    R.id.btnBookmarks,
-                    "Bookmarks"
-                ) { button -> handleLeftMenuAction(button.id) },
-                4*buttonHeight.toFloat()..5*buttonHeight.toFloat() to ToggleButtonInfo(
-                    R.id.btnScrollUp,
-                    "ScrollUp"
-                ) { button -> handleLeftMenuAction(button.id) },
-                6*buttonHeight.toFloat()..7*buttonHeight.toFloat() to ToggleButtonInfo(
-                    R.id.btnScrollDown,
-                    "ScrollDown"
-                ) { button -> handleLeftMenuAction(button.id) },
-                7*buttonHeight.toFloat()..8*buttonHeight.toFloat() to ToggleButtonInfo(
-                    R.id.btnMask,
-                    "Mask"
-                ) { button -> handleLeftMenuAction(button.id) },
-                8*buttonHeight.toFloat()..9*buttonHeight.toFloat() to ToggleButtonInfo(
-                    R.id.btnAnchor,
-                    "Anchor"
-                ) { button -> handleLeftMenuAction(button.id) }
-            )
-
-            // Handle regular button clicks
-            toggleButtons.forEach { (range, buttonInfo) ->
-                if (y in range) {
-                    leftToggleBar.findViewById<ImageButton>(buttonInfo.id)?.let { button ->
-                        buttonInfo.clickHandler(button)
-                    }
+            
+            // Check each button's actual bounds
+            for (buttonId in toggleBarButtons) {
+                val button = leftToggleBar.findViewById<View>(buttonId) ?: continue
+                val buttonLocation = IntArray(2)
+                button.getLocationOnScreen(buttonLocation)
+                
+                // Convert screen coordinates to check against button bounds
+                val screenX = toggleBarLocation[0] + localX
+                val screenY = toggleBarLocation[1] + y
+                
+                val buttonLeft = buttonLocation[0]
+                val buttonTop = buttonLocation[1]
+                val buttonRight = buttonLeft + button.width
+                val buttonBottom = buttonTop + button.height
+                
+                if (screenX >= buttonLeft && screenX < buttonRight &&
+                    screenY >= buttonTop && screenY < buttonBottom) {
+                    handleLeftMenuAction(buttonId)
                     return
                 }
             }
@@ -3066,10 +3409,6 @@ class DualWebViewGroup @JvmOverloads constructor(
             when {
                 isHoveringZoomOut -> handleZoomButtonClick("out")
                 isHoveringZoomIn -> handleZoomButtonClick("in")
-                isHoveringScrollUp -> handleScrollButtonClick("up")
-                isHoveringScrollLeft -> handleScrollButtonClick("left")
-                isHoveringScrollRight -> handleScrollButtonClick("right")
-                isHoveringScrollDown -> handleScrollButtonClick("down")
             }
         }
 
@@ -3149,6 +3488,9 @@ class DualWebViewGroup @JvmOverloads constructor(
         webView.visibility = View.VISIBLE
         rightEyeView.visibility = View.VISIBLE
         startRefreshing()
+        
+        // Update scrollbars immediately
+        updateScrollBarsVisibility()
 
         // Disable direct touch handling on toggle bar buttons in anchored mode
         // Logic removed to keep buttons enabled
@@ -3170,6 +3512,9 @@ class DualWebViewGroup @JvmOverloads constructor(
     fun stopAnchoring() {
         isAnchored = false
         resetPositions()
+        
+        // Update scrollbars immediately
+        updateScrollBarsVisibility()
 
         // Re-enable touch handling on toggle bar buttons
         // Logic removed as buttons are no longer disabled
@@ -3296,30 +3641,24 @@ class DualWebViewGroup @JvmOverloads constructor(
         val leftBookmarksButton    = leftToggleBar.findViewById<ImageButton>(R.id.btnBookmarks)
         val leftZoomInButton       = leftToggleBar.findViewById<ImageButton>(R.id.btnZoomIn)
         val leftZoomOutButton      = leftToggleBar.findViewById<ImageButton>(R.id.btnZoomOut)
-        val leftScrollUpButton     = leftToggleBar.findViewById<ImageButton>(R.id.btnScrollUp)
-        val leftScrollLeftButton   = leftToggleBar.findViewById<ImageButton>(R.id.btnScrollLeft)
-        val leftScrollRightButton  = leftToggleBar.findViewById<ImageButton>(R.id.btnScrollRight)
-        val leftScrollDownButton   = leftToggleBar.findViewById<ImageButton>(R.id.btnScrollDown)
         val leftMaskButton         = leftToggleBar.findViewById<ImageButton>(R.id.btnMask)
         val leftAnchorButton       = leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)
 
 
         // Calculate positioning constants
         val buttonHeight = verticalBarSize / (nButtons)
-        val smallButtonWidth = 20 // Size for split buttons (zoom and scroll) - Reduced to match 40 width
+        val smallButtonWidth = 20 // Size for split buttons (zoom) - Reduced to match 40 width
         val buttonWidth      = 2 * smallButtonWidth
         //val spacing = 8 // Standard spacing between buttons
 
-// Calculate Y positions based on consistent spacing (56dp per button)
+// Calculate Y positions based on consistent spacing
         val modeToggleY      = 0
         val dashboardY       = buttonHeight
         val bookmarksY       = buttonHeight * 2
-        val zoomButtonsY     = buttonHeight * 3
-        val scrollUpY        = buttonHeight * 4
-        val leftRightScrollY = buttonHeight * 5
-        val scrollDownY      = buttonHeight * 6
-        val maskY            = buttonHeight * 7
-        val anchorY          = buttonHeight * 8
+        val zoomOutY         = buttonHeight * 3
+        val zoomInY          = buttonHeight * 4
+        val maskY            = buttonHeight * 5
+        val anchorY          = buttonHeight * 6
 
 // Configure main feature buttons (top section)
         listOf(
@@ -3329,7 +3668,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         ).forEach { (button, yPosition) ->
             try {
                 button?.apply {
-                    val params = LinearLayout.LayoutParams(buttonHeight, buttonWidth)
+                    val params = LinearLayout.LayoutParams(buttonWidth, buttonHeight)
                     layoutParams = params
                     visibility = View.VISIBLE
                     background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
@@ -3364,79 +3703,31 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
         }
 
-        // Configure zoom buttons
+        // Configure zoom buttons vertically
         leftZoomOutButton?.apply {
-            layoutParams = LinearLayout.LayoutParams(smallButtonWidth, buttonHeight)
+            layoutParams = LinearLayout.LayoutParams(buttonWidth, buttonHeight)
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
             setImageResource(R.drawable.ic_zoom_out)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(0, 8, 0, 8)
+            setPadding(6, 6, 6, 6)
             elevation = 4f
             alpha = 1f
-            layout(left, zoomButtonsY, left + smallButtonWidth, zoomButtonsY + buttonHeight)
+            layout(left, zoomOutY, left + buttonWidth, zoomOutY + buttonHeight)
         }
 
         leftZoomInButton?.apply {
-            layoutParams = LinearLayout.LayoutParams(smallButtonWidth, buttonHeight)
+            layoutParams = LinearLayout.LayoutParams(buttonWidth, buttonHeight)
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
             setImageResource(R.drawable.ic_zoom_in)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(0, 8, 0, 8)
+            setPadding(6, 6, 6, 6)
             elevation = 4f
             alpha = 1f
-            layout(left + smallButtonWidth, zoomButtonsY, left + 2*smallButtonWidth, zoomButtonsY + buttonHeight)
+            layout(left, zoomInY, left + buttonWidth, zoomInY + buttonHeight)
         }
 
-        // Configure scroll buttons
-        leftScrollUpButton?.apply {
-            layoutParams = LinearLayout.LayoutParams(buttonWidth, buttonHeight)
-            visibility = View.VISIBLE
-            background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(8, 8, 8, 8)
-            elevation = 4f
-            alpha = 1f
-            layout(left, scrollUpY, left + buttonWidth, scrollUpY + buttonHeight)
-        }
-
-        // Configure left scroll button
-        leftScrollLeftButton?.apply {
-            layoutParams = LinearLayout.LayoutParams(smallButtonWidth, buttonHeight)
-            visibility = View.VISIBLE
-            background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            setImageResource(R.drawable.ic_arrow_left)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(0, 8, 0, 8)
-            elevation = 4f
-            alpha = 1f
-            layout(left, leftRightScrollY, left + smallButtonWidth, leftRightScrollY + buttonHeight)
-        }
-
-        // Configure right scroll button
-        leftScrollRightButton?.apply {
-            layoutParams = LinearLayout.LayoutParams(smallButtonWidth, buttonHeight)
-            visibility = View.VISIBLE
-            background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            setImageResource(R.drawable.ic_arrow_right)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(0, 8, 0, 8)
-            elevation = 4f
-            alpha = 1f
-            layout(left + smallButtonWidth, leftRightScrollY, left + 2*smallButtonWidth, leftRightScrollY + buttonHeight)
-        }
-
-        leftScrollDownButton?.apply {
-            layoutParams = LinearLayout.LayoutParams(buttonWidth, buttonHeight)
-            visibility = View.VISIBLE
-            background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(8, 8, 8, 8)
-            elevation = 4f
-            alpha = 1f
-            layout(left, scrollDownY, left + buttonWidth, scrollDownY + buttonHeight)
-        }
 
         leftMaskButton?.apply {
             layoutParams = LinearLayout.LayoutParams(buttonWidth, buttonHeight)
@@ -3469,10 +3760,6 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftBookmarksButton to R.id.btnBookmarks,
             leftZoomOutButton to R.id.btnZoomOut,
             leftZoomInButton to R.id.btnZoomIn,
-            leftScrollUpButton to R.id.btnScrollUp,
-            leftScrollLeftButton to R.id.btnScrollLeft,
-            leftScrollRightButton to R.id.btnScrollRight,
-            leftScrollDownButton to R.id.btnScrollDown,
             leftMaskButton to R.id.btnMask,
             leftAnchorButton to R.id.btnAnchor
         ).forEach { (button, id) ->
@@ -3775,12 +4062,14 @@ class DualWebViewGroup @JvmOverloads constructor(
             colorAccentButton?.getLocationOnScreen(colorAccentLocation)
             colorYellowButton?.getLocationOnScreen(colorYellowLocation)
 
-            if (x >= menuLocation[0] && x <= menuLocation[0] + (menu.width * uiScale) &&
-                y >= menuLocation[1] && y <= menuLocation[1] + (menu.height * uiScale)) {
+            val slop = 40 // Increased from 20 to 40 to handle touch issues better
+
+            if (x >= menuLocation[0] - slop && x <= menuLocation[0] + (menu.width * uiScale) + slop &&
+                y >= menuLocation[1] - slop && y <= menuLocation[1] + (menu.height * uiScale) + slop) {
                 // Check if click is on volume seekbar
                 if (volumeSeekBar != null &&
-                    x >= volumeLocation[0] && x <= volumeLocation[0] + (volumeSeekBar.width * uiScale) &&
-                    y >= volumeLocation[1] && y <= volumeLocation[1] + (volumeSeekBar.height * uiScale)) {
+                    x >= volumeLocation[0] - slop && x <= volumeLocation[0] + (volumeSeekBar.width * uiScale) + slop &&
+                    y >= volumeLocation[1] - slop && y <= volumeLocation[1] + (volumeSeekBar.height * uiScale) + slop) {
 
                     // Calculate relative position on seekbar
                     val relativeX = (x - volumeLocation[0]) / uiScale
@@ -3810,8 +4099,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on brightness seekbar
                 if (brightnessSeekBar != null &&
-                    x >= brightnessLocation[0] && x <= brightnessLocation[0] + (brightnessSeekBar.width * uiScale) &&
-                    y >= brightnessLocation[1] && y <= brightnessLocation[1] + (brightnessSeekBar.height * uiScale)) {
+                    x >= brightnessLocation[0] - slop && x <= brightnessLocation[0] + (brightnessSeekBar.width * uiScale) + slop &&
+                    y >= brightnessLocation[1] - slop && y <= brightnessLocation[1] + (brightnessSeekBar.height * uiScale) + slop) {
 
                     // Calculate relative position on seekbar
                     val relativeX = (x - brightnessLocation[0]) / uiScale
@@ -3834,8 +4123,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on smoothness seekbar
                 if (smoothnessSeekBar != null &&
-                    x >= smoothnessLocation[0] && x <= smoothnessLocation[0] + (smoothnessSeekBar.width * uiScale) &&
-                    y >= smoothnessLocation[1] && y <= smoothnessLocation[1] + (smoothnessSeekBar.height * uiScale)) {
+                    x >= smoothnessLocation[0] - slop && x <= smoothnessLocation[0] + (smoothnessSeekBar.width * uiScale) + slop &&
+                    y >= smoothnessLocation[1] - slop && y <= smoothnessLocation[1] + (smoothnessSeekBar.height * uiScale) + slop) {
 
                     // Calculate relative position on seekbar
                     val relativeX = (x - smoothnessLocation[0]) / uiScale
@@ -3864,8 +4153,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on screen size seekbar
                 if (screenSizeSeekBar != null &&
-                    x >= screenSizeLocation[0] && x <= screenSizeLocation[0] + (screenSizeSeekBar.width * uiScale) &&
-                    y >= screenSizeLocation[1] && y <= screenSizeLocation[1] + (screenSizeSeekBar.height * uiScale)) {
+                    x >= screenSizeLocation[0] - slop && x <= screenSizeLocation[0] + (screenSizeSeekBar.width * uiScale) + slop &&
+                    y >= screenSizeLocation[1] - slop && y <= screenSizeLocation[1] + (screenSizeSeekBar.height * uiScale) + slop) {
 
                     // Calculate relative position on seekbar
                     val relativeX = (x - screenSizeLocation[0]) / uiScale
@@ -3930,8 +4219,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on reset screen size button
                 if (resetScreenSizeButton != null &&
-                    x >= resetScreenSizeLocation[0] && x <= resetScreenSizeLocation[0] + (resetScreenSizeButton.width * uiScale) &&
-                    y >= resetScreenSizeLocation[1] && y <= resetScreenSizeLocation[1] + (resetScreenSizeButton.height * uiScale)) {
+                    x >= resetScreenSizeLocation[0] - slop && x <= resetScreenSizeLocation[0] + (resetScreenSizeButton.width * uiScale) + slop &&
+                    y >= resetScreenSizeLocation[1] - slop && y <= resetScreenSizeLocation[1] + (resetScreenSizeButton.height * uiScale) + slop) {
 
                     // Reset screen size to 100%
                     screenSizeSeekBar?.progress = 100
@@ -3985,8 +4274,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on horizontal pos seekbar
                 if (horizontalPosSeekBar != null && horizontalPosSeekBar.visibility == View.VISIBLE &&
-                    x >= horzPosLocation[0] && x <= horzPosLocation[0] + (horizontalPosSeekBar.width * uiScale) &&
-                    y >= horzPosLocation[1] && y <= horzPosLocation[1] + (horizontalPosSeekBar.height * uiScale)) {
+                    x >= horzPosLocation[0] - slop && x <= horzPosLocation[0] + (horizontalPosSeekBar.width * uiScale) + slop &&
+                    y >= horzPosLocation[1] - slop && y <= horzPosLocation[1] + (horizontalPosSeekBar.height * uiScale) + slop) {
 
                     val relativeX = (x - horzPosLocation[0]) / uiScale
                     val percentage = relativeX.coerceIn(0f, horizontalPosSeekBar.width.toFloat()) / horizontalPosSeekBar.width
@@ -4010,8 +4299,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on vertical pos seekbar
                 if (verticalPosSeekBar != null && verticalPosSeekBar.visibility == View.VISIBLE &&
-                    x >= vertPosLocation[0] && x <= vertPosLocation[0] + (verticalPosSeekBar.width * uiScale) &&
-                    y >= vertPosLocation[1] && y <= vertPosLocation[1] + (verticalPosSeekBar.height * uiScale)) {
+                    x >= vertPosLocation[0] - slop && x <= vertPosLocation[0] + (verticalPosSeekBar.width * uiScale) + slop &&
+                    y >= vertPosLocation[1] - slop && y <= vertPosLocation[1] + (verticalPosSeekBar.height * uiScale) + slop) {
 
                     val relativeX = (x - vertPosLocation[0]) / uiScale
                     val percentage = relativeX.coerceIn(0f, verticalPosSeekBar.width.toFloat()) / verticalPosSeekBar.width
@@ -4035,8 +4324,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on reset button
                 if (resetButton != null && resetButton.visibility == View.VISIBLE &&
-                    x >= resetLocation[0] && x <= resetLocation[0] + (resetButton.width * uiScale) &&
-                    y >= resetLocation[1] && y <= resetLocation[1] + (resetButton.height * uiScale)) {
+                    x >= resetLocation[0] - slop && x <= resetLocation[0] + (resetButton.width * uiScale) + slop &&
+                    y >= resetLocation[1] - slop && y <= resetLocation[1] + (resetButton.height * uiScale) + slop) {
 
                     // Reset position progress to 50 (center)
                     horizontalPosSeekBar?.progress = 50
@@ -4060,8 +4349,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on help button
                 if (helpButton != null &&
-                    x >= helpLocation[0] && x <= helpLocation[0] + (helpButton.width * uiScale) &&
-                    y >= helpLocation[1] && y <= helpLocation[1] + (helpButton.height * uiScale)) {
+                    x >= helpLocation[0] - slop && x <= helpLocation[0] + (helpButton.width * uiScale) + slop &&
+                    y >= helpLocation[1] - slop && y <= helpLocation[1] + (helpButton.height * uiScale) + slop) {
 
                     // Visual feedback
                     helpButton.isPressed = true
@@ -4075,8 +4364,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on font size seekbar
                 if (fontSizeSeekBar != null &&
-                    x >= fontSizeLocation[0] && x <= fontSizeLocation[0] + (fontSizeSeekBar.width * uiScale) &&
-                    y >= fontSizeLocation[1] && y <= fontSizeLocation[1] + (fontSizeSeekBar.height * uiScale)) {
+                    x >= fontSizeLocation[0] - slop && x <= fontSizeLocation[0] + (fontSizeSeekBar.width * uiScale) + slop &&
+                    y >= fontSizeLocation[1] - slop && y <= fontSizeLocation[1] + (fontSizeSeekBar.height * uiScale) + slop) {
 
                     // Calculate relative position on seekbar
                     val relativeX = (x - fontSizeLocation[0]) / uiScale
@@ -4107,8 +4396,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on white color button
                 if (colorWhiteButton != null &&
-                    x >= colorWhiteLocation[0] && x <= colorWhiteLocation[0] + (colorWhiteButton.width * uiScale) &&
-                    y >= colorWhiteLocation[1] && y <= colorWhiteLocation[1] + (colorWhiteButton.height * uiScale)) {
+                    x >= colorWhiteLocation[0] - slop && x <= colorWhiteLocation[0] + (colorWhiteButton.width * uiScale) + slop &&
+                    y >= colorWhiteLocation[1] - slop && y <= colorWhiteLocation[1] + (colorWhiteButton.height * uiScale) + slop) {
 
                     applyTextColor("#FFFFFF")
                     colorWhiteButton.isPressed = true
@@ -4120,8 +4409,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on gray color button
                 if (colorGrayButton != null &&
-                    x >= colorGrayLocation[0] && x <= colorGrayLocation[0] + (colorGrayButton.width * uiScale) &&
-                    y >= colorGrayLocation[1] && y <= colorGrayLocation[1] + (colorGrayButton.height * uiScale)) {
+                    x >= colorGrayLocation[0] - slop && x <= colorGrayLocation[0] + (colorGrayButton.width * uiScale) + slop &&
+                    y >= colorGrayLocation[1] - slop && y <= colorGrayLocation[1] + (colorGrayButton.height * uiScale) + slop) {
 
                     applyTextColor("#9DB3D1")
                     colorGrayButton.isPressed = true
@@ -4133,8 +4422,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on accent color button
                 if (colorAccentButton != null &&
-                    x >= colorAccentLocation[0] && x <= colorAccentLocation[0] + (colorAccentButton.width * uiScale) &&
-                    y >= colorAccentLocation[1] && y <= colorAccentLocation[1] + (colorAccentButton.height * uiScale)) {
+                    x >= colorAccentLocation[0] - slop && x <= colorAccentLocation[0] + (colorAccentButton.width * uiScale) + slop &&
+                    y >= colorAccentLocation[1] - slop && y <= colorAccentLocation[1] + (colorAccentButton.height * uiScale) + slop) {
 
                     applyTextColor("#69F0AE")
                     colorAccentButton.isPressed = true
@@ -4146,8 +4435,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on yellow color button
                 if (colorYellowButton != null &&
-                    x >= colorYellowLocation[0] && x <= colorYellowLocation[0] + (colorYellowButton.width * uiScale) &&
-                    y >= colorYellowLocation[1] && y <= colorYellowLocation[1] + (colorYellowButton.height * uiScale)) {
+                    x >= colorYellowLocation[0] - slop && x <= colorYellowLocation[0] + (colorYellowButton.width * uiScale) + slop &&
+                    y >= colorYellowLocation[1] - slop && y <= colorYellowLocation[1] + (colorYellowButton.height * uiScale) + slop) {
 
                     applyTextColor("#FFD54F")
                     colorYellowButton.isPressed = true
@@ -4159,8 +4448,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                 // Check if click is on close button
                 if (closeButton != null &&
-                    x >= closeLocation[0] && x <= closeLocation[0] + (closeButton.width * uiScale) &&
-                    y >= closeLocation[1] && y <= closeLocation[1] + (closeButton.height * uiScale)) {
+                    x >= closeLocation[0] - slop && x <= closeLocation[0] + (closeButton.width * uiScale) + slop &&
+                    y >= closeLocation[1] - slop && y <= closeLocation[1] + (closeButton.height * uiScale) + slop) {
 
                     // Visual feedback
                     closeButton.isPressed = true
@@ -4300,6 +4589,17 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftNavigationBar.isClickable = false
             leftSystemInfoView.visibility = View.GONE
 
+            // Update scrollbar margins for scroll mode (expand to edges)
+            (horizontalScrollBar.layoutParams as? FrameLayout.LayoutParams)?.apply {
+                leftMargin = 0
+                bottomMargin = 0
+                horizontalScrollBar.layoutParams = this
+            }
+            (verticalScrollBar.layoutParams as? FrameLayout.LayoutParams)?.apply {
+                bottomMargin = 0
+                verticalScrollBar.layoutParams = this
+            }
+
             // Then animate menus away
             leftToggleBar.animate()
                 .alpha(0f)
@@ -4336,6 +4636,17 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftToggleBar.isClickable = true
             leftNavigationBar.isClickable = true
             leftSystemInfoView.visibility = View.VISIBLE
+
+            // Restore scrollbar margins for normal mode (respect bars)
+            (horizontalScrollBar.layoutParams as? FrameLayout.LayoutParams)?.apply {
+                leftMargin = 40
+                bottomMargin = 40
+                horizontalScrollBar.layoutParams = this
+            }
+            (verticalScrollBar.layoutParams as? FrameLayout.LayoutParams)?.apply {
+                bottomMargin = 40
+                verticalScrollBar.layoutParams = this
+            }
 
             // Then show menus with animation
             leftToggleBar.visibility = View.VISIBLE
