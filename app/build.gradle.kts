@@ -17,9 +17,9 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    aaptOptions {
-        noCompress("onnx")
-        noCompress("txt") // for tokens.txt
+    androidResources {
+        noCompress += "onnx"
+        noCompress += "txt" // for tokens.txt
     }
 
 
@@ -64,6 +64,7 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.filament.android)
     implementation(libs.core)
+    implementation(libs.androidx.webkit)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

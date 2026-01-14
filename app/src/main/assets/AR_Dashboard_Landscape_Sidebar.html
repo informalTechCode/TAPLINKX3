@@ -429,7 +429,7 @@
     /* Apps list */
     const appsList = {
       // Social & Messaging
-      gmessages: { name: 'Google Messages', url: 'https://messages.google.com/web' },
+      gmessages: { name: 'Google Messages', url: 'https://messages.google.com/web/welcome' },
       discord: { name: 'Discord', url: 'https://discord.com/app' },
       whatsapp: { name: 'WhatsApp', url: 'https://web.whatsapp.com' },
       instagram: { name: 'Instagram', url: 'https://www.instagram.com' },
@@ -442,12 +442,12 @@
       minijuegos: { name: 'Minijuegos', url: 'https://www.minijuegos.com' },
 
       // Music Streaming
+      ytmusic: { name: 'YouTube Music', url: 'https://music.youtube.com' },
       spotify: { name: 'Spotify', url: 'https://open.spotify.com' },
       applemusic: { name: 'Apple Music', url: 'https://music.apple.com' },
       tidal: { name: 'Tidal', url: 'https://listen.tidal.com' },
       deezer: { name: 'Deezer', url: 'https://www.deezer.com' },
       audiomack: { name: 'Audiomack', url: 'https://audiomack.com' },
-      ytmusic: { name: 'YouTube Music', url: 'https://music.youtube.com' },
       soundcloud: { name: 'SoundCloud', url: 'https://soundcloud.com' },
 
       // Creativity / Multimedia
@@ -464,6 +464,8 @@
 
       // LLMs / Chatbots
       gemini: { name: 'Gemini', url: 'https://gemini.google.com' },
+      googleaistudio: { name: 'Google AI Studio', url: 'https://aistudio.google.com' },
+      jules: { name: 'Jules (Code)', url: 'https://jules.google.com' },
       perplexity: { name: 'Perplexity', url: 'https://www.perplexity.ai' },
       chatgpt: { name: 'ChatGPT', url: 'https://chatgpt.com' },
       claude: { name: 'Claude', url: 'https://claude.ai' },
@@ -524,9 +526,9 @@
 
     const groups = [
       { title: '🧭 Navigation / Entertainment', cls: 'sec-nav', keys: ['youtube', 'gmaps', 'minijuegos', 'tiktok'] },
-      { title: '🧠 AI / Chatbots', cls: 'sec-llm', keys: ['gemini', 'perplexity', 'chatgpt', 'claude', 'deepseek', 'grok'] },
+      { title: '🧠 AI / Chatbots', cls: 'sec-llm', keys: ['gemini', 'googleaistudio', 'jules', 'perplexity', 'chatgpt', 'claude', 'deepseek', 'grok'] },
       { title: '💬 Social / Communication', cls: 'sec-social', keys: ['gmessages', 'discord', 'whatsapp', 'instagram', 'telegram'] },
-      { title: '🎧 Music / Streaming', cls: 'sec-music', keys: ['spotify', 'applemusic', 'tidal', 'deezer', 'audiomack', 'ytmusic', 'soundcloud'] },
+      { title: '🎧 Music / Streaming', cls: 'sec-music', keys: ['ytmusic', 'spotify', 'applemusic', 'tidal', 'deezer', 'audiomack', 'soundcloud'] },
       { title: '🎨 Creativity / Multimedia', cls: 'sec-creative', keys: ['photopea', 'clipchamp', 'bandlab', 'wireframe', 'kleki'] },
       { title: '💼 Productivity / Documents', cls: 'sec-prod', keys: ['todoist', 'stackedit', 'sejda'] },
       { title: '🛠️ Utilities / Reference', cls: 'sec-util', keys: ['wikipedia', 'translate', 'wolfram'] },
