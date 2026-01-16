@@ -58,6 +58,15 @@
 
         <meta-data android:name="com.rayneo.mercury.app" android:value="true" />
 
+        <service android:name=".NotificationService"
+            android:label="@string/app_name"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>
