@@ -829,51 +829,63 @@ class CustomKeyboardView @JvmOverloads constructor(
     }
 
     private fun getKeyAtScreenPosition(screenX: Float, screenY: Float, uiScale: Float): Button? {
-        val shouldLog = false
+        val kvLocation = IntArray(2)
+        this.getLocationOnScreen(kvLocation)
         
+        // Transform Global Cursor -> Local Keyboard Coordinates
+        val localCursorX = (screenX - kvLocation[0]) / uiScale
+        val localCursorY = (screenY - kvLocation[1]) / uiScale
+
+        val shouldLog = false
+
         if (shouldLog) {
-            Log.d("HoverDebug", "=== getKeyAtScreenPosition screen($screenX,$screenY) scale=$uiScale ===")
+            Log.d("HoverDebug", "=== getKeyAtScreenPosition Local($localCursorX,$localCursorY) ===")
         }
 
         var bestCandidate: Button? = null
         var bestDist = Float.MAX_VALUE
 
-        // Tolerance in screen pixels for fuzzy matching (covers gaps between keys)
-        val tolerance = 15f
+        // Fixed tolerance in Layout Pixels (consistent across all devices/scales)
+        // 20px is roughly the size of a finger tap variance
+        val tolerance = 20f
 
         for (button in keys) {
             if (button.visibility != View.VISIBLE) continue
 
-            // Get actual visible bounds in screen coordinates
-            val rect = android.graphics.Rect()
-            if (!button.getGlobalVisibleRect(rect)) continue
+            // Calculate Button's exact position relative to CustomKeyboardView
+            // Hierarchy: CustomKeyboardView -> verticalLL -> horizontalRow -> Button
+            val row = button.parent as? ViewGroup ?: continue
+            val mainLayout = row.parent as? ViewGroup ?: continue
             
-            val btnLeft = rect.left.toFloat()
-            val btnTop = rect.top.toFloat()
-            val btnRight = rect.right.toFloat()
-            val btnBottom = rect.bottom.toFloat()
+            // localX = button.left + row.left + mainLayout.left
+            // Note: mainLayout is the vertical LinearLayout child of CustomKeyboardView.
+            // CustomKeyboardView (FrameLayout/ViewGroup) -> mainLayout -> row -> button.
+            // If mainLayout.parent is CustomKeyboardView, then mainLayout.left is relative to CustomKeyboardView.
+            // Just summing them up is correct.
+            val btnLeft = (button.left + row.left + mainLayout.left).toFloat()
+            val btnTop = (button.top + row.top + mainLayout.top).toFloat()
 
-            if (shouldLog) {
-                Log.d("HoverDebug", "Button '${button.text}': screen bounds ($btnLeft,$btnTop)-($btnRight,$btnBottom)")
-            }
+            val btnRight = btnLeft + button.width
+            val btnBottom = btnTop + button.height
 
-            // --- PASS 1: Strict Hit (screen space) ---
-            if (screenX >= btnLeft && screenX < btnRight &&
-                screenY >= btnTop && screenY < btnBottom) {
+            // --- PASS 1: Strict Hit ---
+            if (localCursorX >= btnLeft && localCursorX < btnRight &&
+                localCursorY >= btnTop && localCursorY < btnBottom) {
                 if (shouldLog) Log.d("HoverDebug", "HIT (Strict): ${button.text}")
                 return button
             }
 
-            // --- PASS 2: Fuzzy matching for gaps between keys ---
-            // Only consider buttons within vertical tolerance (same row priority)
-            val dy = kotlin.math.max(0f, kotlin.math.max(btnTop - screenY, screenY - btnBottom))
+            // --- PASS 2: Bounding Box Distance (Fuzzy) ---
+
+            // Vertical Check (Row Priority)
+            val dy = kotlin.math.max(0f, kotlin.math.max(btnTop - localCursorY, localCursorY - btnBottom))
             
-            if (dy > tolerance) {
+            if (dy > 5f) {
                 continue
             }
 
             // Horizontal Distance
-            val dx = kotlin.math.max(0f, kotlin.math.max(btnLeft - screenX, screenX - btnRight))
+            val dx = kotlin.math.max(0f, kotlin.math.max(btnLeft - localCursorX, localCursorX - btnRight))
             
             val dist = kotlin.math.sqrt(dx * dx + dy * dy)
 
@@ -884,7 +896,7 @@ class CustomKeyboardView @JvmOverloads constructor(
         }
         
         if (bestCandidate != null) {
-            if (shouldLog) Log.d("HoverDebug", "HIT (Fuzzy): ${bestCandidate.text} dist=$bestDist")
+            if (shouldLog) Log.d("HoverDebug", "HIT (BoundingBox): ${bestCandidate.text} dist=$bestDist")
             return bestCandidate
         }
 

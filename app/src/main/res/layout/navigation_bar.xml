@@ -2,25 +2,24 @@
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="24dp"
+    android:layout_height="40dp"
     android:orientation="horizontal"
-    android:background="@drawable/nav_bar_background"
+    android:background="#000000"
     android:gravity="center_vertical"
-    android:paddingStart="4dp"
-    android:paddingEnd="4dp">
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp">
 
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnBack"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
-        android:src="@drawable/ic_arrow_back"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="@string/fa_arrow_left"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Go back"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:gravity="center"
+        android:padding="8dp"/>
 
     <Space
         android:layout_width="0dp"
@@ -29,16 +28,15 @@
 
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnForward"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
-        android:src="@drawable/ic_arrow_forward"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="@string/fa_arrow_right"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Go forward"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:gravity="center"
+        android:padding="8dp"/>
 
     <Space
         android:layout_width="0dp"
@@ -47,16 +45,15 @@
 
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnHome"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
-        android:src="@drawable/ic_home"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="@string/fa_home"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Go home"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:gravity="center"
+        android:padding="8dp"/>
 
     <Space
         android:layout_width="0dp"
@@ -65,16 +62,15 @@
 
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnLink"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
-        android:src="@drawable/ic_link"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="@string/fa_link"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Enter URL"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:gravity="center"
+        android:padding="8dp"/>
 
     <Space
         android:layout_width="0dp"
@@ -83,16 +79,15 @@
 
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnSettings"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
-        android:src="@drawable/ic_settings"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="@string/fa_cog"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Settings"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:gravity="center"
+        android:padding="8dp"/>
 
     <Space
         android:layout_width="0dp"
@@ -101,16 +96,15 @@
 
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnRefresh"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
-        android:src="@drawable/ic_refresh"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="@string/fa_sync"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Refresh page"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:gravity="center"
+        android:padding="8dp"/>
 
     <Space
         android:layout_width="0dp"
@@ -119,16 +113,15 @@
 
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnHide"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
-        android:src="@drawable/ic_visibility_off"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="@string/fa_eye_slash"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Hide navigation"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:gravity="center"
+        android:padding="8dp"/>
 
     <Space
         android:layout_width="0dp"
@@ -137,14 +130,13 @@
 
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnQuit"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
-        android:src="@drawable/ic_close"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="@string/fa_times"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Quit app"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:gravity="center"
+        android:padding="8dp"/>
 </LinearLayout>

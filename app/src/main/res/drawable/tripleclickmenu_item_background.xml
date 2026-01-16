@@ -1,0 +1,10 @@
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Focused item gets lighter gray -->
+    <item
+        android:drawable="@color/light_gray_bg"
+        android:state_selected="true" />
+
+    <!-- Non-focused item is darker gray -->
+    <item
+        android:drawable="@color/dark_gray_bg" />
+</selector>
