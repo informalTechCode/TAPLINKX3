@@ -2,21 +2,24 @@
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="40dp"
+    android:layout_height="24dp"
     android:orientation="horizontal"
-    android:background="#000000"
+    android:background="@drawable/nav_bar_background"
     android:gravity="center_vertical"
-    android:paddingStart="8dp"
-    android:paddingEnd="8dp">
+    android:paddingStart="4dp"
+    android:paddingEnd="4dp">
 
     <ImageButton
         android:id="@+id/btnBack"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="32dp"
+        android:layout_height="24dp"
         android:src="@drawable/ic_arrow_back"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Go back"
-        android:padding="8dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
         android:scaleType="fitCenter"/>
 
     <Space
@@ -26,12 +29,15 @@
 
     <ImageButton
         android:id="@+id/btnForward"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="32dp"
+        android:layout_height="24dp"
         android:src="@drawable/ic_arrow_forward"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Go forward"
-        android:padding="8dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
         android:scaleType="fitCenter"/>
 
     <Space
@@ -41,12 +47,15 @@
 
     <ImageButton
         android:id="@+id/btnHome"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="32dp"
+        android:layout_height="24dp"
         android:src="@drawable/ic_home"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Go home"
-        android:padding="8dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
         android:scaleType="fitCenter"/>
 
     <Space
@@ -56,12 +65,15 @@
 
     <ImageButton
         android:id="@+id/btnLink"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="32dp"
+        android:layout_height="24dp"
         android:src="@drawable/ic_link"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Enter URL"
-        android:padding="8dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
         android:scaleType="fitCenter"/>
 
     <Space
@@ -71,12 +83,15 @@
 
     <ImageButton
         android:id="@+id/btnSettings"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="32dp"
+        android:layout_height="24dp"
         android:src="@drawable/ic_settings"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Settings"
-        android:padding="8dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
         android:scaleType="fitCenter"/>
 
     <Space
@@ -86,12 +101,15 @@
 
     <ImageButton
         android:id="@+id/btnRefresh"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="32dp"
+        android:layout_height="24dp"
         android:src="@drawable/ic_refresh"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Refresh page"
-        android:padding="8dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
         android:scaleType="fitCenter"/>
 
     <Space
@@ -101,12 +119,15 @@
 
     <ImageButton
         android:id="@+id/btnHide"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="32dp"
+        android:layout_height="24dp"
         android:src="@drawable/ic_visibility_off"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Hide navigation"
-        android:padding="8dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
         android:scaleType="fitCenter"/>
 
     <Space
@@ -116,11 +137,14 @@
 
     <ImageButton
         android:id="@+id/btnQuit"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="32dp"
+        android:layout_height="24dp"
         android:src="@drawable/ic_close"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Quit app"
-        android:padding="8dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
         android:scaleType="fitCenter"/>
 </LinearLayout>
