@@ -105,7 +105,7 @@ class SystemInfoView @JvmOverloads constructor(
                 setMargins(6, 0, 6, 0)
             }
             textSize = 14f
-            textColor = Color.WHITE
+            setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         }
     }

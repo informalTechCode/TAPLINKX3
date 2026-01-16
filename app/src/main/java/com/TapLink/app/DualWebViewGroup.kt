@@ -219,11 +219,10 @@ class DualWebViewGroup @JvmOverloads constructor(
         var isHovered: Boolean = false
     )
 
-    private fun ImageButton.configureToggleButton(iconRes: Int) {
+    private fun FontIconView.configureToggleButton(iconText: String) {
         visibility = View.VISIBLE
-        setImageResource(iconRes)
+        text = iconText
         setBackgroundResource(R.drawable.nav_button_background)
-        scaleType = ImageView.ScaleType.FIT_CENTER
         setPadding(8, 8, 8, 8)
         alpha = 1.0f
         elevation = 2f
@@ -635,20 +634,19 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
         // Set up the toggle buttons with explicit configurations
-        leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle).apply {
-            configureToggleButton(R.drawable.ic_mode_mobile)
+        leftToggleBar.findViewById<FontIconView>(R.id.btnModeToggle).apply {
+            configureToggleButton(context.getString(R.string.fa_mobile_screen))
         }
 
-        leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube).apply {
-            configureToggleButton(R.drawable.ic_dashboard)
+        leftToggleBar.findViewById<FontIconView>(R.id.btnYouTube).apply {
+            configureToggleButton(context.getString(R.string.fa_table_columns))
         }
 
 
-        leftToggleBar.findViewById<ImageButton>(R.id.btnBookmarks).apply {
+        leftToggleBar.findViewById<FontIconView>(R.id.btnBookmarks).apply {
             visibility = View.VISIBLE
-            setImageResource(R.drawable.ic_bookmarks)
+            text = context.getString(R.string.fa_bookmark)
             setBackgroundResource(R.drawable.nav_button_background)
-            scaleType = ImageView.ScaleType.FIT_CENTER
             setPadding(8, 8, 8, 8)
             alpha = 1.0f
             elevation = 2f
@@ -984,7 +982,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         maskOverlay.visibility = View.VISIBLE
         maskOverlay.bringToFront()
         // Hide both cursor views
-        leftToggleBar.findViewById<ImageButton>(R.id.btnMask)?.setImageResource(R.drawable.ic_visibility_off)
+        leftToggleBar.findViewById<FontIconView>(R.id.btnMask)?.text = context.getString(R.string.fa_eye_slash)
     }
 
     fun unmaskScreen() {
@@ -992,7 +990,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         maskOverlay.visibility = View.GONE
         // Let MainActivity handle cursor visibility restoration - cursors will be shown
         // if they were visible before masking through updateCursorPosition call
-        leftToggleBar.findViewById<ImageButton>(R.id.btnMask)?.setImageResource(R.drawable.ic_visibility_on)
+        leftToggleBar.findViewById<FontIconView>(R.id.btnMask)?.text = context.getString(R.string.fa_eye)
     }
 
     fun isScreenMasked() = isScreenMasked
@@ -1814,9 +1812,9 @@ class DualWebViewGroup @JvmOverloads constructor(
         maskOverlay.visibility = if (isScreenMasked) View.VISIBLE else View.GONE
 
         // Update the mask button icon
-        leftToggleBar.findViewById<ImageButton>(R.id.btnMask)?.let { button ->
-            button.setImageResource(
-                if (isScreenMasked) R.drawable.ic_visibility_off else R.drawable.ic_visibility_on
+        leftToggleBar.findViewById<FontIconView>(R.id.btnMask)?.let { button ->
+            button.text = context.getString(
+                if (isScreenMasked) R.string.fa_eye_slash else R.string.fa_eye
             )
         }
     }
@@ -1933,7 +1931,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     override fun dispatchDraw(canvas: Canvas) {
         super.dispatchDraw(canvas)
         // Force redraw of toggle buttons
-        leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle)?.invalidate()
+        leftToggleBar.findViewById<FontIconView>(R.id.btnModeToggle)?.invalidate()
     }
 
     private fun getCursorInContainerCoords(): Pair<Float, Float> {
@@ -2445,9 +2443,9 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Update toggle button icons
         webView.post {
-            val leftButton = leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle)
-            val newResource = if (isDesktop) R.drawable.ic_mode_desktop else R.drawable.ic_mode_mobile
-            leftButton?.setImageResource(newResource)
+            val leftButton = leftToggleBar.findViewById<FontIconView>(R.id.btnModeToggle)
+            val newText = context.getString(if (isDesktop) R.string.fa_desktop else R.string.fa_mobile_screen)
+            leftButton?.text = newText
         }
     }
 
@@ -2542,7 +2540,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             keyboardListener?.onHideKeyboard()
         }
 
-        val button = leftToggleBar.findViewById<ImageButton>(buttonId)
+        val button = leftToggleBar.findViewById<FontIconView>(buttonId)
 
         when (buttonId) {
             R.id.btnModeToggle -> {
@@ -2690,7 +2688,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         )
         
         for ((buttonId, name, setHoverFlag) in toggleBarButtons) {
-            val button = leftToggleBar.findViewById<ImageButton>(buttonId)
+            val button = leftToggleBar.findViewById<FontIconView>(buttonId)
             if (isOver(button)) {
                 button?.isHovered = true
                 setHoverFlag()
@@ -2797,7 +2795,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             R.id.btnAnchor
 
         ).forEach { id ->
-            leftToggleBar.findViewById<ImageButton>(id)?.isHovered = false
+            leftToggleBar.findViewById<FontIconView>(id)?.isHovered = false
         }
         
         // Clear settings hover states
@@ -2976,7 +2974,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             data class ToggleButtonInfo(
                 val id: Int,
                 val name: String,
-                val clickHandler: (ImageButton) -> Unit
+                val clickHandler: (View) -> Unit
             )
 
             val toggleButtons = mapOf(
@@ -3013,7 +3011,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             // Handle regular button clicks
             toggleButtons.forEach { (range, buttonInfo) ->
                 if (y in range) {
-                    leftToggleBar.findViewById<ImageButton>(buttonInfo.id)?.let { button ->
+                    leftToggleBar.findViewById<FontIconView>(buttonInfo.id)?.let { button ->
                         buttonInfo.clickHandler(button)
                     }
                     return
@@ -3147,8 +3145,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftBookmarksView.setAnchoredMode(true)
         }
 
-        // Use unbarred anchor icon when anchored
-        leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)?.setImageResource(R.drawable.ic_anchor)
+        // Use anchor icon when anchored
+        leftToggleBar.findViewById<FontIconView>(R.id.btnAnchor)?.text = context.getString(R.string.fa_anchor)
         tripleClickMenu?.updateAnchorButtonState(true)
     }
 
@@ -3168,7 +3166,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftBookmarksView.setAnchoredMode(false)
         }
 
-        leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)?.setImageResource(R.drawable.ic_anchor_barred)
+        leftToggleBar.findViewById<FontIconView>(R.id.btnAnchor)?.text = context.getString(R.string.fa_arrows_up_down_left_right)
         tripleClickMenu?.updateAnchorButtonState(false)
         webView.visibility = View.VISIBLE
         rightEyeView.visibility = View.VISIBLE
@@ -3276,17 +3274,17 @@ class DualWebViewGroup @JvmOverloads constructor(
 """.trimIndent())
 
         // Get references to all buttons
-        val leftModeToggleButton   = leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle)
-        val leftDashboardButton    = leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube)
-        val leftBookmarksButton    = leftToggleBar.findViewById<ImageButton>(R.id.btnBookmarks)
-        val leftZoomInButton       = leftToggleBar.findViewById<ImageButton>(R.id.btnZoomIn)
-        val leftZoomOutButton      = leftToggleBar.findViewById<ImageButton>(R.id.btnZoomOut)
-        val leftScrollUpButton     = leftToggleBar.findViewById<ImageButton>(R.id.btnScrollUp)
-        val leftScrollLeftButton   = leftToggleBar.findViewById<ImageButton>(R.id.btnScrollLeft)
-        val leftScrollRightButton  = leftToggleBar.findViewById<ImageButton>(R.id.btnScrollRight)
-        val leftScrollDownButton   = leftToggleBar.findViewById<ImageButton>(R.id.btnScrollDown)
-        val leftMaskButton         = leftToggleBar.findViewById<ImageButton>(R.id.btnMask)
-        val leftAnchorButton       = leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)
+        val leftModeToggleButton   = leftToggleBar.findViewById<FontIconView>(R.id.btnModeToggle)
+        val leftDashboardButton    = leftToggleBar.findViewById<FontIconView>(R.id.btnYouTube)
+        val leftBookmarksButton    = leftToggleBar.findViewById<FontIconView>(R.id.btnBookmarks)
+        val leftZoomInButton       = leftToggleBar.findViewById<FontIconView>(R.id.btnZoomIn)
+        val leftZoomOutButton      = leftToggleBar.findViewById<FontIconView>(R.id.btnZoomOut)
+        val leftScrollUpButton     = leftToggleBar.findViewById<FontIconView>(R.id.btnScrollUp)
+        val leftScrollLeftButton   = leftToggleBar.findViewById<FontIconView>(R.id.btnScrollLeft)
+        val leftScrollRightButton  = leftToggleBar.findViewById<FontIconView>(R.id.btnScrollRight)
+        val leftScrollDownButton   = leftToggleBar.findViewById<FontIconView>(R.id.btnScrollDown)
+        val leftMaskButton         = leftToggleBar.findViewById<FontIconView>(R.id.btnMask)
+        val leftAnchorButton       = leftToggleBar.findViewById<FontIconView>(R.id.btnAnchor)
 
 
         // Calculate positioning constants
@@ -3318,7 +3316,6 @@ class DualWebViewGroup @JvmOverloads constructor(
                     layoutParams = params
                     visibility = View.VISIBLE
                     background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-                    scaleType = ImageView.ScaleType.FIT_CENTER
                     setPadding(8, 8, 8, 8)
                     elevation = 4f
                     alpha = 1f
@@ -3354,8 +3351,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             layoutParams = LinearLayout.LayoutParams(smallButtonWidth, buttonHeight)
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            setImageResource(R.drawable.ic_zoom_out)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            text = context.getString(R.string.fa_magnifying_glass_minus)
             setPadding(0, 8, 0, 8)
             elevation = 4f
             alpha = 1f
@@ -3366,8 +3362,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             layoutParams = LinearLayout.LayoutParams(smallButtonWidth, buttonHeight)
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            setImageResource(R.drawable.ic_zoom_in)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            text = context.getString(R.string.fa_magnifying_glass_plus)
             setPadding(0, 8, 0, 8)
             elevation = 4f
             alpha = 1f
@@ -3379,7 +3374,6 @@ class DualWebViewGroup @JvmOverloads constructor(
             layoutParams = LinearLayout.LayoutParams(buttonWidth, buttonHeight)
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            scaleType = ImageView.ScaleType.FIT_CENTER
             setPadding(8, 8, 8, 8)
             elevation = 4f
             alpha = 1f
@@ -3391,8 +3385,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             layoutParams = LinearLayout.LayoutParams(smallButtonWidth, buttonHeight)
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            setImageResource(R.drawable.ic_arrow_left)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            text = context.getString(R.string.fa_arrow_left)
             setPadding(0, 8, 0, 8)
             elevation = 4f
             alpha = 1f
@@ -3404,8 +3397,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             layoutParams = LinearLayout.LayoutParams(smallButtonWidth, buttonHeight)
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            setImageResource(R.drawable.ic_arrow_right)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            text = context.getString(R.string.fa_arrow_right)
             setPadding(0, 8, 0, 8)
             elevation = 4f
             alpha = 1f
@@ -3416,7 +3408,6 @@ class DualWebViewGroup @JvmOverloads constructor(
             layoutParams = LinearLayout.LayoutParams(buttonWidth, buttonHeight)
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            scaleType = ImageView.ScaleType.FIT_CENTER
             setPadding(8, 8, 8, 8)
             elevation = 4f
             alpha = 1f
@@ -3427,8 +3418,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             layoutParams = LinearLayout.LayoutParams(buttonWidth, buttonHeight)
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            setImageResource(R.drawable.ic_visibility_on)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            text = context.getString(R.string.fa_eye)
             setPadding(8, 8, 8, 8)
             elevation = 4f
             alpha = 1f
@@ -3440,8 +3430,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
             // Check anchored state and set appropriate icon
-            setImageResource(if (isAnchored) R.drawable.ic_anchor else R.drawable.ic_anchor_barred)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            text = context.getString(if (isAnchored) R.string.fa_anchor else R.string.fa_arrows_up_down_left_right)
             setPadding(8, 8, 8, 8)
             elevation = 4f
             alpha = 1f
