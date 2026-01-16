@@ -81,9 +81,9 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var velocityTracker: android.view.VelocityTracker? = null
     private val refreshHandler = Handler(Looper.getMainLooper())
-    private val refreshInterval = 33L // Reduced to ~30fps for performance
+    private val refreshInterval = 16L // ~60fps for smooth mirroring
     private var lastCaptureTime = 0L
-    private val MIN_CAPTURE_INTERVAL = 33L  // Cap at ~30fps
+    private val MIN_CAPTURE_INTERVAL = 16L  // Cap at ~60fps
     private var lastCursorUpdateTime = 0L
     private val CURSOR_UPDATE_INTERVAL = 16L  // 60fps cap for cursor updates
 
@@ -492,63 +492,111 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     fun updateScrollBarsVisibility() {
+        Log.d("ScrollDebug", "updateScrollBarsVisibility called. isAnchored=$isAnchored, isInScrollMode=$isInScrollMode, uiScale=$uiScale")
+
+        // Determine mode-specific base constraints
+        val isScrollModeActive = isInScrollMode
+        
+        // Base dimensions
+        // Base dimensions
+        val containerWidth = 640
+        // Corrected base margins: Nav bar is 30px, Toggle bar is 40px
+        val baseLeftMargin = if (isScrollModeActive) 0 else 40
+        val baseBottomMargin = if (isScrollModeActive) 0 else 30 
+        
+        // If anchored, scrollbars are always hidden
         if (isAnchored) {
             horizontalScrollBar.visibility = View.GONE
             verticalScrollBar.visibility = View.GONE
             
-            // Reset margins when hidden
-             (webView.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
+            (webView.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
+                if (isScrollModeActive) {
+                    p.width = containerWidth
+                    p.height = 480
+                } else {
+                    p.width = containerWidth - baseLeftMargin // 640 - 40 = 600
+                    p.height = FrameLayout.LayoutParams.MATCH_PARENT
+                }
+                p.leftMargin = baseLeftMargin
                 p.rightMargin = 0
-                p.bottomMargin = 0
+                p.bottomMargin = baseBottomMargin
                 webView.layoutParams = p
             }
             return
         }
 
         val useWebViewScroll = isWebViewScrollEnabled()
-        
         val shouldShow = if (useWebViewScroll) {
-             // Show only if scrollable in that direction
              val canScrollVertically = webView.canScrollVertically(-1) || webView.canScrollVertically(1)
              val canScrollHorizontally = webView.canScrollHorizontally(-1) || webView.canScrollHorizontally(1)
              canScrollVertically || canScrollHorizontally
         } else {
-            // Panning mode: Show if scaled down
             uiScale < 0.99f
         }
 
-        if (useWebViewScroll) {
-            val canScrollHorizontally = webView.canScrollHorizontally(-1) || webView.canScrollHorizontally(1)
-            horizontalScrollBar.visibility = if (canScrollHorizontally) View.VISIBLE else View.GONE
-            
-            val canScrollVertically = webView.canScrollVertically(-1) || webView.canScrollVertically(1)
-            verticalScrollBar.visibility = if (canScrollVertically) View.VISIBLE else View.GONE
-            
-            // Adjust WebView margins to make space for scrollbars (side-by-side layout)
-            (webView.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
-                p.rightMargin = if (canScrollVertically) 30 else 0
-                p.bottomMargin = if (canScrollHorizontally) 30 else 0
-                webView.layoutParams = p
-            }
+        // Determine visibility independently
+        val showHorz: Boolean = if (useWebViewScroll) {
+             webView.canScrollHorizontally(-1) || webView.canScrollHorizontally(1)
+        } else shouldShow
 
-            updateScrollBarThumbs(0, 0)
-        } else {
-            horizontalScrollBar.visibility = if (shouldShow) View.VISIBLE else View.GONE
-            verticalScrollBar.visibility = if (shouldShow) View.VISIBLE else View.GONE
-            
-            // Adjust WebView margins
-             (webView.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
-                p.rightMargin = if (shouldShow) 30 else 0
-                p.bottomMargin = if (shouldShow) 30 else 0
-                webView.layoutParams = p
-            }
+        val showVert: Boolean = if (useWebViewScroll) {
+             webView.canScrollVertically(-1) || webView.canScrollVertically(1)
+        } else shouldShow
+        
+        horizontalScrollBar.visibility = if (showHorz) View.VISIBLE else View.GONE
+        verticalScrollBar.visibility = if (showVert) View.VISIBLE else View.GONE
+        
+        // Apply layout adjustments
+        (webView.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
+            val rightMarginShift = if (showVert) 20 else 0
+            val bottomMarginShift = if (showHorz) 20 else 0
 
-            if (shouldShow) {
-                val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-                val xProgress = prefs.getInt("uiTransXProgress", 50)
-                val yProgress = prefs.getInt("uiTransYProgress", 50)
-                updateScrollBarThumbs(xProgress, yProgress)
+            var targetWidth = 0
+            var targetHeight = 0
+            var targetLeftMargin = 0
+            var targetBottomMargin = 0
+            var targetRightMargin = 0
+
+            if (isScrollModeActive) {
+                 // Scroll Mode: 640 total width
+                 targetWidth = 640 - rightMarginShift
+                 targetHeight = 480 - bottomMarginShift
+                 targetLeftMargin = 0
+                 targetRightMargin = rightMarginShift 
+                 targetBottomMargin = bottomMarginShift
+            } else {
+                 // Normal Mode:
+                 // Width: 640 total - 40 toggle - margin
+                 targetWidth = (640 - baseLeftMargin) - rightMarginShift
+                 
+                 // Height: 480 total - 40 nav - margin
+                 // We must be explicit here so onMeasure picks it up
+                 targetHeight = (480 - baseBottomMargin) - bottomMarginShift
+                 
+                 targetLeftMargin = baseLeftMargin // 40
+                 targetRightMargin = rightMarginShift
+                 targetBottomMargin = baseBottomMargin + bottomMarginShift // 40 + shift
             }
+            
+            p.width = targetWidth
+            p.height = targetHeight
+            p.leftMargin = targetLeftMargin
+            p.rightMargin = targetRightMargin
+            p.bottomMargin = targetBottomMargin
+            
+            Log.d("ScrollDebug", "Applying Layout: Mode=${if(isScrollModeActive)"Scroll" else "Normal"}, [${p.width} x ${p.height}], Margins: L=${p.leftMargin}, R=${p.rightMargin}, B=${p.bottomMargin}")
+            webView.layoutParams = p
+        }
+
+        // Force both requestLayout AND invalidate to ensure redraw
+        webView.requestLayout()
+        webView.invalidate()
+
+        if (horizontalScrollBar.visibility == View.VISIBLE || verticalScrollBar.visibility == View.VISIBLE) {
+             val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+             val xProgress = if (useWebViewScroll) 0 else prefs.getInt("uiTransXProgress", 50)
+             val yProgress = if (useWebViewScroll) 0 else prefs.getInt("uiTransYProgress", 50)
+             updateScrollBarThumbs(xProgress, yProgress)
         }
     }
 
@@ -1991,28 +2039,36 @@ class DualWebViewGroup @JvmOverloads constructor(
         val isKeyboardVisible = keyboardContainer.visibility == View.VISIBLE
         
         if (isInScrollMode) {
-            val webViewBottom = if (isKeyboardVisible) {
+            val keyboardLimit = if (isKeyboardVisible) {
                 eyeHeight - keyboardHeight  // Shrink to fit above keyboard
             } else {
                 480
             }
+            // Respect proper measurement which accounts for margins (scrollbars)
+            val measuredBottom = 0 + webView.measuredHeight
+            
             webView.layout(
                 0,  // No left margin in scroll mode
                 0,
-                640,  // Full width
-                webViewBottom
+                0 + webView.measuredWidth,  // Full width minus margins
+                minOf(keyboardLimit, measuredBottom)
             )
         } else {
-            val webViewBottom = if (isKeyboardVisible) {
-                minOf(440, eyeHeight - keyboardHeight)  // Shrink to fit above keyboard
+            val navBarTop = eyeHeight - navBarHeight // 480 - 30 = 450
+            
+            val keyboardLimit = if (isKeyboardVisible) {
+                minOf(navBarTop, eyeHeight - keyboardHeight)  // Shrink to fit above keyboard
             } else {
-                440
+                navBarTop // Default bottom for 30px nav bar
             }
+            // Respect proper measurement which accounts for margins (scrollbars)
+            val measuredBottom = 0 + webView.measuredHeight
+            
             webView.layout(
                 40,  // Account for toggle bar
                 0,
-                640,  // Standard width + toggle bar offset
-                webViewBottom
+                40 + webView.measuredWidth,  // Standard width + toggle bar offset
+                minOf(keyboardLimit, measuredBottom)
             )
         }
 
@@ -2633,16 +2689,30 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         // Measure WebView with different dimensions based on scroll mode
+        // FIX: Respect the LayoutParams set by updateScrollBarsVisibility
+        val lp = webView.layoutParams
+        
         if (isInScrollMode) {
+            val targetWidth = if (lp != null && lp.width > 0) lp.width else 640
+            val targetHeight = if (lp != null && lp.height > 0) lp.height else 480
+            
             webView.measure(
-                MeasureSpec.makeMeasureSpec(640, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY)
+                MeasureSpec.makeMeasureSpec(targetWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(targetHeight, MeasureSpec.EXACTLY)
             )
         } else {
-            // 640 - 40 = 600
-            webView.measure(
-                MeasureSpec.makeMeasureSpec(600, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(440, MeasureSpec.EXACTLY)
+             // Normal Mode
+             // Use layout params if available (set by updateScrollBarsVisibility)
+             // Default fallback: 640 - 40 = 600 width, 440 height
+             val targetWidth = if (lp != null && lp.width > 0) lp.width else 600
+             
+             // For height in normal mode, we used MATCH_PARENT in updateScrollBarsVisibility usually, 
+             // but sometimes explicit. If MATCH_PARENT (-1), we use the calculated contentHeight.
+             val targetHeight = if (lp != null && lp.height > 0) lp.height else if (contentHeight > 0) contentHeight else 440
+
+             webView.measure(
+                MeasureSpec.makeMeasureSpec(targetWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(targetHeight, MeasureSpec.EXACTLY)
             )
         }
 
@@ -3129,34 +3199,30 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Clear all states initially
         clearAllHoverStates()
         
-        // Debug: Log cursor position
-        Log.d("HoverDebug", "Cursor at screen: ($screenX, $screenY)")
-        
         // Helper function to check if cursor is over a button or view
         fun isOver(button: View?): Boolean {
             if (button == null || button.visibility != View.VISIBLE) return false
-            val location = IntArray(2)
-            button.getLocationOnScreen(location)
             
-            // Account for scale in hit testing
-            val isOver = screenX >= location[0] && screenX <= location[0] + (button.width * uiScale) &&
-                   screenY >= location[1] && screenY <= location[1] + (button.height * uiScale)
+            // Use getGlobalVisibleRect for accurate screen bounds detection
+            val rect = android.graphics.Rect()
+            if (!button.getGlobalVisibleRect(rect)) return false
             
-            if (isOver) {
-                Log.d("HoverDebug", "Button at screen: (${location[0]}, ${location[1]}) size: ${button.width}x${button.height}")
-            }
+            val isOver = screenX >= rect.left && screenX <= rect.right &&
+                   screenY >= rect.top && screenY <= rect.bottom
+            
             return isOver
         }
         
-        // Check bottom navigation bar buttons using actual screen positions
-        navButtons.forEach { (name, navButton) ->
-            if (isOver(navButton.left)) {
-                navButton.isHovered = true
-                navButton.left.isHovered = true
-                navButton.right.isHovered = true
-                Log.d("HoverDebug", "Hovering over nav button: $name")
-                customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
-                return  // Found the hovered button, stop checking
+        // Check bottom navigation bar buttons ONLY if nav bar is visible
+        if (leftNavigationBar.visibility == View.VISIBLE) {
+            navButtons.forEach { (name, navButton) ->
+                if (isOver(navButton.left)) {
+                    navButton.isHovered = true
+                    navButton.left.isHovered = true
+                    navButton.right.isHovered = true
+                    customKeyboard?.clearHover() // Clear keyboard hover
+                    return  // Found the hovered button, stop checking
+                }
             }
         }
         
@@ -3561,42 +3627,22 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
         // Handle toggle bar clicks
-        if (localX < toggleBarWidth) {
-            // Use actual button bounds for click detection - more maintainable than hardcoded Y ranges
-            val toggleBarLocation = IntArray(2)
-            leftToggleBar.getLocationOnScreen(toggleBarLocation)
-            
-            // List of all toggle bar buttons to check
-            val toggleBarButtons = listOf(
-                R.id.btnModeToggle,
-                R.id.btnYouTube,
-                R.id.btnBookmarks,
-                R.id.btnZoomOut,
-                R.id.btnZoomIn,
-                R.id.btnMask,
-                R.id.btnAnchor
-            )
-            
-            // Check each button's actual bounds
-            for (buttonId in toggleBarButtons) {
-                val button = leftToggleBar.findViewById<View>(buttonId) ?: continue
-                val buttonLocation = IntArray(2)
-                button.getLocationOnScreen(buttonLocation)
-                
-                // Convert screen coordinates to check against button bounds
-                val screenX = toggleBarLocation[0] + localX
-                val screenY = toggleBarLocation[1] + y
-                
-                val buttonLeft = buttonLocation[0]
-                val buttonTop = buttonLocation[1]
-                val buttonRight = buttonLeft + button.width
-                val buttonBottom = buttonTop + button.height
-                
-                if (screenX >= buttonLeft && screenX < buttonRight &&
-                    screenY >= buttonTop && screenY < buttonBottom) {
-                    handleLeftMenuAction(buttonId)
-                    return
-                }
+        // Handle toggle bar clicks using hover state
+        val toggleBarButtons = listOf(
+            R.id.btnModeToggle,
+            R.id.btnYouTube,
+            R.id.btnBookmarks,
+            R.id.btnZoomOut,
+            R.id.btnZoomIn,
+            R.id.btnMask,
+            R.id.btnAnchor
+        )
+
+        for (buttonId in toggleBarButtons) {
+            val button = leftToggleBar.findViewById<View>(buttonId)
+            if (button != null && button.isHovered) {
+                handleLeftMenuAction(buttonId)
+                return
             }
         }
 
@@ -4748,30 +4794,10 @@ class DualWebViewGroup @JvmOverloads constructor(
         isInScrollMode = enabled
 
         if (enabled) {
-            // First set WebView to full size
-            webView.layoutParams = FrameLayout.LayoutParams(640, 480).apply {
-                leftMargin = 0
-                topMargin = 0
-                rightMargin = 0
-                bottomMargin = 0
-            }
-            webView.requestLayout()
-
             // Immediately disable touch interception before animating
             leftToggleBar.isClickable = false
             leftNavigationBar.isClickable = false
             leftSystemInfoView.visibility = View.GONE
-
-            // Update scrollbar margins for scroll mode (expand to edges)
-            (horizontalScrollBar.layoutParams as? FrameLayout.LayoutParams)?.apply {
-                leftMargin = 0
-                bottomMargin = 0
-                horizontalScrollBar.layoutParams = this
-            }
-            (verticalScrollBar.layoutParams as? FrameLayout.LayoutParams)?.apply {
-                bottomMargin = 0
-                verticalScrollBar.layoutParams = this
-            }
 
             // Then animate menus away
             leftToggleBar.animate()
@@ -4796,30 +4822,10 @@ class DualWebViewGroup @JvmOverloads constructor(
             btnShowNavBars.requestLayout()
 
         } else {
-            // First set WebView back to original size
-            webView.layoutParams = FrameLayout.LayoutParams(600, LayoutParams.MATCH_PARENT).apply {
-                leftMargin = 40
-                topMargin = 0
-                rightMargin = 0
-                bottomMargin = 40
-            }
-            webView.requestLayout()
-
             // Re-enable touch interception and show system info bar
             leftToggleBar.isClickable = true
             leftNavigationBar.isClickable = true
             leftSystemInfoView.visibility = View.VISIBLE
-
-            // Restore scrollbar margins for normal mode (respect bars)
-            (horizontalScrollBar.layoutParams as? FrameLayout.LayoutParams)?.apply {
-                leftMargin = 40
-                bottomMargin = 40
-                horizontalScrollBar.layoutParams = this
-            }
-            (verticalScrollBar.layoutParams as? FrameLayout.LayoutParams)?.apply {
-                bottomMargin = 40
-                verticalScrollBar.layoutParams = this
-            }
 
             // Then show menus with animation
             leftToggleBar.visibility = View.VISIBLE
@@ -4841,6 +4847,9 @@ class DualWebViewGroup @JvmOverloads constructor(
                 btnShowNavBars.visibility = View.GONE
             }.start()
         }
+
+        // Update scrollbars and layout
+        updateScrollBarsVisibility()
 
         // Force layout update
         post {

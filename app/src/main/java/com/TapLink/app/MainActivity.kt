@@ -138,6 +138,7 @@ class MainActivity : AppCompatActivity(),
     private var lastCursorY = 240f
     private var isDispatchingTouchEvent = false
     private var isGestureHandled = false
+    private var wasTouchOnBookmarks = false
 
     private val CAMERA_REQUEST_CODE = 1001
     private val CAMERA_PERMISSION_CODE = 100
@@ -295,6 +296,13 @@ class MainActivity : AppCompatActivity(),
     private var isProcessingDoubleTap = false
     private var lastDoubleTapStartTime = 0L
     private val DOUBLE_TAP_CONFIRMATION_DELAY = 200L
+
+    // Triple tap detection for re-centering in anchored mode
+    private var lastTapTime = 0L
+    private var firstTapTime = 0L
+    private var tapCount = 0
+    private val TRIPLE_TAP_TIMEOUT = 500L  // Total window for triple-tap sequence
+    private var isTripleTapInProgress = false
 
     private var isRingSwitchEnabled = false
     private var settingsMenu: View? = null
@@ -484,10 +492,42 @@ class MainActivity : AppCompatActivity(),
                 // Store the down event for potential tap
                 potentialTapEvent = MotionEvent.obtain(e)
 
+                // Triple tap detection for screen re-centering in anchored mode
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastTapTime > TRIPLE_TAP_TIMEOUT) {
+                    Log.d("TripleTapDebug", "Starting new tap sequence")
+                    tapCount = 1
+                    firstTapTime = currentTime
+                    isTripleTapInProgress = false
+                } else {
+                    tapCount++
+                    Log.d("TripleTapDebug", "Tap count increased to: $tapCount")
+                }
+                lastTapTime = currentTime
+
+                // Check for triple tap (only works in anchored mode)
+                if (isAnchored && tapCount == 3 && (currentTime - firstTapTime) <= TRIPLE_TAP_TIMEOUT) {
+                    Log.d("TripleTapDebug", "Triple tap detected! Time from first tap: ${currentTime - firstTapTime}ms")
+                    handler.removeCallbacksAndMessages(null)
+                    synchronized(doubleTapLock) {
+                        pendingDoubleTapAction = false
+                    }
+                    isTripleTapInProgress = true
+
+                    // Reset translations to center the view
+                    shouldResetInitialQuaternion = true
+                    dualWebViewGroup.updateLeftEyePosition(0f, 0f, 0f)  // Reset translations and rotation
+                    dualWebViewGroup.showToast("Screen Re-centered")
+                    
+                    tapCount = 0
+                    return true
+                }
+
                 return true
             }
 
             override fun onLongPress(e: MotionEvent) {
+                tapCount = 0
                 Log.d("RingInput", """
             Long Press:
             Source: ${e.source}
@@ -504,6 +544,7 @@ class MainActivity : AppCompatActivity(),
                 distanceX: Float,
                 distanceY: Float
             ): Boolean {
+                tapCount = 0 // Reset tap count on scroll to prevent accidental triple-tap detection
                 totalScrollDistance += kotlin.math.sqrt(distanceX * distanceX + distanceY * distanceY)
 
                 // When ANCHORED: both X and Y move the page vertically
@@ -580,6 +621,18 @@ class MainActivity : AppCompatActivity(),
                 }
 
                 handleUserInteraction()
+
+    // If the touch interaction started on the bookmarks view, consume the tap here
+    // to prevent it from propagating to the WebView (even if bookmarks closed in the meantime)
+    if (wasTouchOnBookmarks) {
+        return true
+    }
+
+    // Don't handle single taps that are part of a triple tap sequence
+    if (isTripleTapInProgress) {
+                    isTripleTapInProgress = false
+                    return true
+                }
 
                 // When masked, don't consume the tap - let it reach the unmask button and media controls
                 // The mask overlay itself will block touches to web content
@@ -668,6 +721,8 @@ class MainActivity : AppCompatActivity(),
                                     performDoubleTapBackNavigation()
                                 }
                             } finally {
+                                tapCount = 0
+                                lastTapTime = 0L
                                 pendingDoubleTapAction = false
                                 isProcessingDoubleTap = false
                                 lastDoubleTapStartTime = 0L
@@ -678,6 +733,7 @@ class MainActivity : AppCompatActivity(),
 
                 return true
             }
+
 
             private fun performDoubleTapBackNavigation() {
                 val isScreenMasked = dualWebViewGroup.isScreenMasked()
@@ -4356,6 +4412,22 @@ class MainActivity : AppCompatActivity(),
 
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // Track if touch started on bookmarks to prevent double-tap issues later
+        if (ev.action == MotionEvent.ACTION_DOWN) {
+            wasTouchOnBookmarks = false
+            if (::dualWebViewGroup.isInitialized && dualWebViewGroup.isBookmarksExpanded()) {
+                val bookmarksView = dualWebViewGroup.getBookmarksView()
+                val location = IntArray(2)
+                bookmarksView.getLocationOnScreen(location)
+                val x = ev.rawX
+                val y = ev.rawY
+                if (x >= location[0] && x <= location[0] + bookmarksView.width &&
+                    y >= location[1] && y <= location[1] + bookmarksView.height) {
+                    wasTouchOnBookmarks = true
+                }
+            }
+        }
+
         // Let gestureDetector see the event for global gestures (like double-tap back)
         // regardless of whether a child view consumes it.
         isDispatchingTouchEvent = true
