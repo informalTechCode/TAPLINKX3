@@ -7,5 +7,43 @@
     <string name="fa_cog">&#xf013;</string>
     <string name="fa_sync">&#xf021;</string>
     <string name="fa_eye_slash">&#xf070;</string>
+    <string name="fa_eye">&#xf06e;</string>
     <string name="fa_times">&#xf00d;</string>
+
+    <string name="fa_mobile_screen">&#xf3cd;</string>
+    <string name="fa_desktop">&#xf108;</string>
+    <string name="fa_table_columns">&#xf0db;</string>
+    <string name="fa_bookmark">&#xf02e;</string>
+    <string name="fa_magnifying_glass_plus">&#xf00e;</string>
+    <string name="fa_magnifying_glass_minus">&#xf010;</string>
+    <string name="fa_arrow_up">&#xf062;</string>
+    <string name="fa_arrow_down">&#xf063;</string>
+    <string name="fa_anchor">&#xf13d;</string>
+    <string name="fa_arrows_up_down_left_right">&#xf047;</string>
+    <string name="fa_mask">&#xf6fa;</string>
+
+    <string name="fa_volume_high">&#xf028;</string>
+    <string name="fa_sun">&#xf185;</string>
+    <string name="fa_gauge_high">&#xf625;</string>
+    <string name="fa_maximize">&#xf31e;</string>
+    <string name="fa_rotate_left">&#xf2ea;</string>
+    <string name="fa_circle_question">&#xf059;</string>
+
+    <string name="fa_play">&#xf04b;</string>
+    <string name="fa_pause">&#xf04c;</string>
+    <string name="fa_backward_step">&#xf048;</string>
+    <string name="fa_forward_step">&#xf051;</string>
+
+    <string name="fa_delete_left">&#xf5de;</string>
+    <string name="fa_microphone">&#xf130;</string>
+    <string name="fa_keyboard">&#xf11c;</string>
+    <string name="fa_arrow_turn_down_left">&#xf3be;</string>
+
+    <string name="fa_wifi">&#xf1eb;</string>
+    <string name="fa_battery_full">&#xf240;</string>
+    <string name="fa_battery_three_quarters">&#xf241;</string>
+    <string name="fa_battery_half">&#xf242;</string>
+    <string name="fa_battery_quarter">&#xf243;</string>
+    <string name="fa_battery_empty">&#xf244;</string>
+    <string name="fa_plus">&#x2b;</string>
 </resources>

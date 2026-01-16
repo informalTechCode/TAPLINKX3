@@ -20,9 +20,8 @@
         <Button
             android:id="@+id/btn_hide"
             style="@style/KeyboardButton"
-            android:foreground="@drawable/ic_visibility_off_small"
-            android:foregroundGravity="center"
-            android:foregroundTint="@android:color/white"
+            android:text="@string/fa_eye_slash"
+            android:fontFamily="@font/fa_solid_900"
             android:padding="0dp"
             android:layout_weight="1"/>
         <Button
@@ -80,7 +79,8 @@
         <Button
             android:id="@+id/btn_backspace"
             style="@style/KeyboardButton"
-            android:text="⌫"
+            android:text="@string/fa_delete_left"
+            android:fontFamily="@font/fa_solid_900"
             android:layout_weight="1"/>
     </LinearLayout>
 
@@ -226,7 +226,8 @@
         <Button
             android:id="@+id/btn_mic"
             style="@style/KeyboardButton"
-            android:text="Mic"
+            android:text="@string/fa_microphone"
+            android:fontFamily="@font/fa_solid_900"
             android:layout_weight="1"/>
 
         <!-- Space key -->
@@ -247,7 +248,8 @@
         <Button
             android:id="@+id/btn_enter"
             style="@style/KeyboardButton"
-            android:text="Enter"
+            android:text="@string/fa_arrow_turn_down_left"
+            android:fontFamily="@font/fa_solid_900"
             android:layout_weight="1.5"/>
     </LinearLayout>
 </LinearLayout>

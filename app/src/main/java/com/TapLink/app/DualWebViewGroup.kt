@@ -418,11 +418,11 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     // Mask mode UI elements
     private lateinit var maskMediaControlsContainer: LinearLayout
-    private lateinit var btnMaskPlay: ImageButton
-    private lateinit var btnMaskPause: ImageButton
-    private lateinit var btnMaskPrev: ImageButton
-    private lateinit var btnMaskNext: ImageButton
-    private lateinit var btnMaskUnmask: ImageButton
+    private lateinit var btnMaskPlay: View
+    private lateinit var btnMaskPause: View
+    private lateinit var btnMaskPrev: View
+    private lateinit var btnMaskNext: View
+    private lateinit var btnMaskUnmask: View
 
 
 
@@ -4604,22 +4604,22 @@ class DualWebViewGroup @JvmOverloads constructor(
         maskOverlay.addView(maskMediaControlsContainer, controlsParams)
 
         // Controls
-        btnMaskPrev = createMediaButton(R.drawable.ic_media_skip_previous) {
+        btnMaskPrev = createMediaButton(context.getString(R.string.fa_backward_step)) {
             webView.evaluateJavascript("document.querySelector('video, audio').currentTime -= 10;", null)
         }
-        btnMaskPlay = createMediaButton(R.drawable.ic_media_play) {
+        btnMaskPlay = createMediaButton(context.getString(R.string.fa_play)) {
             webView.evaluateJavascript("document.querySelector('video, audio').play();", null)
             // Immediately update button visibility for responsive UI
             btnMaskPlay.visibility = View.GONE
             btnMaskPause.visibility = View.VISIBLE
         }
-        btnMaskPause = createMediaButton(R.drawable.ic_media_pause) {
+        btnMaskPause = createMediaButton(context.getString(R.string.fa_pause)) {
             webView.evaluateJavascript("document.querySelector('video, audio').pause();", null)
             // Immediately update button visibility for responsive UI
             btnMaskPause.visibility = View.GONE
             btnMaskPlay.visibility = View.VISIBLE
         }
-        btnMaskNext = createMediaButton(R.drawable.ic_media_skip_next) {
+        btnMaskNext = createMediaButton(context.getString(R.string.fa_forward_step)) {
             webView.evaluateJavascript("document.querySelector('video, audio').currentTime += 10;", null)
         }
 
@@ -4631,11 +4631,13 @@ class DualWebViewGroup @JvmOverloads constructor(
         maskMediaControlsContainer.addView(btnMaskNext)
     }
 
-    private fun createMediaButton(iconRes: Int, onClick: () -> Unit): ImageButton {
-        return ImageButton(context).apply {
-            setImageResource(iconRes)
+    private fun createMediaButton(text: String, onClick: () -> Unit): View {
+        return FontIconView(context).apply {
+            this.text = text
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, 24f) // Use PX since container is fixed PX
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
             setBackgroundResource(R.drawable.nav_button_background)
-            scaleType = ImageView.ScaleType.FIT_CENTER
             setPadding(8, 8, 8, 8)
             layoutParams = LinearLayout.LayoutParams(40, 40).apply {
                 leftMargin = 4

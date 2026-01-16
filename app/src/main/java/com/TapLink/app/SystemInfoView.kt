@@ -24,8 +24,8 @@ class SystemInfoView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : LinearLayout(context, attrs, defStyleAttr) {
 
-    private var connectivityIcon: ImageView? = null
-    private var batteryIcon: ImageView? = null
+    private var connectivityIcon: FontIconView? = null
+    private var batteryIcon: FontIconView? = null
     private var timeText: TextView? = null
     private var dateText: TextView? = null
 
@@ -88,22 +88,25 @@ class SystemInfoView @JvmOverloads constructor(
         dateText = createTextView().also { addView(it) }
 
         // Set initial values
-        connectivityIcon?.setImageResource(R.drawable.wifi_off)
-        batteryIcon?.setImageResource(R.drawable.battery_full)
+        connectivityIcon?.text = context.getString(R.string.fa_wifi)
+        connectivityIcon?.alpha = 0.3f
+        batteryIcon?.text = context.getString(R.string.fa_battery_full)
         timeText?.text = "--:--"
         dateText?.text = "--/--"
     }
 
-    private fun createIconView(): ImageView {
-        return ImageView(context).apply {
+    private fun createIconView(): FontIconView {
+        return FontIconView(context).apply {
             layoutParams = LayoutParams(
-                24,  // width in dp
-                24   // height in dp
+                LayoutParams.WRAP_CONTENT,
+                LayoutParams.WRAP_CONTENT
             ).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 setMargins(6, 0, 6, 0)
             }
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            textSize = 14f
+            textColor = Color.WHITE
+            gravity = Gravity.CENTER
         }
     }
 
@@ -155,38 +158,40 @@ class SystemInfoView @JvmOverloads constructor(
             val hasVpnTransport = networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ?: false
             val hasTunInterface = hasTunInterface()
 
-            val iconResource = when {
+            val (iconText, alphaValue) = when {
                 networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> {
-                    R.drawable.wifi_on
+                    context.getString(R.string.fa_wifi) to 1.0f
                 }
                 networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) == true ||
                         (hasVpnTransport && hasTunInterface) -> {
-                    R.drawable.wifi_bluetooth
+                    context.getString(R.string.fa_wifi) to 0.7f // Use dim wifi for BT/VPN shared as placeholder or fa_link?
                 }
                 else -> {
-                    R.drawable.wifi_off
+                    context.getString(R.string.fa_wifi) to 0.3f
                 }
             }
-            connectivityIcon?.setImageResource(iconResource)
+            connectivityIcon?.text = iconText
+            connectivityIcon?.alpha = alphaValue
         } catch (e: Exception) {
             Log.e("SystemInfoView", "Connectivity update error", e)
-            connectivityIcon?.setImageResource(R.drawable.wifi_off)
+            connectivityIcon?.text = context.getString(R.string.fa_wifi)
+            connectivityIcon?.alpha = 0.3f
         }
     }
 
     private fun updateBattery(level: Int) {
         try {
-            val iconResource = when {
-                level > 80 -> R.drawable.battery_full
-                level > 60 -> R.drawable.battery_75
-                level > 40 -> R.drawable.battery_50
-                level > 20 -> R.drawable.battery_25
-                else -> R.drawable.battery_low
+            val iconText = when {
+                level > 80 -> context.getString(R.string.fa_battery_full)
+                level > 60 -> context.getString(R.string.fa_battery_three_quarters)
+                level > 40 -> context.getString(R.string.fa_battery_half)
+                level > 20 -> context.getString(R.string.fa_battery_quarter)
+                else -> context.getString(R.string.fa_battery_empty)
             }
-            batteryIcon?.setImageResource(iconResource)
+            batteryIcon?.text = iconText
         } catch (e: Exception) {
             Log.e("SystemInfoView", "Battery update error", e)
-            batteryIcon?.setImageResource(R.drawable.battery_full)
+            batteryIcon?.text = context.getString(R.string.fa_battery_full)
         }
     }
 

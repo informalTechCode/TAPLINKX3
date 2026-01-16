@@ -69,35 +69,41 @@ class TripleClickMenu(context: Context) : FrameLayout(context) {
         }
 
         // Create anchor toggle button
-        val anchorButton = ImageButton(context).apply {
-            setImageResource(R.drawable.ic_anchor_barred)
+        val anchorButton = FontIconView(context).apply {
+            text = context.getString(R.string.fa_arrows_up_down_left_right)
+            textSize = 32f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
             setBackgroundResource(R.drawable.nav_button_background)
             layoutParams = LinearLayout.LayoutParams(96, 96).apply {
                 setMargins(0, 8, 0, 8)
             }
-            scaleType = ImageView.ScaleType.FIT_CENTER
             setPadding(16, 16, 16, 16)
         }
 
         // Create mask toggle button
-        val maskButton = ImageButton(context).apply {
-            setImageResource(R.drawable.ic_visibility_off)
+        val maskButton = FontIconView(context).apply {
+            text = context.getString(R.string.fa_eye_slash)
+            textSize = 32f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
             setBackgroundResource(R.drawable.nav_button_background)
             layoutParams = LinearLayout.LayoutParams(96, 96).apply {
                 setMargins(0, 8, 0, 8)
             }
-            scaleType = ImageView.ScaleType.FIT_CENTER
             setPadding(16, 16, 16, 16)
         }
 
         // Create quit button
-        val quitButton = ImageButton(context).apply {
-            setImageResource(R.drawable.ic_close)
+        val quitButton = FontIconView(context).apply {
+            text = context.getString(R.string.fa_times)
+            textSize = 32f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
             setBackgroundResource(R.drawable.nav_button_background)
             layoutParams = LinearLayout.LayoutParams(96, 96).apply {
                 setMargins(0, 8, 0, 8)
             }
-            scaleType = ImageView.ScaleType.FIT_CENTER
             setPadding(16, 16, 16, 16)
         }
 
@@ -183,15 +189,11 @@ class TripleClickMenu(context: Context) : FrameLayout(context) {
     fun isMenuVisible() = isVisible
 
     fun updateAnchorButtonState(isAnchored: Boolean) {
-        (buttons[0] as ImageButton).setImageResource(
-            if (!isAnchored) R.drawable.ic_anchor else R.drawable.ic_anchor_barred
-        )
+        (buttons[0] as FontIconView).text = if (isAnchored) context.getString(R.string.fa_anchor) else context.getString(R.string.fa_arrows_up_down_left_right)
     }
 
     fun updateMaskButtonState(isMasked: Boolean) {
-        (buttons[1] as ImageButton).setImageResource(
-            if (isMasked) R.drawable.ic_visibility_off else R.drawable.ic_visibility_on
-        )
+        (buttons[1] as FontIconView).text = if (isMasked) context.getString(R.string.fa_eye_slash) else context.getString(R.string.fa_eye)
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {

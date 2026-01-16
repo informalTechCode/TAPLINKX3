@@ -281,8 +281,10 @@ class BookmarksView @JvmOverloads constructor(
         }
 
         // Home/Set Home Button
-        val homeButton = TextView(context).apply {
-            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_home, 0, 0, 0)
+        val homeButton = FontIconView(context).apply {
+            text = context.getString(R.string.fa_home)
+            textSize = 20f
+            setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(48, LayoutParams.MATCH_PARENT)
             tag = ViewAction(ActionType.SET_HOME, entry.id, entry.url)
@@ -312,9 +314,9 @@ class BookmarksView @JvmOverloads constructor(
 
         // Only add delete button if not home
         if (!entry.isHome) {
-            val deleteButton = TextView(context).apply {
-                text = "X"
-                textSize = 16f
+            val deleteButton = FontIconView(context).apply {
+                text = context.getString(R.string.fa_times)
+                textSize = 20f
                 setTextColor(Color.RED)
                 gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(48, LayoutParams.MATCH_PARENT)
