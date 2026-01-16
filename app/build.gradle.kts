@@ -88,6 +88,4 @@ dependencies {
     implementation(files("libs/MercuryAndroidSDK-v0.2.2-20250717110238_48b655b3.aar"))
     implementation(fileTree("libs"))
 
-    // Sherpa-onnx offline speech recognition (local AAR)
-    implementation(files("libs/sherpa-onnx.aar"))
 }

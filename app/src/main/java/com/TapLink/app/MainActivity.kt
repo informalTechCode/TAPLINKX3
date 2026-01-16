@@ -16,6 +16,7 @@ import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.media.ImageReader
+import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -58,10 +59,18 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 import java.io.File
 import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
 import android.provider.Settings
@@ -75,6 +84,7 @@ import com.ffalconxr.mercury.ipc.Launcher
 import com.ffalconxr.mercury.ipc.helpers.RingIPCHelper
 import com.ffalcon.mercury.android.sdk.util.DeviceUtil
 import androidx.core.content.edit
+import java.util.UUID
 
 
 interface NavigationListener {
@@ -189,7 +199,6 @@ class MainActivity : AppCompatActivity(),
     private var pendingPermissionRequest: PermissionRequest? = null
     private var audioManager: AudioManager? = null
     private var speechRecognizer: SpeechRecognizer? = null
-    private var sherpaRecognizer: SherpaSpeechRecognizer? = null
     private lateinit var cameraManager: CameraManager
     private var cameraDevice: CameraDevice? = null
     private var imageReader: ImageReader? = null
@@ -202,6 +211,14 @@ class MainActivity : AppCompatActivity(),
     private var originalSystemUiVisibility: Int = 0
     private var originalOrientation: Int = 0
     private var wasKeyboardDismissedByEnter = false
+
+    private var mediaRecorder: MediaRecorder? = null
+    private var currentRecordingFile: File? = null
+    private var isRecordingSpeech = false
+    private val grokApiKeyPref = "grokApiKey"
+    private val grokTranscriptionModel = "whisper-large-v3-turbo"
+    private val grokTranscriptionUrl = "https://api.x.ai/v1/audio/transcriptions"
+    private val transcriptionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private var preMaskCursorState = false
     private var preMaskCursorX = 0f
@@ -461,13 +478,6 @@ class MainActivity : AppCompatActivity(),
         } else {
             dualWebViewGroup.stopAnchoring()
         }
-
-        // Initialize Sherpa-onnx model on startup
-        initializeSherpaRecognizer()
-
-
-
-
 
         // Initialize GestureDetector
         gestureDetector = GestureDetector(this, object : SimpleOnGestureListener() {
@@ -2013,106 +2023,238 @@ class MainActivity : AppCompatActivity(),
     }
 
     private var isListeningForSpeech = false
-    private var isSherpaInitialized = false
 
     override fun onMicrophonePressed() {
-        Log.d("SpeechRecognition", "onMicrophonePressed called, isListening: $isListeningForSpeech")
+        Log.d("SpeechRecognition", "onMicrophonePressed called, isRecording: $isRecordingSpeech")
         runOnUiThread {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                 Log.d("SpeechRecognition", "Requesting audio permission")
-                 requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSIONS_REQUEST_CODE)
-                 return@runOnUiThread
-            }
-
-            // Use Sherpa-onnx for offline speech recognition
-            if (sherpaRecognizer == null) {
-                initializeSherpaRecognizer()
-            }
-            
-            // If Sherpa is still initializing model, show message
-            if (!isSherpaInitialized) {
-                dualWebViewGroup.showToast("Initializing speech model, please wait...")
+                Log.d("SpeechRecognition", "Requesting audio permission")
+                requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSIONS_REQUEST_CODE)
                 return@runOnUiThread
             }
 
-            if (sherpaRecognizer?.isListening() == true) {
-                // Stop listening
-                Log.d("SpeechRecognition", "Stopping Sherpa recognition")
-                sherpaRecognizer?.stopListening()
-                dualWebViewGroup.showToast("Voice command stopped")
+            val apiKey = getGrokApiKey()
+            if (apiKey.isNullOrEmpty()) {
+                dualWebViewGroup.showToast("Enter your Grok API key to use voice input.")
+                showGrokApiKeyDialog()
+                return@runOnUiThread
+            }
+
+            if (isRecordingSpeech) {
+                stopGrokRecording(apiKey)
             } else {
-                // Start listening
-                Log.d("SpeechRecognition", "Starting Sherpa recognition")
-                sherpaRecognizer?.startListening()
-                dualWebViewGroup.showToast("Listening...")
+                startGrokRecording()
             }
         }
     }
-    
-    private fun initializeSherpaRecognizer() {
-        if (sherpaRecognizer != null) return
-        
-        Log.d("SpeechRecognition", "Initializing Sherpa recognizer...")
-        
-        sherpaRecognizer = SherpaSpeechRecognizer(this).apply {
-            setListener(object : SherpaSpeechRecognizer.SpeechListener {
-                override fun onResult(text: String) {
-                    if (text.isNotBlank()) {
-                        Log.d("SpeechRecognition", "Sherpa result: $text")
-                        runOnUiThread {
-                            handleVoiceResult(text)
+
+    fun showGrokApiKeyDialog() {
+        val existingKey = getGrokApiKey().orEmpty()
+        dualWebViewGroup.showPromptDialog(
+            "Grok API Key",
+            existingKey,
+            { text ->
+                val trimmed = text?.trim().orEmpty()
+                val prefs = getSharedPreferences("TapLinkPrefs", MODE_PRIVATE)
+                if (trimmed.isNotEmpty()) {
+                    prefs.edit().putString(grokApiKeyPref, trimmed).apply()
+                    dualWebViewGroup.showToast("Grok API key saved")
+                } else {
+                    prefs.edit().remove(grokApiKeyPref).apply()
+                    dualWebViewGroup.showToast("Grok API key cleared")
+                }
+            },
+            {
+                dualWebViewGroup.showToast("Grok API key entry canceled")
+            }
+        )
+    }
+
+    private fun getGrokApiKey(): String? {
+        return getSharedPreferences("TapLinkPrefs", MODE_PRIVATE)
+            .getString(grokApiKeyPref, null)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun startGrokRecording() {
+        val recordingFile = createUniqueRecordingFile()
+        currentRecordingFile = recordingFile
+
+        try {
+            mediaRecorder = MediaRecorder().apply {
+                setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setOutputFile(recordingFile.absolutePath)
+                prepare()
+                start()
+            }
+            isRecordingSpeech = true
+            isListeningForSpeech = true
+            keyboardView?.setMicActive(true)
+            dualWebViewGroup.showToast("Listening...")
+        } catch (e: Exception) {
+            Log.e("SpeechRecognition", "Failed to start recording", e)
+            cleanupRecordingFile(recordingFile)
+            mediaRecorder?.release()
+            mediaRecorder = null
+            currentRecordingFile = null
+            isRecordingSpeech = false
+            isListeningForSpeech = false
+            keyboardView?.setMicActive(false)
+            dualWebViewGroup.showToast("Could not start recording")
+        }
+    }
+
+    private fun stopGrokRecording(apiKey: String) {
+        val recordingFile = currentRecordingFile
+        if (!isRecordingSpeech || recordingFile == null) {
+            return
+        }
+
+        try {
+            mediaRecorder?.stop()
+        } catch (e: RuntimeException) {
+            Log.e("SpeechRecognition", "Recording stop failed", e)
+            dualWebViewGroup.showToast("Recording too short")
+            cleanupRecordingFile(recordingFile)
+            resetRecordingState()
+            return
+        } finally {
+            mediaRecorder?.release()
+            mediaRecorder = null
+        }
+
+        resetRecordingState()
+        dualWebViewGroup.showToast("Processing...")
+        transcribeRecording(recordingFile, apiKey)
+    }
+
+    private fun resetRecordingState() {
+        isRecordingSpeech = false
+        isListeningForSpeech = false
+        keyboardView?.setMicActive(false)
+        currentRecordingFile = null
+    }
+
+    private fun createUniqueRecordingFile(): File {
+        val fileName = "grok_recording_${UUID.randomUUID()}.m4a"
+        return File(cacheDir, fileName)
+    }
+
+    private fun cleanupRecordingFile(file: File?) {
+        if (file == null) return
+        if (file.exists() && !file.delete()) {
+            Log.w("SpeechRecognition", "Failed to delete recording file: ${file.absolutePath}")
+        }
+    }
+
+    private data class GrokTranscriptionResult(
+        val text: String? = null,
+        val errorMessage: String? = null,
+        val isRateLimit: Boolean = false
+    )
+
+    private fun transcribeRecording(recordingFile: File, apiKey: String) {
+        transcriptionScope.launch {
+            val result = try {
+                uploadForTranscription(recordingFile, apiKey)
+            } catch (e: Exception) {
+                Log.e("SpeechRecognition", "Transcription error", e)
+                GrokTranscriptionResult(errorMessage = e.message ?: "Transcription failed")
+            } finally {
+                cleanupRecordingFile(recordingFile)
+            }
+
+            runOnUiThread {
+                when {
+                    !result.text.isNullOrBlank() -> handleVoiceResult(result.text)
+                    result.errorMessage != null -> {
+                        val message = if (result.isRateLimit) {
+                            "Grok API limit reached: ${result.errorMessage}"
+                        } else {
+                            "Grok API error: ${result.errorMessage}"
                         }
+                        dualWebViewGroup.showToast(message)
                     }
-                }
-
-                override fun onPartialResult(text: String) {
-                    if (text.isNotBlank()) {
-                        Log.d("SpeechRecognition", "Sherpa partial: $text")
-                    }
-                }
-
-                override fun onError(message: String) {
-                    Log.e("SpeechRecognition", "Sherpa error: $message")
-                    runOnUiThread {
-                        dualWebViewGroup.showToast("Voice Error: $message")
-                        if (message.contains("Microphone")) {
-                            isSherpaInitialized = false
-                        }
-                    }
-                }
-
-                override fun onListening() {
-                    Log.d("SpeechRecognition", "Sherpa listening")
-                    runOnUiThread {
-                         isListeningForSpeech = true
-                         keyboardView?.setMicActive(true)
-                    }
-                }
-
-                override fun onDone() {
-                     Log.d("SpeechRecognition", "Sherpa done")
-                     runOnUiThread {
-                         isListeningForSpeech = false
-                         keyboardView?.setMicActive(false)
-                     }
-                }
-            })
-            
-            // Load model immediately
-            initModel { success ->
-                runOnUiThread {
-                    if (success) {
-                        Log.d("SpeechRecognition", "Sherpa model loaded successfully")
-                        isSherpaInitialized = true
-                        dualWebViewGroup.showToast("Voice ready")
-                    } else {
-                        Log.e("SpeechRecognition", "Failed to load Sherpa model")
-                        dualWebViewGroup.showToast("Failed to load speech model")
-                        isSherpaInitialized = false
-                    }
+                    else -> dualWebViewGroup.showToast("No transcription received")
                 }
             }
         }
+    }
+
+    private fun uploadForTranscription(recordingFile: File, apiKey: String): GrokTranscriptionResult {
+        val boundary = "----TapLinkX3${UUID.randomUUID()}"
+        val connection = (URL(grokTranscriptionUrl).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            doInput = true
+            setRequestProperty("Authorization", "Bearer $apiKey")
+            setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+        }
+
+        DataOutputStream(connection.outputStream).use { output ->
+            fun writeFormField(name: String, value: String) {
+                output.writeBytes("--$boundary\r\n")
+                output.writeBytes("Content-Disposition: form-data; name=\"$name\"\r\n\r\n")
+                output.writeBytes(value)
+                output.writeBytes("\r\n")
+            }
+
+            fun writeFileField(file: File) {
+                output.writeBytes("--$boundary\r\n")
+                output.writeBytes(
+                    "Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"\r\n"
+                )
+                output.writeBytes("Content-Type: audio/mp4\r\n\r\n")
+                file.inputStream().use { it.copyTo(output) }
+                output.writeBytes("\r\n")
+            }
+
+            writeFormField("model", grokTranscriptionModel)
+            writeFormField("response_format", "json")
+            writeFileField(recordingFile)
+            output.writeBytes("--$boundary--\r\n")
+            output.flush()
+        }
+
+        val responseCode = connection.responseCode
+        val responseBody = (if (responseCode in 200..299) {
+            connection.inputStream
+        } else {
+            connection.errorStream
+        })?.bufferedReader()?.use { it.readText() }.orEmpty()
+
+        if (responseCode in 200..299) {
+            val text = try {
+                JSONObject(responseBody).optString("text").trim()
+            } catch (e: Exception) {
+                ""
+            }
+            return if (text.isNotEmpty()) {
+                GrokTranscriptionResult(text = text)
+            } else {
+                GrokTranscriptionResult(errorMessage = "Empty transcription response")
+            }
+        }
+
+        val errorMessage = try {
+            val errorObject = JSONObject(responseBody).optJSONObject("error")
+            errorObject?.optString("message")?.takeIf { it.isNotBlank() } ?: responseBody
+        } catch (e: Exception) {
+            responseBody.ifBlank { "Unknown error ($responseCode)" }
+        }
+
+        val isRateLimit = responseCode == 429 ||
+            errorMessage.contains("limit", ignoreCase = true) ||
+            errorMessage.contains("rate", ignoreCase = true) ||
+            errorMessage.contains("quota", ignoreCase = true)
+
+        return GrokTranscriptionResult(
+            errorMessage = errorMessage.ifBlank { "Unknown error ($responseCode)" },
+            isRateLimit = isRateLimit
+        )
     }
     
     private fun handleVoiceResult(text: String) {
@@ -2147,10 +2289,6 @@ class MainActivity : AppCompatActivity(),
                 sendTextToWebView(text + " ")
             }
         }
-        
-        // Stop listening after getting a result
-        sherpaRecognizer?.stopListening()
-        isListeningForSpeech = false
     }
 
     private fun moveCursor(offset: Int) {
@@ -4556,6 +4694,18 @@ class MainActivity : AppCompatActivity(),
     }
     override fun onDestroy() {
         super.onDestroy()
+        transcriptionScope.cancel()
+        if (isRecordingSpeech) {
+            try {
+                mediaRecorder?.stop()
+            } catch (e: Exception) {
+                Log.w("SpeechRecognition", "Failed stopping recorder during destroy", e)
+            }
+        }
+        mediaRecorder?.release()
+        mediaRecorder = null
+        cleanupRecordingFile(currentRecordingFile)
+        currentRecordingFile = null
         cameraDevice?.close()
         imageReader?.close()
         cameraThread.quitSafely()

@@ -4100,6 +4100,11 @@ class DualWebViewGroup @JvmOverloads constructor(
                 showHelpDialog()
             }
 
+            settingsMenu?.findViewById<Button>(R.id.btnGrokApiKey)?.setOnClickListener {
+                Log.d("SettingsDebug", "Grok API Key button clicked")
+                (context as? MainActivity)?.showGrokApiKeyDialog()
+            }
+
             val layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
@@ -4244,6 +4249,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val colorGrayButton = menu.findViewById<Button>(R.id.btnColorGray)
             val colorAccentButton = menu.findViewById<Button>(R.id.btnColorAccent)
             val colorYellowButton = menu.findViewById<Button>(R.id.btnColorYellow)
+            val grokApiKeyButton = menu.findViewById<Button>(R.id.btnGrokApiKey)
 
             // Get screen locations
             val volumeLocation = IntArray(2)
@@ -4261,6 +4267,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val colorGrayLocation = IntArray(2)
             val colorAccentLocation = IntArray(2)
             val colorYellowLocation = IntArray(2)
+            val grokApiKeyLocation = IntArray(2)
 
             val menuLocation = IntArray(2)
             menu.getLocationOnScreen(menuLocation)
@@ -4280,6 +4287,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             colorGrayButton?.getLocationOnScreen(colorGrayLocation)
             colorAccentButton?.getLocationOnScreen(colorAccentLocation)
             colorYellowButton?.getLocationOnScreen(colorYellowLocation)
+            grokApiKeyButton?.getLocationOnScreen(grokApiKeyLocation)
 
             val slop = 5 // Reduced from 40 to 5 to prevent overlapping touch targets
 
@@ -4661,6 +4669,18 @@ class DualWebViewGroup @JvmOverloads constructor(
                     colorYellowButton.isPressed = true
                     Handler(Looper.getMainLooper()).postDelayed({
                         colorYellowButton.isPressed = false
+                    }, 100)
+                    return
+                }
+
+                if (grokApiKeyButton != null &&
+                    x >= grokApiKeyLocation[0] - slop && x <= grokApiKeyLocation[0] + (grokApiKeyButton.width * uiScale) + slop &&
+                    y >= grokApiKeyLocation[1] - slop && y <= grokApiKeyLocation[1] + (grokApiKeyButton.height * uiScale) + slop) {
+
+                    grokApiKeyButton.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        grokApiKeyButton.isPressed = false
+                        (context as? MainActivity)?.showGrokApiKeyDialog()
                     }, 100)
                     return
                 }

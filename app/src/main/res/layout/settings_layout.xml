@@ -236,6 +236,19 @@
             android:thumbTint="#FFFFFF"
             android:progressBackgroundTint="#40FFFFFF"/>
 
+        <Button
+            android:id="@+id/btnGrokApiKey"
+            android:layout_width="match_parent"
+            android:layout_height="28dp"
+            android:text="Grok API Key"
+            android:textColor="#82B1FF"
+            android:textSize="10sp"
+            android:layout_marginBottom="10dp"
+            android:background="@drawable/settings_outlined_button_background"
+            android:textAllCaps="false"
+            android:clickable="true"
+            android:focusable="true"/>
+
         <!-- Close Button -->
         <Button
             android:id="@+id/btnCloseSettings"
