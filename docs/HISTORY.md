@@ -2,6 +2,27 @@
 
 The original TapLink builds and documentation were published through the release log hosted at https://pastebin.com/80GGhiEK. To preserve that history inside the repository, the paste contents are reproduced below with light formatting for readability.
 
+### TapLink 1.3.0 (January 16, 2026)
+
+- **Source code**: Repository current
+- **New features**:
+  - Offline Voice Recognition: Added Sherpa-onnx support for offline speech recognition.
+  - Enhanced Input Handling: Improved text injection and cursor movement.
+  - Stability Improvements: Various bug fixes and performance enhancements.
+- **Maintenance**:
+  - Code Cleanup: Removed unused code and comments.
+  - Dependency Updates: Updated internal library references.
+
+### TapLink 1.2.1
+
+- **Source code**: [v1.2.1](https://github.com/informalTechCode/TAPLINKX3/releases/tag/v1.2.1)
+- **Changes**: Minor fixes and improvements.
+
+### TapLink 1.2.0
+
+- **Source code**: [v1.2.0](https://github.com/informalTechCode/TAPLINKX3/releases/tag/v1.2.0)
+- **Changes**: Incremental updates.
+
 ### TapLink 1.1.0 (December 15, 2025)
 
 - **Source code**: Repository current
