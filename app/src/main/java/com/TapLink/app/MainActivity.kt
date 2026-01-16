@@ -269,16 +269,8 @@ class MainActivity : AppCompatActivity(),
     private val MIN_FRAME_INTERVAL_MS = 8L // ~120 FPS max (displays may be 90-120Hz)
 
     private var sensorEventListener = createSensorEventListener()
-
-    private lateinit var tripleClickMenu: TripleClickMenu
-    private var lastTapTime = 0L
-    private var firstTapTime = 0L
-    private var tapCount = 0
-    private var pendingDoubleTapAction = false
-    private val TRIPLE_TAP_TIMEOUT = 500L  // Total window for triple-tap sequence
-
-    private var isTripleTapInProgress = false
     private var shouldResetInitialQuaternion = false
+    private var pendingDoubleTapAction = false
 
     private val SCROLL_MODE_TIMEOUT = 30000L // 30 seconds in milliseconds
     private var scrollModeHandler = Handler(Looper.getMainLooper())
@@ -299,7 +291,7 @@ class MainActivity : AppCompatActivity(),
 
     private data class Quaternion(val w: Double, val x: Double, val y: Double, val z: Double)
 
-    private val doubleTapLock = Object()
+    private val doubleTapLock = Any()
     private var isProcessingDoubleTap = false
     private var lastDoubleTapStartTime = 0L
     private val DOUBLE_TAP_CONFIRMATION_DELAY = 200L
@@ -354,7 +346,7 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
-    private val cursorToggleLock = Object()
+    private val cursorToggleLock = Any()
     private val MINIMUM_FLING_VELOCITY = 50f
     private val MINIMUM_FLING_DISTANCE = 10f    // Minimum distance the finger must move
     private var potentialTapEvent: MotionEvent? = null
@@ -371,8 +363,8 @@ class MainActivity : AppCompatActivity(),
 
                 Log.d("MainActivity", "Received notification from $packageName: $title - $text")
                 
-                // Show a toast or update UI with the notification
-                Toast.makeText(context, "Notification: $title - $text", Toast.LENGTH_SHORT).show()
+                // Show a custom toast with the notification
+                dualWebViewGroup.showToast("Notification: $title - $text", 3000L)
             }
         }
     }
@@ -398,6 +390,7 @@ class MainActivity : AppCompatActivity(),
 
         // Prevent any drawing until we're ready
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            @Suppress("DEPRECATION")
             window.setDecorFitsSystemWindows(false)
         }
 
@@ -464,39 +457,6 @@ class MainActivity : AppCompatActivity(),
         // Initialize Sherpa-onnx model on startup
         initializeSherpaRecognizer()
 
-        tripleClickMenu = TripleClickMenu(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.CENTER
-            }
-            // Add explicit background to make it visible
-            setBackgroundColor(Color.parseColor("#202020"))
-            setPadding(32, 32, 32, 32)  // Add padding for better visibility
-            elevation = 1000f
-
-            listener = object : TripleClickMenu.TripleClickMenuListener {
-                override fun onAnchorTogglePressed() {
-                    toggleAnchor()
-                    centerCursor()
-                    tripleClickMenu.updateAnchorButtonState(!isAnchored)
-                }
-                override fun onQuitPressed() {
-                    finish()
-                }
-                override fun onBackPressed() {
-                    tripleClickMenu.hide()
-                }
-
-                override fun onMaskTogglePressed() {
-                    dualWebViewGroup.maskToggleListener?.onMaskTogglePressed()
-                }
-            }
-        }
-
-        // Instead of adding directly to mainContainer, pass to DualWebViewGroup
-        dualWebViewGroup.setTripleClickMenu(tripleClickMenu)
 
 
 
@@ -524,51 +484,10 @@ class MainActivity : AppCompatActivity(),
                 // Store the down event for potential tap
                 potentialTapEvent = MotionEvent.obtain(e)
 
-                // Prevent tap counting if keyboard is visible
-                if (isKeyboardVisible) {
-                    tapCount = 1 // Reset to 1 just to be safe, but don't increment for triple tap
-                    lastTapTime = System.currentTimeMillis()
-                    return true
-                }
-
-                val currentTime = System.currentTimeMillis()
-                if (currentTime - lastTapTime > TRIPLE_TAP_TIMEOUT) {
-                    Log.d("TripleClickMenuDebug", "Starting new tap sequence")
-                    tapCount = 1
-                    firstTapTime = currentTime
-                    isTripleTapInProgress = false
-                } else {
-                    tapCount++
-                    Log.d("TripleClickMenuDebug", "Tap count increased to: $tapCount")
-                }
-                lastTapTime = currentTime
-
-                if (tapCount == 3 && (currentTime - firstTapTime) <= TRIPLE_TAP_TIMEOUT) {
-                    Log.d("TripleClickMenuDebug", "Triple tap detected! Time from first tap: ${currentTime - firstTapTime}ms")
-                    handler.removeCallbacksAndMessages(null)
-                    synchronized(doubleTapLock) {
-                        pendingDoubleTapAction = false
-                    }
-                    isTripleTapInProgress = true
-
-                    // Reset translations to center the view
-                    shouldResetInitialQuaternion = true
-                    dualWebViewGroup.updateLeftEyePosition(0f, 0f, 0f)  // Reset translations and rotation
-
-                    if (!tripleClickMenu.isMenuVisible()) {
-                        tripleClickMenu.show()  // Use the original show() method which handles button states
-                        tripleClickMenu.updateAnchorButtonState(isAnchored)
-                    } else {
-                        tripleClickMenu.handleTap()
-                    }
-                    tapCount = 0
-                    return true
-                }
                 return true
             }
 
             override fun onLongPress(e: MotionEvent) {
-                tapCount = 0
                 Log.d("RingInput", """
             Long Press:
             Source: ${e.source}
@@ -585,15 +504,7 @@ class MainActivity : AppCompatActivity(),
                 distanceX: Float,
                 distanceY: Float
             ): Boolean {
-                tapCount = 0 // Reset tap count on scroll to prevent accidental triple-tap detection
                 totalScrollDistance += kotlin.math.sqrt(distanceX * distanceX + distanceY * distanceY)
-
-                // Keep menu behavior first
-                if (tripleClickMenu.isMenuVisible()) {
-                    val scaledDistance = -distanceX * 0.5f
-                    tripleClickMenu.handleScroll(scaledDistance)
-                    return true
-                }
 
                 // When ANCHORED: both X and Y move the page vertically
                 if (isAnchored && !isKeyboardVisible && !dualWebViewGroup.isScreenMasked()) {
@@ -670,98 +581,51 @@ class MainActivity : AppCompatActivity(),
 
                 handleUserInteraction()
 
-                // Don't handle single taps that are part of a triple tap sequence
-                if (isTripleTapInProgress) {
-                    isTripleTapInProgress = false
-                    return true
-                }
+                // When masked, don't consume the tap - let it reach the unmask button and media controls
+                // The mask overlay itself will block touches to web content
 
-//                if(!tripleClickMenu.isMenuVisible()) {
-//                    dualWebViewGroup.setScrollMode(false)
-//                }
+                if (isProcessingTap) return true
+
+                isProcessingTap = true
+                Handler(Looper.getMainLooper()).postDelayed({ isProcessingTap = false }, 300)
 
 
-                Log.d("TouchDebug", "checkpoint2")
+                // Bookmark taps are now handled exclusively by DualWebViewGroup.onTouchEvent
+                // to prevent double-dispatch issues with actions like "Set Home"
 
-                if (tripleClickMenu.isMenuVisible()) {
-                    tripleClickMenu.handleTap()
-                    return true
-                }
-
-                Log.d("TouchDebug", "checkpoint3")
-
-                Log.d("TripleClickMenuDebug", "Single tap confirmed, tapCount: $tapCount")
-
-                if (tapCount < 2) {
-                    Log.d("TouchDebug", "checkpoint4")
-
-                    // When masked, don't consume the tap - let it reach the unmask button and media controls
-                    // The mask overlay itself will block touches to web content
-
-                    Log.d("TouchDebug", "checkpoint5")
-
-                    if (isProcessingTap) return true
-
-                    isProcessingTap = true
-                    Handler(Looper.getMainLooper()).postDelayed({ isProcessingTap = false }, 300)
-
-//                Log.d("TouchDebug", """
-//        SingleTapConfirmed:
-//        Event: $e
-//        Coordinates: (${e.x}, ${e.y})
-//        isProcessingTap: $isProcessingTap
-//        isCursorVisible: $isCursorVisible
-//    """.trimIndent())
-                    Log.d("TouchDebug", "checkpoint6")
-                    // Check if bookmarks are visible first
-                    if (!isAnchored && dualWebViewGroup.isBookmarksExpanded()) {
-                        Log.d("BookmarksDebug", "Processing tap while bookmarks are visible")
-                        val handled = dualWebViewGroup.handleBookmarkTap()
-                        if (handled) return true
+                when {
+                    isToggling && cursorJustAppeared -> {
+                        Log.d("TouchDebug", "Ignoring tap during cursor appearance")
+                        return true
                     }
 
-                    Log.d("TouchDebug", "checkpoint7")
-
-                    when {
-                        isToggling && cursorJustAppeared -> {
-                            Log.d("TouchDebug", "Ignoring tap during cursor appearance")
+                    isCursorVisible -> {
+                        // Check if this is a long press
+                        if (e.eventTime - e.downTime > longPressTimeout) {
+                            //Log.d("TouchDebug", "Long press detected, ignoring input interaction")
                             return true
                         }
 
+                        // Handle regular clicks when cursor is visible
+                        if (!cursorJustAppeared && !isSimulatingTouchEvent) {
+                            val UILocation = IntArray(2)
+                            dualWebViewGroup.leftEyeUIContainer.getLocationOnScreen(UILocation)
 
-
-                        isCursorVisible -> {
-                            // Check if this is a long press
-                            if (e.eventTime - e.downTime > longPressTimeout) {
-                                //Log.d("TouchDebug", "Long press detected, ignoring input interaction")
-                                return true
-                            }
-
-
-
-                            // Handle regular clicks when cursor is visible
-                            if (!cursorJustAppeared && !isSimulatingTouchEvent) {
-                                Log.d("TouchDebug", "checkpoint8")
-                                val UILocation = IntArray(2)
-                                dualWebViewGroup.leftEyeUIContainer.getLocationOnScreen(UILocation)
-
-                                // Dispatch the touch event at the current cursor position
-                                dispatchTouchEventAtCursor()
-                            }
-                        }
-
-                        else -> {
-                            // In scroll mode (cursor hidden), let taps pass through to the WebView
-                            // User can exit scroll mode via the dedicated unhide button
-                            if (dualWebViewGroup.isInScrollMode()) {
-                                return false  // Don't consume - let tap go to WebView
-                            }
-                            isSimulatingTouchEvent = true
-                            toggleCursorVisibility()
-                            Log.d("TouchDebug", "Toggling Cursor Visibility")
+                            // Dispatch the touch event at the current cursor position
+                            dispatchTouchEventAtCursor()
                         }
                     }
-                    return true
+
+                    else -> {
+                        // In scroll mode (cursor hidden), let taps pass through to the WebView
+                        // User can exit scroll mode via the dedicated unhide button
+                        if (dualWebViewGroup.isInScrollMode()) {
+                            return false  // Don't consume - let tap go to WebView
+                        }
+                        isSimulatingTouchEvent = true
+                        toggleCursorVisibility()
+                        Log.d("TouchDebug", "Toggling Cursor Visibility")
+                    }
                 }
                 return true
             }
@@ -804,8 +668,6 @@ class MainActivity : AppCompatActivity(),
                                     performDoubleTapBackNavigation()
                                 }
                             } finally {
-                                tapCount = 0
-                                lastTapTime = 0L
                                 pendingDoubleTapAction = false
                                 isProcessingDoubleTap = false
                                 lastDoubleTapStartTime = 0L
@@ -980,7 +842,9 @@ class MainActivity : AppCompatActivity(),
             // In scroll mode, let taps pass through to WebView
             // The gesture detector still sees all events via dispatchTouchEvent,
             // so double-tap detection still works independently
-            if (dualWebViewGroup.isInScrollMode()) {
+            // In scroll mode, let taps pass through to WebView ONLY if anchored
+            // If not anchored, we want the cursor to handle the event (move/wake)
+            if (dualWebViewGroup.isInScrollMode() && isAnchored) {
                 // Always return false to let taps reach the WebView (for clicking links, etc.)
                 // The gesture detector has already processed the event in dispatchTouchEvent
                 return@setOnTouchListener false
@@ -992,7 +856,7 @@ class MainActivity : AppCompatActivity(),
 
 
             if (event.action == MotionEvent.ACTION_UP && !handled) {
-                webView.performClick()
+                // webView.performClick() // REMOVED: Caused double clicks on drag release
             }
 
             handled
@@ -1199,12 +1063,12 @@ class MainActivity : AppCompatActivity(),
         registerReceiver(notificationReceiver, filter)
 
         // Check for notification listener permission
-        if (!isNotificationListenerEnabled()) {
-             // On glasses, we can't reliably open the settings screen.
-             // Just inform the user they need to run the ADB command.
-             Toast.makeText(this, "Run: adb shell cmd notification allow_listener com.TapLinkX3.app/com.TapLink.app.NotificationService", Toast.LENGTH_LONG).show()
-             Log.e("MainActivity", "Notification permission missing. Run: adb shell cmd notification allow_listener com.TapLinkX3.app/com.TapLink.app.NotificationService")
-        }
+//        if (!isNotificationListenerEnabled()) {
+//             // On glasses, we can't reliably open the settings screen.
+//             // Just inform the user they need to run the ADB command.
+//             dualWebViewGroup.showToast("Run: adb shell cmd notification allow_listener com.TapLinkX3.app/com.TapLink.app.NotificationService", 5000L)
+//             Log.e("MainActivity", "Notification permission missing. Run: adb shell cmd notification allow_listener com.TapLinkX3.app/com.TapLink.app.NotificationService")
+//        }
 
 
         if (isAnchored) {
@@ -1551,7 +1415,6 @@ class MainActivity : AppCompatActivity(),
     override fun onShowKeyboardForNew() {
         showCustomKeyboard()
     }
-
 
     private fun adjustViewportForKeyboard() {
         val totalHeight = 480 // Total screen height
@@ -2683,6 +2546,27 @@ class MainActivity : AppCompatActivity(),
             }
         }
 
+        // Check for scrollbar interaction
+        if (dualWebViewGroup.isPointInScrollbar(interactionX, interactionY)) {
+            dualWebViewGroup.dispatchScrollbarTouch(interactionX, interactionY)
+            return
+        }
+
+        // Check for bookmarks interaction (prevent click propagation to webview)
+        if (dualWebViewGroup.isBookmarksExpanded()) {
+            val bookmarksLocation = IntArray(2)
+            dualWebViewGroup.getBookmarksView().getLocationOnScreen(bookmarksLocation)
+            val bv = dualWebViewGroup.getBookmarksView()
+            if (interactionX >= bookmarksLocation[0] &&
+                interactionX <= bookmarksLocation[0] + bv.width &&
+                interactionY >= bookmarksLocation[1] &&
+                interactionY <= bookmarksLocation[1] + bv.height) {
+                // Handled by DualWebViewGroup.onTouchEvent - just don't dispatch to webview
+                Log.d("ClickDebug", "Click consumed by bookmarks window")
+                return
+            }
+        }
+
         // Handle navigation bar and toggle bar clicks only if visible
         if (dualWebViewGroup.isNavBarVisible()) {
             val UILocation = IntArray(2)
@@ -3179,6 +3063,7 @@ class MainActivity : AppCompatActivity(),
                 // JavaScript and Content Settings
                 javaScriptEnabled = true
                 domStorageEnabled = true
+                @Suppress("DEPRECATION")
                 databaseEnabled = true
                 javaScriptCanOpenWindowsAutomatically = false
                 mediaPlaybackRequiresUserGesture = false
@@ -3596,6 +3481,7 @@ class MainActivity : AppCompatActivity(),
             mediaPlaybackRequiresUserGesture = false
             domStorageEnabled = true
             javaScriptEnabled = true
+            @Suppress("DEPRECATION")
             databaseEnabled = true
             useWideViewPort = true
             loadWithOverviewMode = true
@@ -4499,7 +4385,7 @@ class MainActivity : AppCompatActivity(),
         val handled = isGestureHandled
         
         if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
-            tripleClickMenu.stopFling()
+            // triple click menu fling logic was here
         }
 
         // If gesture detector handled it, or if ring controls are active, consume the event

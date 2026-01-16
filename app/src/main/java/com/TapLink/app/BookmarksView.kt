@@ -126,6 +126,7 @@ class BookmarkManager(private val context: Context) {
 interface BookmarkKeyboardListener {
     fun onShowKeyboardForEdit(text: String)
     fun onShowKeyboardForNew()
+    fun onHideKeyboard()
 }
 
 
@@ -142,7 +143,7 @@ class BookmarksView @JvmOverloads constructor(
         private const val TAG = "BookmarksView"
     }
 
-    private enum class ActionType { OPEN, DELETE, SET_HOME, NEW, CLOSE }
+    private enum class ActionType { OPEN, DELETE, SET_HOME, NEW, CLOSE, PREV, NEXT }
     private data class ViewAction(val type: ActionType, val id: String? = null, val url: String? = null)
 
     private val bookmarkManager = BookmarkManager(context)
@@ -167,27 +168,13 @@ class BookmarksView @JvmOverloads constructor(
 
     private val bookmarkViews = mutableListOf<View>()
 
-    private val scrollContainer = ScrollView(context)
+
+    private val pageSize = 4
+    private var currentPage = 0
 
     private var editingBookmarkId: String? = null
-    private val editField = EditText(context).apply {
-        layoutParams = LayoutParams(
-            LayoutParams.MATCH_PARENT,
-            LayoutParams.WRAP_CONTENT
-        ).apply {
-            setMargins(16, 12, 16, 12)
-        }
-        background = GradientDrawable().apply {
-            setColor(Color.parseColor("#20FFFFFF"))
-            cornerRadius = 12f
-        }
-        setTextColor(Color.WHITE)
-        setHintTextColor(Color.parseColor("#80FFFFFF"))
-        setPadding(16, 12, 16, 12)
-        visibility = View.GONE
-    }
 
-    // Modern color palette
+    // Modern color palette - must be declared before editField which uses colorAccent
     private val colorBackground = Color.parseColor("#E80B0F1A")
     private val colorItemDefault = Color.parseColor("#15FFFFFF")
     private val colorItemSelected = Color.parseColor("#3582B1FF")
@@ -197,11 +184,31 @@ class BookmarksView @JvmOverloads constructor(
     private val colorTextSecondary = Color.parseColor("#B0FFFFFF")
     private val colorDanger = Color.parseColor("#FF5252")
 
+    private val editField = EditText(context).apply {
+        layoutParams = LayoutParams(
+            LayoutParams.MATCH_PARENT,
+            LayoutParams.WRAP_CONTENT
+        ).apply {
+            setMargins(16, 8, 16, 8)
+        }
+        background = GradientDrawable().apply {
+            setColor(Color.parseColor("#30FFFFFF"))
+            cornerRadius = 12f
+            setStroke(2, colorAccent)
+        }
+        setTextColor(Color.WHITE)
+        setHintTextColor(Color.parseColor("#80FFFFFF"))
+        setHint("URL...")
+        setPadding(16, 12, 16, 12)
+        visibility = View.GONE
+        isSingleLine = true
+    }
+
     // Header view for the dialog
     private val headerView = LinearLayout(context).apply {
         orientation = HORIZONTAL
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
-        setPadding(16, 16, 16, 8)
+        setPadding(16, 8, 8, 8)
         gravity = Gravity.CENTER_VERTICAL
 
         val titleText = TextView(context).apply {
@@ -211,39 +218,59 @@ class BookmarksView @JvmOverloads constructor(
             setTypeface(null, Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
         }
+
+        val closeButton = TextView(context).apply {
+            text = "✕"
+            textSize = 20f
+            setTextColor(Color.WHITE)
+            setPadding(16, 8, 16, 8)
+            setOnClickListener { visibility = View.GONE }
+            // Add a highlight view for hover consistency later if needed
+            tag = ViewAction(ActionType.CLOSE)
+        }
+
         addView(titleText)
+        addView(closeButton)
+        bookmarkViews.add(closeButton)
+    }
+
+    private val footerView = LinearLayout(context).apply {
+        orientation = HORIZONTAL
+        layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 64)
+        setPadding(8, 4, 8, 4)
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = 64
     }
 
     init {
         orientation = VERTICAL
         background = ContextCompat.getDrawable(context, R.drawable.bookmarks_background)
         elevation = 24f
-        setPadding(8, 8, 8, 8)
+        setPadding(4, 4, 4, 4)
 
         // Add header
         addView(headerView)
+        
+        // Add edit field below header
+        addView(editField)
 
-        scrollContainer.apply {
-            layoutParams = LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                280
-            )
-            isVerticalScrollBarEnabled = true
-            isScrollbarFadingEnabled = false
-        }
-
+        // Fixed height container for exactly 4 bookmarks
+        // 4 bookmarks * (52 height + 8 margin) = 240
         bookmarksList.apply {
             orientation = VERTICAL
             layoutParams = LayoutParams(
                 LayoutParams.MATCH_PARENT,
-                LayoutParams.WRAP_CONTENT
+                240
             )
-            setPadding(8, 4, 8, 8)
+            setPadding(8, 0, 8, 0)
         }
 
-        scrollContainer.addView(bookmarksList)
-        addView(scrollContainer)
-        addView(editField)
+        addView(bookmarksList)
+        addView(footerView)
+        
+        // Ensure touch events are consumed by this view, not propagated to webview
+        isClickable = true
+        isFocusable = true
     }
 
 
@@ -262,41 +289,6 @@ class BookmarksView @JvmOverloads constructor(
 
 
 
-    private fun calculateAndSetScroll() {
-        if (currentSelection < 0 || currentSelection >= bookmarkViews.size) return
-
-        val selectedView = bookmarkViews[currentSelection]
-
-        post {
-            // Get the visible boundaries
-            val containerHeight = scrollContainer.height
-
-            // Calculate the current position of the selected view
-            val viewTop = selectedView.top
-            val viewHeight = selectedView.height
-
-            // Calculate how much room we want at the bottom (e.g., 2 items worth of space)
-            val bottomPadding = viewHeight * 2
-
-            // Calculate scroll position that would put the selected item with proper bottom padding
-            val targetScroll = max(0, viewTop - (containerHeight - bottomPadding))
-
-            Log.d("BookmarksScroll", """
-            Scroll Calculation:
-            Container height: $containerHeight
-            View top: $viewTop
-            View height: $viewHeight
-            Bottom padding: $bottomPadding
-            Target scroll: $targetScroll
-        """.trimIndent())
-
-            scrollContainer.smoothScrollTo(0, targetScroll)
-
-            // Ensure view hierarchy is updated
-            requestLayout()
-            invalidate()
-        }
-    }
 
 
 
@@ -337,10 +329,7 @@ class BookmarksView @JvmOverloads constructor(
                 setColorFilter(if (entry.isHome) colorAccentGreen else colorTextPrimary)
             }
             addView(homeIcon)
-
-            setOnClickListener {
-                handleSetAsHome(entry.id)
-            }
+            // Click handled by handleTap system via ViewAction tag
         }
 
         val urlView = TextView(context).apply {
@@ -349,7 +338,7 @@ class BookmarksView @JvmOverloads constructor(
                 .replace("http://", "")
                 .replace("www.", "")
                 .trimEnd('/')
-            textSize = 14f
+            textSize = 16f
             setTextColor(colorTextPrimary)
             gravity = Gravity.CENTER_VERTICAL
             setPadding(8, 0, 8, 0)
@@ -385,10 +374,7 @@ class BookmarksView @JvmOverloads constructor(
                     gravity = Gravity.CENTER
                 }
                 addView(closeIcon)
-
-                setOnClickListener {
-                    handleDeleteBookmark(entry.id)
-                }
+                // Click handled by handleTap system via ViewAction tag
             }
             rowLayout.addView(deleteButton)
             bookmarkViews.add(deleteButton)
@@ -435,33 +421,133 @@ class BookmarksView @JvmOverloads constructor(
 
 
     fun refreshBookmarks() {
-        Log.d(TAG, "refreshBookmarks() called")
+        Log.d(TAG, "refreshBookmarks() called, current page: $currentPage")
 
+        // 1. Clear everything
         bookmarksList.removeAllViews()
+        footerView.removeAllViews()
+        
+        // bookmarkViews should only contain interactive elements on screen
         bookmarkViews.clear()
+        
+        // Re-add close button from header to bookmarkViews
+        headerView.getChildAt(1)?.let { bookmarkViews.add(it) }
 
-        val bookmarks = bookmarkManager.getBookmarks()
-        Log.d(TAG, "Found ${bookmarks.size} bookmarks")
+        val allBookmarks = bookmarkManager.getBookmarks()
+        val totalPages = max(1, (allBookmarks.size + pageSize - 1) / pageSize)
+        
+        if (currentPage >= totalPages) currentPage = totalPages - 1
+        if (currentPage < 0) currentPage = 0
 
-        // Add bookmarks in order (0 to n-1)
-        bookmarks.forEachIndexed { index, entry ->
-            addBookmarkView(entry)
-            Log.d(TAG, "Added bookmark ${index}: ${entry.url}, isHome: ${entry.isHome}")
+        // 2. Add current page's bookmarks
+        val startIdx = currentPage * pageSize
+        val endIdx = minOf(startIdx + pageSize, allBookmarks.size)
+        
+        for (i in startIdx until endIdx) {
+            addBookmarkView(allBookmarks[i])
+        }
+        
+        // Fill empty slots to maintain fixed height
+        for (i in (endIdx - startIdx) until pageSize) {
+            val emptySlot = View(context).apply {
+                layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 52).apply {
+                    setMargins(4, 4, 4, 4)
+                }
+            }
+            bookmarksList.addView(emptySlot)
         }
 
-        // Add "+" button at index n
-        addSpecialButton("+", bookmarks.size)
-        Log.d(TAG, "Added + button at index ${bookmarks.size}")
-
-        // Add "Close" button at index n+1
-        addSpecialButton("Close", bookmarks.size + 1)
-        Log.d(TAG, "Added close button at index ${bookmarks.size + 1}")
+        // 3. Setup Footer
+        setupFooter(totalPages)
 
         // Ensure selection is within bounds
         if (currentSelection != -1) {
             currentSelection = currentSelection.coerceIn(0, bookmarkViews.size - 1)
         }
         updateAllSelections()
+        
+        // Force measure and layout after content change (like toggle() does)
+        measure(
+            MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+        )
+        layout(left, top, left + measuredWidth, top + measuredHeight)
+        
+        // Force redraw after content change
+        invalidate()
+        
+        // Also trigger parent refresh for mirroring
+        post {
+            var currentParent = parent
+            while (currentParent != null) {
+                if (currentParent is DualWebViewGroup) {
+                    currentParent.startRefreshing()
+                    break
+                }
+                currentParent = currentParent.parent
+            }
+        }
+    }
+
+    private fun setupFooter(totalPages: Int) {
+        val btnPrev = createFooterButton("< Prev") {
+            if (currentPage > 0) {
+                currentPage--
+                refreshBookmarks()
+            }
+        }
+        
+        val btnNext = createFooterButton("Next >") {
+            if (currentPage < totalPages - 1) {
+                currentPage++
+                refreshBookmarks()
+            }
+        }
+        
+        val btnAdd = createFooterButton("+ Add") {
+            startEditWithId("NEW_BOOKMARK", bookmarkListener?.getCurrentUrl() ?: "")
+        }.apply {
+            (background as GradientDrawable).setColor(Color.parseColor("#6069F0AE"))
+        }
+
+        footerView.apply {
+            addView(btnPrev, LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+            addView(btnAdd, LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1.2f))
+            addView(btnNext, LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+        }
+        
+        bookmarkViews.add(btnPrev)
+        bookmarkViews.add(btnAdd)
+        bookmarkViews.add(btnNext)
+        
+        // Visually disable buttons if at bounds
+        btnPrev.alpha = if (currentPage > 0) 1.0f else 0.5f
+        btnNext.alpha = if (currentPage < totalPages - 1) 1.0f else 0.5f
+    }
+
+    private fun createFooterButton(text: String, onClick: () -> Unit): TextView {
+        return TextView(context).apply {
+            this.text = text
+            textSize = 16f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(8, 6, 8, 6)
+            background = GradientDrawable().apply {
+                setColor(colorItemDefault)
+                cornerRadius = 8f
+            }
+            layoutParams = LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f).apply {
+                setMargins(4, 4, 4, 4)
+            }
+            setOnClickListener { onClick() }
+            tag = when {
+                text.contains("+") -> ViewAction(ActionType.NEW)
+                text.contains("< Prev") -> ViewAction(ActionType.PREV)
+                text.contains("Next >") -> ViewAction(ActionType.NEXT)
+                else -> null
+            }
+        }
     }
 
     //this function handles the change in focus of bookmarks rows
@@ -484,9 +570,8 @@ class BookmarksView @JvmOverloads constructor(
             }
         }
 
-        // Ensure selected view is visible
         if (currentSelection != -1) {
-            calculateAndSetScroll()
+            //calculateAndSetScroll()
         }
 
     }
@@ -604,7 +689,88 @@ class BookmarksView @JvmOverloads constructor(
         }
     }
 
+    private val hitTolerance = 20f
+
+    private fun findSelectionIndexAt(localX: Float, localY: Float): Int {
+        // Check header (Close button)
+        val closeBtn = headerView.getChildAt(1)
+        if (closeBtn != null && isOverView(closeBtn, headerView, localX, localY)) {
+            return bookmarkViews.indexOf(closeBtn)
+        }
+
+        // Check footer
+        for (i in 0 until footerView.childCount) {
+            val btn = footerView.getChildAt(i)
+            if (isOverView(btn, footerView, localX, localY)) {
+                return bookmarkViews.indexOf(btn)
+            }
+        }
+
+        // Check bookmarks list
+        if (localX >= bookmarksList.left && localX <= bookmarksList.right &&
+            localY >= bookmarksList.top && localY <= bookmarksList.bottom) {
+
+            val relX = localX - bookmarksList.left
+            val relY = localY - bookmarksList.top
+
+            for (i in 0 until bookmarksList.childCount) {
+                val child = bookmarksList.getChildAt(i)
+                if (child.visibility != View.VISIBLE) continue
+
+                if (relY >= child.top - 2 && relY <= child.bottom + 2) {
+                    if (child is LinearLayout) {
+                        val rowRelX = relX - child.left
+
+                        for (j in 0 until child.childCount) {
+                            val innerView = child.getChildAt(j)
+                            if (rowRelX >= innerView.left - hitTolerance && rowRelX <= innerView.right + hitTolerance) {
+                                return bookmarkViews.indexOf(innerView)
+                            }
+                        }
+                    } else {
+                        // Empty slot
+                    }
+                }
+            }
+        }
+        return -1
+    }
+
+    private fun isOverView(view: View, parent: ViewGroup, localX: Float, localY: Float): Boolean {
+        if (view.visibility != View.VISIBLE) return false
+        val vx = localX - parent.left - view.left
+        val vy = localY - parent.top - view.top
+        return vx >= -hitTolerance && vx <= view.width + hitTolerance &&
+               vy >= -hitTolerance && vy <= view.height + hitTolerance
+    }
+
+    fun updateHover(localX: Float, localY: Float): Boolean {
+        // Basic bounds check
+        if (localX < 0 || localX > width || localY < 0 || localY > height) {
+            val oldSelection = currentSelection
+            currentSelection = -1
+            if (oldSelection != -1) {
+                updateAllSelections()
+            }
+            return false
+        }
+
+        val index = findSelectionIndexAt(localX, localY)
+        if (index != currentSelection) {
+            currentSelection = index
+            updateAllSelections()
+        }
+        
+        // Return true if we're over the bookmarks window at all
+        return true
+    }
+
     fun handleAnchoredTap(localX: Float, localY: Float): Boolean {
+        // Always consume taps within the window bounds to prevent propagation
+        if (localX < 0 || localX > width || localY < 0 || localY > height) {
+            return false // Outside window - don't consume
+        }
+        
         if (editField.visibility == View.VISIBLE) {
             if (localX >= editField.left && localX <= editField.right &&
                 localY >= editField.top && localY <= editField.bottom) {
@@ -612,74 +778,29 @@ class BookmarksView @JvmOverloads constructor(
             }
         }
 
-        if (localX >= scrollContainer.left && localX <= scrollContainer.right &&
-            localY >= scrollContainer.top && localY <= scrollContainer.bottom) {
-
-            val scrollX = localX - scrollContainer.left
-            val scrollY = localY - scrollContainer.top + scrollContainer.scrollY
-
-            for (i in 0 until bookmarksList.childCount) {
-                val child = bookmarksList.getChildAt(i)
-
-                if (scrollX >= child.left && scrollX <= child.right &&
-                    scrollY >= child.top && scrollY <= child.bottom) {
-
-                    // Found the row. Now find which specific view inside was clicked.
-                    if (child is LinearLayout) {
-                        val childRelX = scrollX - child.left
-                        val childRelY = scrollY - child.top
-
-                        // Check each child of the row
-                        for (j in 0 until child.childCount) {
-                            val innerView = child.getChildAt(j)
-                            if (childRelX >= innerView.left && childRelX <= innerView.right &&
-                                childRelY >= innerView.top && childRelY <= innerView.bottom) {
-
-                                // Found the exact view. Find it in bookmarkViews list.
-                                val index = bookmarkViews.indexOf(innerView)
-                                if (index != -1) {
-                                    currentSelection = index
-                                    updateAllSelections()
-                                    return handleTap()
-                                }
-                            }
-                        }
-                    } else {
-                        // Special button
-                        val index = bookmarkViews.indexOf(child)
-                        if (index != -1) {
-                            currentSelection = index
-                            updateAllSelections()
-                            return handleTap()
-                        }
-                    }
-                }
-            }
+        val index = findSelectionIndexAt(localX, localY)
+        if (index != -1) {
+            currentSelection = index
+            updateAllSelections()
+            handleTap()
         }
-        return false
+        // Always return true to consume the tap and prevent propagation to webpage
+        return true
     }
 
     private var scrollResidue = 0f
 
-    // Anchored mode: handle vertical swipe to scroll
-    fun handleAnchoredSwipe(verticalDelta: Float) {
-        if (!isAnchoredMode) return
-
-        // Accumulate the delta (fractional parts)
-        val totalDelta = verticalDelta + scrollResidue
-        val scrollPixels = totalDelta.toInt()
-        scrollResidue = totalDelta - scrollPixels
-
-        if (scrollPixels != 0) {
-            // Use scrollBy instead of smoothScrollBy for direct tracking
-            scrollContainer.scrollBy(0, scrollPixels)
-        }
+    // Anchored mode: handle vertical swipe (scrolling logic removed as we use pagination)
+    @Suppress("UNUSED_PARAMETER")
+    fun handleAnchoredSwipe(_verticalDelta: Float) {
+        // No-op for now as we use pagination. 
+        // We could potentially use this to switch pages.
     }
 
     // Anchored mode: handle fling
-    fun handleAnchoredFling(velocity: Float) {
-        if (!isAnchoredMode) return
-        scrollContainer.fling(-velocity.toInt())
+    @Suppress("UNUSED_PARAMETER")
+    fun handleAnchoredFling(_velocity: Float) {
+        // No-op for now
     }
 
     // Non-anchored mode: drag handling (similar to CustomKeyboardView)
@@ -706,26 +827,13 @@ class BookmarksView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_MOVE -> {
-                val dx = x - lastX
                 val totalMove = kotlin.math.abs(x - startX)
 
+                // Swipe logic removed: only track drag state to prevent accidental taps
                 if (!isDragging && totalMove > touchSlop) {
                     isDragging = true
                 }
-
-                if (isDragging) {
-                    accumulatedX += dx
-
-                    while (accumulatedX >= stepThresholdX) {
-                        handleFling(true)
-                        accumulatedX -= stepThresholdX
-                    }
-                    while (accumulatedX <= -stepThresholdX) {
-                        handleFling(false)
-                        accumulatedX += stepThresholdX
-                    }
-                }
-
+                
                 lastX = x
             }
 
@@ -789,6 +897,22 @@ class BookmarksView @JvmOverloads constructor(
                 visibility = View.GONE
                 true
             }
+            ActionType.PREV -> {
+                if (currentPage > 0) {
+                    currentPage--
+                    refreshBookmarks()
+                }
+                true
+            }
+            ActionType.NEXT -> {
+                val allBookmarks = bookmarkManager.getBookmarks()
+                val totalPages = (allBookmarks.size + pageSize - 1) / pageSize
+                if (currentPage < totalPages - 1) {
+                    currentPage++
+                    refreshBookmarks()
+                }
+                true
+            }
         }
     }
 
@@ -822,15 +946,27 @@ class BookmarksView @JvmOverloads constructor(
     }
 
     fun isEditing(): Boolean {
+        // Check if parent DualWebViewGroup's edit field is actually visible
+        var currentParent = parent
+        while (currentParent != null) {
+            if (currentParent is DualWebViewGroup) {
+                // Check if urlEditText is visible, not just the flag
+                val isEditing = currentParent.urlEditText.visibility == View.VISIBLE
+                Log.d("BookmarksDebug", "isEditing() via parent urlEditText visibility: $isEditing")
+                return isEditing
+            }
+            currentParent = currentParent.parent
+        }
+        // Fallback to internal field check
         val isVisible = editField.visibility == View.VISIBLE
-        Log.d("BookmarksDebug", "isEditing() called, editField visibility: $isVisible")
+        Log.d("BookmarksDebug", "isEditing() fallback, editField visibility: $isVisible")
         return isVisible
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(
-            MeasureSpec.makeMeasureSpec(420, MeasureSpec.EXACTLY),
-            MeasureSpec.makeMeasureSpec(400, MeasureSpec.AT_MOST)
+            MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(440, MeasureSpec.AT_MOST)
         )
     }
 
@@ -838,10 +974,6 @@ class BookmarksView @JvmOverloads constructor(
         super.onLayout(changed, left, top, right, bottom)
 
         if (visibility == View.VISIBLE) {
-            scrollContainer.measure(
-                MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(320, MeasureSpec.EXACTLY)
-            )
 
             bookmarksList.measure(
                 MeasureSpec.makeMeasureSpec(width - paddingLeft - paddingRight, MeasureSpec.EXACTLY),
@@ -884,25 +1016,27 @@ class BookmarksView @JvmOverloads constructor(
     }
 
     fun startEditWithId(bookmarkId: String?, currentUrl: String) {
-        Log.d(TAG, "startEditWithId called with id: $bookmarkId, url: $currentUrl")
+        Log.d(TAG, "startEditWithId local called with id: $bookmarkId, url: $currentUrl")
         editingBookmarkId = bookmarkId
 
-        // Find DualWebViewGroup by traversing up the view hierarchy
+        // Find parent DualWebViewGroup and use its shared edit field
         var currentParent = parent
         while (currentParent != null) {
             if (currentParent is DualWebViewGroup) {
-                Log.d(TAG, "Found DualWebViewGroup, showing edit field")
                 currentParent.showEditField(currentUrl)
-                currentParent.urlEditText.setSelection(currentUrl.length)
-                break
+                return
             }
             currentParent = currentParent.parent
         }
-        if (currentParent == null) {
-            Log.e(TAG, "Could not find DualWebViewGroup in parent hierarchy!")
+        
+        // Fallback: use internal field if parent not found (shouldn't happen)
+        Log.w(TAG, "DualWebViewGroup parent not found, using internal editField")
+        editField.apply {
+            setText(currentUrl)
+            visibility = View.VISIBLE
+            requestFocus()
+            setSelection(currentUrl.length)
         }
-
-        Log.d(TAG, "Calling keyboard listener: ${keyboardListener != null}")
         keyboardListener?.onShowKeyboardForEdit(currentUrl)
     }
 
@@ -910,22 +1044,9 @@ class BookmarksView @JvmOverloads constructor(
     fun endEdit() {
         Log.d(TAG, "endEdit called")
         editingBookmarkId = null
+        editField.visibility = View.GONE
 
-        var dualWebViewGroup: DualWebViewGroup? = null
-        var currentParent = parent
-        while (currentParent != null) {
-            if (currentParent is DualWebViewGroup) {
-                dualWebViewGroup = currentParent
-                break
-            }
-            currentParent = currentParent.parent
-        }
-
-        dualWebViewGroup?.apply {
-            hideLinkEditing()
-            // Make sure keyboard is hidden
-            keyboardListener?.onHideKeyboard()
-        }
+        keyboardListener?.onHideKeyboard()
     }
 
 
@@ -951,8 +1072,9 @@ class BookmarksView @JvmOverloads constructor(
             currentParent = currentParent.parent
         }
 
-        if (dualWebViewGroup != null) {
-            val newUrl = dualWebViewGroup.getCurrentEditText()
+        // Check if we're in bookmark editing mode via the parent
+        if (dualWebViewGroup?.isBookmarkEditing() == true) {
+            val newUrl = dualWebViewGroup.getCurrentLinkText()
             val bookmarkId = editingBookmarkId
 
             Log.d(TAG, "Processing enter - bookmarkId: $bookmarkId, newUrl: $newUrl")
@@ -968,8 +1090,8 @@ class BookmarksView @JvmOverloads constructor(
                     bookmarkManager.addBookmark(urlToAdd)
                 }
                 endEdit()
-
-                // Refresh both bookmarks views
+                dualWebViewGroup.hideBookmarkEditing()
+                refreshBookmarks()
                 dualWebViewGroup.refreshBothBookmarks()
                 return
             }
@@ -989,9 +1111,8 @@ class BookmarksView @JvmOverloads constructor(
             }
 
             endEdit()
-            dualWebViewGroup.refreshBothBookmarks()
-        } else {
-            Log.e(TAG, "Could not find DualWebViewGroup when handling enter!")
+            dualWebViewGroup.hideBookmarkEditing()
+            refreshBookmarks()
         }
     }
 

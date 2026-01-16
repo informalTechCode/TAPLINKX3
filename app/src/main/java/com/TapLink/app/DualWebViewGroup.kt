@@ -87,9 +87,9 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var lastCursorUpdateTime = 0L
     private val CURSOR_UPDATE_INTERVAL = 16L  // 60fps cap for cursor updates
 
-    private lateinit var leftSystemInfoView: SystemInfoView
+    private var leftSystemInfoView: SystemInfoView
 
-    lateinit var leftNavigationBar: View
+    var leftNavigationBar: View
     private val verticalBarSize = 480 - 30
     private val nButtons    = 7
     private val buttonHeight = verticalBarSize / nButtons
@@ -105,7 +105,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var isAnchoredDrag = false
     private val ANCHORED_TOUCH_SLOP = 10f
 
-    lateinit var leftToggleBar: View
+    var leftToggleBar: View
     var progressBar: android.widget.ProgressBar = android.widget.ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 4)
         progressDrawable.setTint(Color.BLUE)
@@ -132,7 +132,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     @Volatile private var isRefreshing = false
-    private val refreshLock = Object()
+    private val refreshLock = Any()
 
     // Near the top of the class
     private var isDesktopMode = false
@@ -173,10 +173,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     var isAnchored = false
     private var isHoveringAnchorToggle = false
 
-    private var tripleClickMenu: TripleClickMenu? = null
-    private var isTripleClickMenuInitialized = false
-
-    private val bitmapLock = Object()
+    private val bitmapLock = Any()
     private var settingsMenu: View? = null
     private var isSettingsVisible = false
 
@@ -244,7 +241,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     // Properties for link editing
-    lateinit var urlEditText: EditText
+    var urlEditText: EditText
     private val urlFieldMinHeight = 56.dp()
 
     private var leftEditField: EditText
@@ -1036,7 +1033,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Create horizontal scroll bar
         horizontalScrollBar = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(Color.parseColor("#E0202020")) // More opaque background
+            setBackgroundColor(Color.BLACK) // Black background
             visibility = View.GONE
             elevation = 150f
             isClickable = true // Prevent click propagation
@@ -1044,21 +1041,21 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             // Left arrow button
             val btnLeft = ImageButton(context).apply {
-                layoutParams = LinearLayout.LayoutParams(30, 30)
+                layoutParams = LinearLayout.LayoutParams(20, 20)
                 setImageResource(R.drawable.ic_arrow_left)
                 setBackgroundColor(Color.parseColor("#404040"))
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(6, 6, 6, 6)
+                setPadding(2, 2, 2, 2)
             }
             addView(btnLeft)
 
             // Track container with thumb
             val trackContainer = FrameLayout(context).apply {
-                layoutParams = LinearLayout.LayoutParams(0, 30, 1f)
+                layoutParams = LinearLayout.LayoutParams(0, 20, 1f)
                 setBackgroundColor(Color.parseColor("#303030"))
             }
             hScrollThumb = View(context).apply {
-                layoutParams = FrameLayout.LayoutParams(60, 20).apply {
+                layoutParams = FrameLayout.LayoutParams(60, 16).apply {
                     gravity = Gravity.CENTER_VERTICAL
                     leftMargin = 0
                 }
@@ -1069,11 +1066,11 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             // Right arrow button
             val btnRight = ImageButton(context).apply {
-                layoutParams = LinearLayout.LayoutParams(30, 30)
+                layoutParams = LinearLayout.LayoutParams(20, 20)
                 setImageResource(R.drawable.ic_arrow_right)
                 setBackgroundColor(Color.parseColor("#404040"))
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(6, 6, 6, 6)
+                setPadding(2, 2, 2, 2)
             }
             addView(btnRight)
 
@@ -1111,7 +1108,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Create vertical scroll bar
         verticalScrollBar = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#E0202020")) // More opaque background
+            setBackgroundColor(Color.BLACK) // Black background
             visibility = View.GONE
             elevation = 150f
             isClickable = true // Prevent click propagation
@@ -1119,21 +1116,21 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             // Up arrow button
             val btnUp = ImageButton(context).apply {
-                layoutParams = LinearLayout.LayoutParams(30, 30)
+                layoutParams = LinearLayout.LayoutParams(20, 20)
                 setImageResource(R.drawable.ic_arrow_up)
                 setBackgroundColor(Color.parseColor("#404040"))
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(6, 6, 6, 6)
+                setPadding(2, 2, 2, 2)
             }
             addView(btnUp)
 
             // Track container with thumb
             val trackContainer = FrameLayout(context).apply {
-                layoutParams = LinearLayout.LayoutParams(30, 0, 1f)
+                layoutParams = LinearLayout.LayoutParams(20, 0, 1f)
                 setBackgroundColor(Color.parseColor("#303030"))
             }
             vScrollThumb = View(context).apply {
-                layoutParams = FrameLayout.LayoutParams(20, 60).apply {
+                layoutParams = FrameLayout.LayoutParams(16, 60).apply {
                     gravity = Gravity.CENTER_HORIZONTAL
                     topMargin = 0
                 }
@@ -1144,11 +1141,11 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             // Down arrow button
             val btnDown = ImageButton(context).apply {
-                layoutParams = LinearLayout.LayoutParams(30, 30)
+                layoutParams = LinearLayout.LayoutParams(20, 20)
                 setImageResource(R.drawable.ic_arrow_down)
                 setBackgroundColor(Color.parseColor("#404040"))
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(6, 6, 6, 6)
+                setPadding(2, 2, 2, 2)
             }
             addView(btnDown)
 
@@ -1207,14 +1204,40 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
 
+    // Track fullscreen toggles for debugging
+    private var fullscreenEntryCount = 0
+    private var lastFullscreenViewHashCode = 0
+
     fun showFullScreenOverlay(view: View) {
-        Log.d("FullscreenDebug", "showFullScreenOverlay called")
+        fullscreenEntryCount++
+        val viewHashCode = view.hashCode()
+        val isSameView = viewHashCode == lastFullscreenViewHashCode
+        lastFullscreenViewHashCode = viewHashCode
         
+        Log.d("FullscreenDebug", """
+            showFullScreenOverlay called:
+              Entry count: $fullscreenEntryCount
+              View class: ${view.javaClass.simpleName}
+              View hashCode: $viewHashCode
+              Same as last view: $isSameView
+              View attached: ${view.isAttachedToWindow}
+              View parent: ${view.parent?.javaClass?.simpleName ?: "null"}
+              Container child count before: ${fullScreenOverlayContainer.childCount}
+        """.trimIndent())
+        
+        // Remove from current parent if any
         if (view.parent is ViewGroup) {
+            Log.d("FullscreenDebug", "  Removing view from parent: ${(view.parent as ViewGroup).javaClass.simpleName}")
             (view.parent as ViewGroup).removeView(view)
         }
 
-        fullScreenOverlayContainer.removeAllViews()
+        // Clear any existing children
+        if (fullScreenOverlayContainer.childCount > 0) {
+            Log.d("FullscreenDebug", "  Clearing ${fullScreenOverlayContainer.childCount} existing children from container")
+            fullScreenOverlayContainer.removeAllViews()
+        }
+        
+        // Add the new view
         fullScreenOverlayContainer.addView(
             view,
             FrameLayout.LayoutParams(
@@ -1222,6 +1245,8 @@ class DualWebViewGroup @JvmOverloads constructor(
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
+        
+        Log.d("FullscreenDebug", "  View added. Container child count: ${fullScreenOverlayContainer.childCount}")
 
         previousFullScreenVisibility.clear()
         Log.d("FullscreenDebug", "Hiding ${fullScreenHiddenViews.size} UI elements")
@@ -1235,48 +1260,81 @@ class DualWebViewGroup @JvmOverloads constructor(
                 urlEditText -> "urlEditText"
                 else -> "unknown"
             }
-            
-            // Fix: Don't hide WebView to prevent video freeze
-            if (target == webView) {
-                Log.d("FullscreenDebug", "  Skipping hiding webView to prevent video freeze")
-            } else {
-                Log.d("FullscreenDebug", "  Hiding $name (was ${if (target.visibility == View.VISIBLE) "VISIBLE" else "GONE"})")
-                previousFullScreenVisibility[target] = target.visibility
-                target.visibility = View.GONE
-            }
+            Log.d("FullscreenDebug", "  Hiding $name (was ${if (target.visibility == View.VISIBLE) "VISIBLE" else "GONE/INVISIBLE"})")
+            previousFullScreenVisibility[target] = target.visibility
+            target.visibility = if (target == webView) View.INVISIBLE else View.GONE
         }
 
         fullScreenOverlayContainer.visibility = View.VISIBLE
+        fullScreenOverlayContainer.elevation = 2000f
         fullScreenOverlayContainer.bringToFront()
         
-        // Save current scroll mode state and enable it to hide all navigation bars
-        wasInScrollModeBeforeFullscreen = isInScrollMode
-        if (!isInScrollMode) {
-            Log.d("FullscreenDebug", "Enabling scroll mode to hide navigation bars")
-            setScrollMode(true)
+        // Force refresh to ensure the fullscreen content is captured
+        post {
+            fullScreenOverlayContainer.invalidate()
+            fullScreenOverlayContainer.requestLayout()
+            startRefreshing()
+            Log.d("FullscreenDebug", "  Post-show refresh triggered")
         }
         
-        // Hide system UI (status bar if any) for immersive fullscreen
         Log.d("FullscreenDebug", "About to call hideSystemUI()")
         hideSystemUI()
     }
 
     fun hideFullScreenOverlay() {
+        Log.d("FullscreenDebug", """
+            hideFullScreenOverlay called:
+              Container child count: ${fullScreenOverlayContainer.childCount}
+              Container visibility: ${if (fullScreenOverlayContainer.visibility == View.VISIBLE) "VISIBLE" else "GONE/INVISIBLE"}
+        """.trimIndent())
+        
+        // Get reference to the view being removed for logging
+        val removedView = if (fullScreenOverlayContainer.childCount > 0) {
+            fullScreenOverlayContainer.getChildAt(0)
+        } else null
+        
+        if (removedView != null) {
+            Log.d("FullscreenDebug", "  Removing view: ${removedView.javaClass.simpleName}, hashCode: ${removedView.hashCode()}")
+        }
+        
         fullScreenOverlayContainer.removeAllViews()
-        fullScreenOverlayContainer.visibility = View.GONE
+        
+        // Use INVISIBLE instead of GONE to keep the container surface attached
+        // This may help prevent surface corruption on second fullscreen entry
+        fullScreenOverlayContainer.visibility = View.INVISIBLE
+        fullScreenOverlayContainer.elevation = 0f
+        
         previousFullScreenVisibility.forEach { (target, visibility) ->
+            val name = when(target) {
+                webView -> "webView"
+                leftToggleBar -> "leftToggleBar"
+                leftNavigationBar -> "leftNavigationBar"
+                keyboardContainer -> "keyboardContainer"
+                leftSystemInfoView -> "leftSystemInfoView"
+                urlEditText -> "urlEditText"
+                else -> "unknown"
+            }
+            Log.d("FullscreenDebug", "  Restoring $name to ${if (visibility == View.VISIBLE) "VISIBLE" else "GONE/INVISIBLE"}")
             target.visibility = visibility
         }
         previousFullScreenVisibility.clear()
         
-        // Restore previous scroll mode state
-        if (!wasInScrollModeBeforeFullscreen && isInScrollMode) {
-            Log.d("FullscreenDebug", "Restoring non-scroll mode (showing navigation bars)")
-            setScrollMode(false)
+        // Force WebView to redraw
+        webView.invalidate()
+        webView.requestLayout()
+        
+        // Force the entire UI container to relayout and redraw
+        leftEyeUIContainer.invalidate()
+        leftEyeUIContainer.requestLayout()
+        
+        // Restart the mirroring refresh
+        post {
+            startRefreshing()
+            Log.d("FullscreenDebug", "  Post-hide refresh triggered")
         }
         
-        // Restore system UI
         showSystemUI()
+        Log.d("FullscreenDebug", "hideFullScreenOverlay complete")
     }
 
     private fun hideSystemUI() {
@@ -1290,6 +1348,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     // Android 11+ (API 30+) - Use WindowInsetsController
                     // CRITICAL: Must set decorFitsSystemWindows to false first
+                    @Suppress("DEPRECATION")
                     activity.window.setDecorFitsSystemWindows(false)
                     
                     activity.window.insetsController?.let { controller ->
@@ -1331,6 +1390,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     // Android 11+ (API 30+) - Use WindowInsetsController
                     // Restore decorFitsSystemWindows
+                    @Suppress("DEPRECATION")
                     activity.window.setDecorFitsSystemWindows(true)
                     
                     activity.window.insetsController?.show(
@@ -1621,6 +1681,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 domStorageEnabled = true
                 allowContentAccess = true
                 allowFileAccess = true
+                @Suppress("DEPRECATION")
                 databaseEnabled = true
             }
         }
@@ -1778,13 +1839,6 @@ class DualWebViewGroup @JvmOverloads constructor(
                     urlEditText.invalidate()
                 }
 
-                // If triple click menu is visible, ensure it's properly layered
-                tripleClickMenu?.let { menu ->
-                    if (menu.visibility == View.VISIBLE) {
-                        menu.bringToFront()
-                        menu.invalidate()
-                    }
-                }
 
                 val captureRect = android.graphics.Rect(0, 0, halfWidth, height)
                 val window = (context as Activity).window
@@ -1794,11 +1848,18 @@ class DualWebViewGroup @JvmOverloads constructor(
                     captureRect,
                     bitmapToUse,
                     { copyResult ->
+                        // Log PixelCopy result for debugging
+                        if (copyResult != PixelCopy.SUCCESS) {
+                            Log.w("MirrorDebug", "PixelCopy failed with result: $copyResult")
+                        }
+                        
                         if (copyResult == PixelCopy.SUCCESS && isRefreshing) {
                             synchronized(bitmapLock) {
                                 if (!bitmapToUse.isRecycled && bitmap === bitmapToUse) {
                                     drawBitmapToSurface()
                                     lastCaptureTime = System.currentTimeMillis()
+                                } else {
+                                    Log.w("MirrorDebug", "Bitmap state issue - recycled: ${bitmapToUse.isRecycled}, same: ${bitmap === bitmapToUse}")
                                 }
                             }
                         }
@@ -1806,7 +1867,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     refreshHandler
                 )
             } catch (e: Exception) {
-                Log.e("CursorDebug", "Error capturing content", e)
+                Log.e("MirrorDebug", "Error capturing content", e)
                 stopRefreshing()
             }
         }
@@ -1845,11 +1906,25 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
     // Refresh handling
+    private var refreshCount = 0
+    private var lastRefreshLogTime = 0L
+    
     private val refreshRunnable = object : Runnable {
         override fun run() {
+            refreshCount++
+            
+            // Log every 2 seconds to avoid spam
+            val now = System.currentTimeMillis()
+            if (now - lastRefreshLogTime > 2000) {
+                Log.d("MirrorDebug", "RefreshLoop running, count=$refreshCount, isRefreshing=$isRefreshing, webViewAttached=${webView.isAttachedToWindow}, fsOverlayVisible=${fullScreenOverlayContainer.visibility == View.VISIBLE}")
+                lastRefreshLogTime = now
+            }
+            
             if (isRefreshing && webView.isAttachedToWindow) {
                 captureLeftEyeContent()
                 refreshHandler.postDelayed(this, refreshInterval)
+            } else {
+                Log.w("MirrorDebug", "RefreshLoop STOPPING! isRefreshing=$isRefreshing, webViewAttached=${webView.isAttachedToWindow}")
             }
         }
     }
@@ -1860,12 +1935,6 @@ class DualWebViewGroup @JvmOverloads constructor(
                 isRefreshing = true
                 refreshHandler.removeCallbacks(refreshRunnable)
                 refreshHandler.post(refreshRunnable)
-            }
-        }
-
-        tripleClickMenu?.let { menu ->
-            if (isTripleClickMenuInitialized && menu.visibility == View.VISIBLE) {
-                menu.invalidate()
             }
         }
     }
@@ -2042,17 +2111,25 @@ class DualWebViewGroup @JvmOverloads constructor(
             // Position bookmarks menu if visible
             if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
                 val bookmarksHeight = leftBookmarksView.measuredHeight
-                val bookmarksY = if (isUrlEditing) {
-                    40  // Below URL edit field
+                val isEditingAnywhere = isUrlEditing || leftBookmarksView.isEditing()
+                val bookmarksY = if (isEditingAnywhere) {
+                    40  // Below URL edit field area / top of screen
                 } else {
                     keyboardY - bookmarksHeight
+                }
+                
+                // Constrain bottom to keyboardY to avoid overlapping with keyboard
+                val bookmarksBottom = if (isEditingAnywhere) {
+                    minOf(bookmarksY + bookmarksHeight, keyboardY)
+                } else {
+                    bookmarksY + bookmarksHeight
                 }
 
                 leftBookmarksView.layout(
                     toggleBarWidth,
                     bookmarksY,
                     toggleBarWidth + 480,
-                    bookmarksY + bookmarksHeight
+                    bookmarksBottom
                 )
 
                 leftBookmarksView.bringToFront()
@@ -2094,7 +2171,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
                 leftBookmarksView.layout(
                     toggleBarWidth,
-                    168,
+                    30,
                     toggleBarWidth + 480,
                     eyeHeight - navBarHeight
                 )
@@ -2192,26 +2269,42 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         // Layout scroll bars for non-anchored mode
+        // Eye button size is 40px with 8px margin from bottom/right, so reserve 48px for it
+        val eyeButtonSpace = if (isInScrollMode && btnShowNavBars.visibility == View.VISIBLE) 48 else 0
+        
         if (horizontalScrollBar.visibility == View.VISIBLE) {
-            val hScrollHeight = 16
-            val hScrollY = eyeHeight - navBarHeight - hScrollHeight  // Above nav bar
+            val hScrollHeight = 20
+            val hScrollY = if (isInScrollMode) eyeHeight - hScrollHeight else eyeHeight - navBarHeight - hScrollHeight  // At bottom in scroll mode
+
+            val scrollLeft = if (isInScrollMode) 0 else toggleBarWidth
+            var scrollWidth = if (isInScrollMode) halfWidth - eyeButtonSpace else halfWidth - toggleBarWidth
+
+            // Prevent overlap with vertical scrollbar if visible
+            if (verticalScrollBar.visibility == View.VISIBLE) {
+                scrollWidth -= 20 // Subtract width of vertical scrollbar
+            }
+
             horizontalScrollBar.measure(
-                MeasureSpec.makeMeasureSpec(halfWidth - toggleBarWidth - 20, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(scrollWidth, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(hScrollHeight, MeasureSpec.EXACTLY)
             )
             horizontalScrollBar.layout(
-                toggleBarWidth + 10,
+                scrollLeft,
                 hScrollY,
-                halfWidth - 10,
+                scrollLeft + scrollWidth,
                 hScrollY + hScrollHeight
             )
         }
 
         if (verticalScrollBar.visibility == View.VISIBLE) {
-            val vScrollWidth = 16
-            val vScrollRight = halfWidth - 4  // Near right edge
-            val vScrollTop = 40  // Below system info area
-            val vScrollHeight = eyeHeight - navBarHeight - vScrollTop - 20
+            val vScrollWidth = 20
+            val vScrollRight = halfWidth  // Align to right edge
+            val vScrollTop = 0  // Start from top
+            
+            // In scroll mode, stop above eye button. Normal mode, stop at nav bar.
+            val vScrollBottom = if (isInScrollMode) eyeHeight - eyeButtonSpace else eyeHeight - navBarHeight
+            val vScrollHeight = vScrollBottom - vScrollTop
+            
             verticalScrollBar.measure(
                 MeasureSpec.makeMeasureSpec(vScrollWidth, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(vScrollHeight, MeasureSpec.EXACTLY)
@@ -2356,7 +2449,20 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     private fun getCursorInContainerCoords(): Pair<Float, Float> {
-        return computeAnchoredCoordinates(lastCursorX, lastCursorY)
+        // Calculate the actual screen position of the cursor first
+        val containerLocation = IntArray(2)
+        getLocationOnScreen(containerLocation)
+        
+        val transX = if (isAnchored) 0f else leftEyeUIContainer.translationX
+        val transY = if (isAnchored) 0f else leftEyeUIContainer.translationY
+        
+        val visualX = 320f + (lastCursorX - 320f) * uiScale + transX
+        val visualY = 240f + (lastCursorY - 240f) * uiScale + transY
+        
+        val screenX = visualX + containerLocation[0]
+        val screenY = visualY + containerLocation[1]
+        
+        return computeAnchoredCoordinates(screenX, screenY)
     }
 
     private fun computeAnchoredKeyboardCoordinates(): Pair<Float, Float>? {
@@ -2416,9 +2522,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
             // Allow interactions with menus that are on top
-            if (tripleClickMenu?.let { isTouchOnView(it, ev.x, ev.y) } == true) {
-                return false
-            }
             if (::leftBookmarksView.isInitialized && isTouchOnView(leftBookmarksView, ev.x, ev.y)) {
                 return false
             }
@@ -2455,17 +2558,6 @@ class DualWebViewGroup @JvmOverloads constructor(
                 }
             }
 
-            // Check TripleClickMenu
-            tripleClickMenu?.let { menu ->
-                if (!isOverTarget && menu.visibility == View.VISIBLE) {
-                    if (cursorX >= menu.left && cursorX <= menu.right &&
-                        cursorY >= menu.top && cursorY <= menu.bottom) {
-                        isOverTarget = true
-                        anchoredTarget = 3
-                        Log.d("TouchDebug", "Intercepting anchored tap for menu")
-                    }
-                }
-            }
 
             when (ev.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -2650,14 +2742,6 @@ class DualWebViewGroup @JvmOverloads constructor(
                                     if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
                                         Log.d("TouchDebug", "Dispatching anchored tap to bookmarks")
                                         leftBookmarksView.handleAnchoredTap(cursorX - leftBookmarksView.left, cursorY - leftBookmarksView.top)
-                                    }
-                                }
-                                3 -> { // Menu
-                                    tripleClickMenu?.let { menu ->
-                                        if (menu.visibility == View.VISIBLE) {
-                                            Log.d("TouchDebug", "Dispatching anchored tap to menu")
-                                            menu.handleAnchoredTap(cursorX - menu.left, cursorY - menu.top)
-                                        }
                                     }
                                 }
                             }
@@ -3152,6 +3236,56 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
         }
         
+        // Check bookmarks view if visible
+        if (isBookmarksExpanded()) {
+            val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
+            
+            val finalX = localX - leftBookmarksView.left
+            val finalY = localY - leftBookmarksView.top
+            
+            if (leftBookmarksView.updateHover(finalX, finalY)) {
+                customKeyboard?.updateHoverScreen(-1f, -1f, 1f) // Clear keyboard hover
+                return
+            }
+        }
+
+        // Check scrollbars if visible (UI scale < 0.99f or forced visible)
+        if (horizontalScrollBar.visibility == View.VISIBLE) {
+            val location = IntArray(2)
+            horizontalScrollBar.getLocationOnScreen(location)
+            if (screenX >= location[0] && screenX <= location[0] + horizontalScrollBar.width &&
+                screenY >= location[1] && screenY <= location[1] + horizontalScrollBar.height) {
+                 // Check children for hover effects
+                 for (i in 0 until horizontalScrollBar.childCount) {
+                     val child = horizontalScrollBar.getChildAt(i)
+                     if (isOver(child)) {
+                         child.isHovered = true
+                         Log.d("HoverDebug", "Hovering over horizontal scrollbar element: $i")
+                     }
+                 }
+                 customKeyboard?.updateHover(-1f, -1f)
+                 return
+            }
+        }
+
+        if (verticalScrollBar.visibility == View.VISIBLE) {
+            val location = IntArray(2)
+            verticalScrollBar.getLocationOnScreen(location)
+             if (screenX >= location[0] && screenX <= location[0] + verticalScrollBar.width &&
+                screenY >= location[1] && screenY <= location[1] + verticalScrollBar.height) {
+                 // Check children for hover effects
+                 for (i in 0 until verticalScrollBar.childCount) {
+                     val child = verticalScrollBar.getChildAt(i)
+                     if (isOver(child)) {
+                         child.isHovered = true
+                         Log.d("HoverDebug", "Hovering over vertical scrollbar element: $i")
+                     }
+                 }
+                 customKeyboard?.updateHover(-1f, -1f)
+                 return
+            }
+        }
+
         // Check keyboard elements if visible
         if (keyboardContainer.visibility == View.VISIBLE) {
             val kbView = customKeyboard
@@ -3242,6 +3376,93 @@ class DualWebViewGroup @JvmOverloads constructor(
         
         // Clear keyboard hover
         customKeyboard?.updateHoverScreen(-1f, -1f, 1f)
+    }
+
+    // Helper method to check if a point is within any visible scrollbar
+    fun isPointInScrollbar(screenX: Float, screenY: Float): Boolean {
+        if (horizontalScrollBar.visibility == View.VISIBLE) {
+            val location = IntArray(2)
+            horizontalScrollBar.getLocationOnScreen(location)
+            if (screenX >= location[0] && screenX <= location[0] + horizontalScrollBar.width &&
+                screenY >= location[1] && screenY <= location[1] + horizontalScrollBar.height) {
+                return true
+            }
+        }
+        if (verticalScrollBar.visibility == View.VISIBLE) {
+            val location = IntArray(2)
+            verticalScrollBar.getLocationOnScreen(location)
+            if (screenX >= location[0] && screenX <= location[0] + verticalScrollBar.width &&
+                screenY >= location[1] && screenY <= location[1] + verticalScrollBar.height) {
+                return true
+            }
+        }
+        return false
+    }
+
+    // Dispatch touch/click to the appropriate scrollbar element
+    fun dispatchScrollbarTouch(screenX: Float, screenY: Float) {
+        fun dispatchToContainer(container: ViewGroup) {
+            val location = IntArray(2)
+            container.getLocationOnScreen(location)
+            // Check which child is hit
+            for (i in 0 until container.childCount) {
+                val child = container.getChildAt(i)
+                val childLocation = IntArray(2)
+                child.getLocationOnScreen(childLocation)
+                
+                if (screenX >= childLocation[0] && screenX <= childLocation[0] + child.width &&
+                    screenY >= childLocation[1] && screenY <= childLocation[1] + child.height) {
+                    
+                    if (child.hasOnClickListeners()) {
+                         child.performClick()
+                    } else {
+                        // For track/thumb, we need to simulate touch events
+                        // The track listener reacts to ACTION_UP
+                        val localX = screenX - childLocation[0]
+                        val localY = screenY - childLocation[1]
+                        
+                        val downEvent = MotionEvent.obtain(
+                            SystemClock.uptimeMillis(),
+                            SystemClock.uptimeMillis(),
+                            MotionEvent.ACTION_DOWN,
+                            localX, localY, 0
+                        )
+                        child.dispatchTouchEvent(downEvent)
+                        downEvent.recycle()
+                        
+                        val upEvent = MotionEvent.obtain(
+                            SystemClock.uptimeMillis(),
+                            SystemClock.uptimeMillis(),
+                            MotionEvent.ACTION_UP,
+                            localX, localY, 0
+                        )
+                        child.dispatchTouchEvent(upEvent)
+                        upEvent.recycle()
+                    }
+                    return
+                }
+            }
+        }
+
+        if (horizontalScrollBar.visibility == View.VISIBLE) {
+             val location = IntArray(2)
+            horizontalScrollBar.getLocationOnScreen(location)
+            if (screenX >= location[0] && screenX <= location[0] + horizontalScrollBar.width &&
+                screenY >= location[1] && screenY <= location[1] + horizontalScrollBar.height) {
+                dispatchToContainer(horizontalScrollBar)
+                return
+            }
+        }
+
+        if (verticalScrollBar.visibility == View.VISIBLE) {
+            val location = IntArray(2)
+            verticalScrollBar.getLocationOnScreen(location)
+            if (screenX >= location[0] && screenX <= location[0] + verticalScrollBar.width &&
+                screenY >= location[1] && screenY <= location[1] + verticalScrollBar.height) {
+                dispatchToContainer(verticalScrollBar)
+                return
+            }
+        }
     }
 
 
@@ -3464,7 +3685,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         leftBookmarksView.visibility = View.VISIBLE
         leftBookmarksView.bringToFront()
         leftBookmarksView.measure(
-            MeasureSpec.makeMeasureSpec(480, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(420, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
         )
         leftBookmarksView.layout(
@@ -3506,7 +3727,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Use unbarred anchor icon when anchored
         leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)?.setImageResource(R.drawable.ic_anchor)
-        tripleClickMenu?.updateAnchorButtonState(true)
     }
 
     fun stopAnchoring() {
@@ -3529,7 +3749,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)?.setImageResource(R.drawable.ic_anchor_barred)
-        tripleClickMenu?.updateAnchorButtonState(false)
         webView.visibility = View.VISIBLE
         rightEyeView.visibility = View.VISIBLE
 
@@ -3543,15 +3762,13 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     fun setBookmarksView(bookmarksView: BookmarksView) {
         this.leftBookmarksView = bookmarksView.apply {
-            val params = MarginLayoutParams(480, LayoutParams.WRAP_CONTENT).apply {
+            val params = MarginLayoutParams(420, LayoutParams.WRAP_CONTENT).apply {
                 leftMargin = 40  // After toggle bar
-                topMargin = 168  // Below toggle buttons
+                topMargin = 10   // Move higher up
             }
             layoutParams = params
             elevation = 1000f
             visibility = View.GONE
-            setBackgroundColor(Color.parseColor("#202020"))
-            setPadding(8, 8, 8, 8)
         }
 
         // Remove existing view if present
@@ -3771,50 +3988,6 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
 
-    fun setTripleClickMenu(menu: TripleClickMenu) {
-        this.tripleClickMenu = menu
-        isTripleClickMenuInitialized = true
-
-        // Add the menu to the left eye UI container with explicit dimensions and margins
-        (menu.parent as? ViewGroup)?.removeView(menu)
-    leftEyeUIContainer.addView(menu, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            gravity = Gravity.CENTER
-            // Add explicit margins to ensure visibility
-            topMargin = 48
-            bottomMargin = 48
-        })
-
-        // Ensure proper z-ordering and visibility
-        menu.elevation = 1000f
-        menu.visibility = View.GONE
-        menu.bringToFront()
-
-        // Force immediate layout
-        menu.measure(
-            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
-            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-        )
-
-        // Add layout change listener
-        menu.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                menu.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                if (menu.visibility == View.VISIBLE) {
-                    menu.bringToFront()
-                    startRefreshing()
-                }
-            }
-        })
-
-        post {
-            requestLayout()
-            invalidate()
-            startRefreshing()
-        }
-    }
 
     fun isSettingsVisible(): Boolean {
         return isSettingsVisible
@@ -4062,7 +4235,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             colorAccentButton?.getLocationOnScreen(colorAccentLocation)
             colorYellowButton?.getLocationOnScreen(colorYellowLocation)
 
-            val slop = 40 // Increased from 20 to 40 to handle touch issues better
+            val slop = 5 // Reduced from 40 to 5 to prevent overlapping touch targets
 
             if (x >= menuLocation[0] - slop && x <= menuLocation[0] + (menu.width * uiScale) + slop &&
                 y >= menuLocation[1] - slop && y <= menuLocation[1] + (menu.height * uiScale) + slop) {
@@ -4995,7 +5168,8 @@ class DualWebViewGroup @JvmOverloads constructor(
                     FrameLayout.LayoutParams.WRAP_CONTENT,
                     FrameLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    gravity = Gravity.CENTER
+                    gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                    bottomMargin = 64.dp()
                 }
                 setPadding(padding * 2, padding, padding * 2, padding)
                 background = GradientDrawable().apply {
