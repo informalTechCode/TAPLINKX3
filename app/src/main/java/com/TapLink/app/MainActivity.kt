@@ -189,7 +189,7 @@ class MainActivity : AppCompatActivity(),
     private var pendingPermissionRequest: PermissionRequest? = null
     private var audioManager: AudioManager? = null
     private var speechRecognizer: SpeechRecognizer? = null
-    private var sherpaRecognizer: SherpaSpeechRecognizer? = null
+    // sherpaRecognizer removed
     private lateinit var cameraManager: CameraManager
     private var cameraDevice: CameraDevice? = null
     private var imageReader: ImageReader? = null
@@ -461,13 +461,6 @@ class MainActivity : AppCompatActivity(),
         } else {
             dualWebViewGroup.stopAnchoring()
         }
-
-        // Initialize Sherpa-onnx model on startup
-        initializeSherpaRecognizer()
-
-
-
-
 
         // Initialize GestureDetector
         gestureDetector = GestureDetector(this, object : SimpleOnGestureListener() {
@@ -2013,7 +2006,7 @@ class MainActivity : AppCompatActivity(),
     }
 
     private var isListeningForSpeech = false
-    private var isSherpaInitialized = false
+    private var grokAudioService: GrokAudioService? = null
 
     override fun onMicrophonePressed() {
         Log.d("SpeechRecognition", "onMicrophonePressed called, isListening: $isListeningForSpeech")
@@ -2024,94 +2017,83 @@ class MainActivity : AppCompatActivity(),
                  return@runOnUiThread
             }
 
-            // Use Sherpa-onnx for offline speech recognition
-            if (sherpaRecognizer == null) {
-                initializeSherpaRecognizer()
+            if (grokAudioService == null) {
+                initializeGrokService()
             }
             
-            // If Sherpa is still initializing model, show message
-            if (!isSherpaInitialized) {
-                dualWebViewGroup.showToast("Initializing speech model, please wait...")
+            if (!grokAudioService!!.hasApiKey()) {
+                showGrokKeyDialog()
                 return@runOnUiThread
             }
 
-            if (sherpaRecognizer?.isListening() == true) {
+            if (grokAudioService!!.isRecording()) {
                 // Stop listening
-                Log.d("SpeechRecognition", "Stopping Sherpa recognition")
-                sherpaRecognizer?.stopListening()
-                dualWebViewGroup.showToast("Voice command stopped")
+                Log.d("SpeechRecognition", "Stopping Grok recording")
+                grokAudioService?.stopRecording()
+                dualWebViewGroup.showToast("Processing...")
             } else {
                 // Start listening
-                Log.d("SpeechRecognition", "Starting Sherpa recognition")
-                sherpaRecognizer?.startListening()
+                Log.d("SpeechRecognition", "Starting Grok recording")
+                grokAudioService?.startRecording()
                 dualWebViewGroup.showToast("Listening...")
             }
         }
     }
-    
-    private fun initializeSherpaRecognizer() {
-        if (sherpaRecognizer != null) return
-        
-        Log.d("SpeechRecognition", "Initializing Sherpa recognizer...")
-        
-        sherpaRecognizer = SherpaSpeechRecognizer(this).apply {
-            setListener(object : SherpaSpeechRecognizer.SpeechListener {
-                override fun onResult(text: String) {
-                    if (text.isNotBlank()) {
-                        Log.d("SpeechRecognition", "Sherpa result: $text")
-                        runOnUiThread {
-                            handleVoiceResult(text)
-                        }
-                    }
-                }
 
-                override fun onPartialResult(text: String) {
-                    if (text.isNotBlank()) {
-                        Log.d("SpeechRecognition", "Sherpa partial: $text")
+    fun showGrokKeyDialog() {
+        val currentKey = grokAudioService?.getApiKey()
+        dualWebViewGroup.showPromptDialog(
+            "Enter Grok API Key",
+            currentKey,
+            { key ->
+                grokAudioService?.setApiKey(key)
+                dualWebViewGroup.showToast("API Key Saved")
+            },
+            {
+                dualWebViewGroup.showToast("API Key Required for Voice")
+            }
+        )
+    }
+
+    private fun initializeGrokService() {
+        grokAudioService = GrokAudioService(this).apply {
+            setListener(object : GrokAudioService.TranscriptionListener {
+                override fun onTranscriptionResult(text: String) {
+                    Log.d("SpeechRecognition", "Grok result: $text")
+                    runOnUiThread {
+                        handleVoiceResult(text)
+                        dualWebViewGroup.showToast("Success")
+                        keyboardView?.setMicActive(false)
                     }
                 }
 
                 override fun onError(message: String) {
-                    Log.e("SpeechRecognition", "Sherpa error: $message")
+                    Log.e("SpeechRecognition", "Grok error: $message")
                     runOnUiThread {
                         dualWebViewGroup.showToast("Voice Error: $message")
-                        if (message.contains("Microphone")) {
-                            isSherpaInitialized = false
+                        keyboardView?.setMicActive(false)
+                        if (message.contains("No API Key")) {
+                            showGrokKeyDialog()
                         }
                     }
                 }
 
-                override fun onListening() {
-                    Log.d("SpeechRecognition", "Sherpa listening")
+                override fun onRecordingStart() {
+                    Log.d("SpeechRecognition", "Grok recording started")
                     runOnUiThread {
                          isListeningForSpeech = true
                          keyboardView?.setMicActive(true)
                     }
                 }
 
-                override fun onDone() {
-                     Log.d("SpeechRecognition", "Sherpa done")
+                override fun onRecordingStop() {
+                     Log.d("SpeechRecognition", "Grok recording stopped")
                      runOnUiThread {
                          isListeningForSpeech = false
-                         keyboardView?.setMicActive(false)
+                         // Don't turn off mic indicator yet, wait for processing result
                      }
                 }
             })
-            
-            // Load model immediately
-            initModel { success ->
-                runOnUiThread {
-                    if (success) {
-                        Log.d("SpeechRecognition", "Sherpa model loaded successfully")
-                        isSherpaInitialized = true
-                        dualWebViewGroup.showToast("Voice ready")
-                    } else {
-                        Log.e("SpeechRecognition", "Failed to load Sherpa model")
-                        dualWebViewGroup.showToast("Failed to load speech model")
-                        isSherpaInitialized = false
-                    }
-                }
-            }
         }
     }
     
@@ -2148,8 +2130,6 @@ class MainActivity : AppCompatActivity(),
             }
         }
         
-        // Stop listening after getting a result
-        sherpaRecognizer?.stopListening()
         isListeningForSpeech = false
     }
 

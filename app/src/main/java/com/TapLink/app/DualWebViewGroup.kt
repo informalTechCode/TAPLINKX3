@@ -3268,7 +3268,8 @@ class DualWebViewGroup @JvmOverloads constructor(
                     R.id.verticalPosSeekBar,
                     R.id.btnResetPosition,
                     R.id.btnHelp,
-                    R.id.btnCloseSettings
+                    R.id.btnCloseSettings,
+                    R.id.btnGrokApiKey
                 )
                 for (id in settingsElements) {
                     val view = menu.findViewById<View>(id)
@@ -3416,7 +3417,8 @@ class DualWebViewGroup @JvmOverloads constructor(
                     R.id.verticalPosSeekBar,
                     R.id.btnResetPosition,
                     R.id.btnHelp,
-                    R.id.btnCloseSettings
+                    R.id.btnCloseSettings,
+                    R.id.btnGrokApiKey
                 )
                 for (id in settingsElements) {
                     menu.findViewById<View>(id)?.isHovered = false
@@ -4244,6 +4246,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val colorGrayButton = menu.findViewById<Button>(R.id.btnColorGray)
             val colorAccentButton = menu.findViewById<Button>(R.id.btnColorAccent)
             val colorYellowButton = menu.findViewById<Button>(R.id.btnColorYellow)
+            val grokKeyButton = menu.findViewById<Button>(R.id.btnGrokApiKey)
 
             // Get screen locations
             val volumeLocation = IntArray(2)
@@ -4261,6 +4264,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val colorGrayLocation = IntArray(2)
             val colorAccentLocation = IntArray(2)
             val colorYellowLocation = IntArray(2)
+            val grokKeyLocation = IntArray(2)
 
             val menuLocation = IntArray(2)
             menu.getLocationOnScreen(menuLocation)
@@ -4280,6 +4284,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             colorGrayButton?.getLocationOnScreen(colorGrayLocation)
             colorAccentButton?.getLocationOnScreen(colorAccentLocation)
             colorYellowButton?.getLocationOnScreen(colorYellowLocation)
+            grokKeyButton?.getLocationOnScreen(grokKeyLocation)
 
             val slop = 5 // Reduced from 40 to 5 to prevent overlapping touch targets
 
@@ -4432,6 +4437,21 @@ class DualWebViewGroup @JvmOverloads constructor(
                     screenSizeSeekBar.isPressed = true
                     Handler(Looper.getMainLooper()).postDelayed({
                         screenSizeSeekBar.isPressed = false
+                    }, 100)
+                    return
+                }
+
+                // Check if click is on Grok API Key button
+                if (grokKeyButton != null &&
+                    x >= grokKeyLocation[0] - slop && x <= grokKeyLocation[0] + (grokKeyButton.width * uiScale) + slop &&
+                    y >= grokKeyLocation[1] - slop && y <= grokKeyLocation[1] + (grokKeyButton.height * uiScale) + slop) {
+
+                    // Visual feedback
+                    grokKeyButton.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        grokKeyButton.isPressed = false
+                        // Show dialog
+                        (context as? MainActivity)?.showGrokKeyDialog()
                     }, 100)
                     return
                 }
