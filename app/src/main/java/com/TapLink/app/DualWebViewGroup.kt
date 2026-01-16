@@ -866,17 +866,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
 
-        // Add views in correct order for proper layering
-        //addView(webView)
-        //addView(leftToggleBar)
-        //addView(leftNavigationBar)
-
-
-
         setupMaskOverlayUI()
-
-        // Add the container to the main view
-        //addView(leftEyeUIContainer)
 
         // Set background styles - use gradient drawables for modern look
         setBackgroundColor(Color.BLACK)
@@ -999,9 +989,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
 
-        // Add views in the correct order (after other views but before maskOverlay)
-        //addView(leftSystemInfoView)
-
         // Make sure they're above other elements
         leftSystemInfoView.bringToFront()
 
@@ -1068,10 +1055,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // After other view initializations
 
-
-        // In init block
-        // leftEyeUIContainer is already added to leftEyeClipParent earlier.
-        // leftEyeClipParent.addView(fullScreenOverlayContainer) // Reverted move
 
         // Add the clip parent to the main view
         addView(leftEyeClipParent)
@@ -3759,10 +3742,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Update scrollbars immediately
         updateScrollBarsVisibility()
 
-        // Disable direct touch handling on toggle bar buttons in anchored mode
-        // Logic removed to keep buttons enabled
-
-
         // Update keyboard behavior
         customKeyboard?.setAnchoredMode(true)
 
@@ -3781,10 +3760,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         
         // Update scrollbars immediately
         updateScrollBarsVisibility()
-
-        // Re-enable touch handling on toggle bar buttons
-        // Logic removed as buttons are no longer disabled
-
 
         // Update keyboard behavior
         customKeyboard?.setAnchoredMode(false)

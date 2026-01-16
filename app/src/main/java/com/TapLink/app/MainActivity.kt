@@ -422,15 +422,6 @@ class MainActivity : AppCompatActivity(),
         )
 
         // After basic window setup but before using any settings
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-//            if (!Settings.System.canWrite(this)) {
-//                Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
-//                    data = Uri.parse("package:$packageName")
-//                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-//                    startActivity(this)
-//                }
-//            }
-//        }
 
         supportActionBar?.hide()
 
@@ -912,7 +903,6 @@ class MainActivity : AppCompatActivity(),
 
 
             if (event.action == MotionEvent.ACTION_UP && !handled) {
-                // webView.performClick() // REMOVED: Caused double clicks on drag release
             }
 
             handled
@@ -1054,7 +1044,7 @@ class MainActivity : AppCompatActivity(),
         // Then try to restore the previous state
         setupWebView()  // This will attempt to load the saved URL
 
-// Only clear cache/history if restoration failed
+        // Only clear cache/history if restoration failed
         if (webView.url == null || webView.url == "about:blank") {
             webView.clearCache(true)
             webView.clearHistory()
@@ -1119,13 +1109,6 @@ class MainActivity : AppCompatActivity(),
         registerReceiver(notificationReceiver, filter)
 
         // Check for notification listener permission
-//        if (!isNotificationListenerEnabled()) {
-//             // On glasses, we can't reliably open the settings screen.
-//             // Just inform the user they need to run the ADB command.
-//             dualWebViewGroup.showToast("Run: adb shell cmd notification allow_listener com.TapLinkX3.app/com.TapLink.app.NotificationService", 5000L)
-//             Log.e("MainActivity", "Notification permission missing. Run: adb shell cmd notification allow_listener com.TapLinkX3.app/com.TapLink.app.NotificationService")
-//        }
-
 
         if (isAnchored) {
             // Re-register the sensor listener
@@ -1735,12 +1718,6 @@ class MainActivity : AppCompatActivity(),
                         try {
                             // Try multiple native scroll methods
                             webView.scrollBy(0, (-slowedVelocity).toInt())
-
-//                            // Additional fallback: post a delayed scroll
-//                            Handler(Looper.getMainLooper()).postDelayed({
-//                                webView.scrollBy(0, (-slowedVelocity).toInt())
-//                            }, 16) // One frame delay
-
                         } catch (e: Exception) {
                             Log.e("ScrollDebug", "Native vertical scroll failed", e)
                         }
@@ -1909,9 +1886,6 @@ class MainActivity : AppCompatActivity(),
         webView.parent?.requestLayout()
 
         // Show cursor if not in URL editing mode
-//        if (!dualWebViewGroup.isUrlEditing()) {
-//            toggleCursorVisibility(forceShow = true)
-//        }
 
         isUrlEditing = false
 
@@ -3104,13 +3078,6 @@ class MainActivity : AppCompatActivity(),
             overScrollMode = View.OVER_SCROLL_NEVER
 
             // Ensure WebView can receive input methods
-//          setOnTouchListener { v, event ->
-//                if (!isCursorVisible) {
-//                    // Only handle focus if cursor is not visible
-//                    v.parent.requestDisallowInterceptTouchEvent(true)
-//                }
-//                false  // Always allow event to propagate
-//            }
 
             // Section 2: WebView Settings Configuration
             settings.apply {
@@ -3126,8 +3093,6 @@ class MainActivity : AppCompatActivity(),
 
                 // Security and Access Settings
                 // Security and Access Settings
-                // saveFormData = true // Deprecated
-                // savePassword = true // Deprecated
                 allowFileAccess = true
                 allowContentAccess = true
                 setGeolocationEnabled(true)
