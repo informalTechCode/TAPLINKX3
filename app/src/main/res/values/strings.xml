@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">TapLink X3</string>
+    <string name="fa_home">&#xf015;</string>
+    <string name="fa_arrow_left">&#xf060;</string>
+    <string name="fa_arrow_right">&#xf061;</string>
+    <string name="fa_link">&#xf0c1;</string>
+    <string name="fa_cog">&#xf013;</string>
+    <string name="fa_sync">&#xf021;</string>
+    <string name="fa_eye_slash">&#xf070;</string>
+    <string name="fa_times">&#xf00d;</string>
 </resources>

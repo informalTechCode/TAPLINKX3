@@ -214,8 +214,8 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     private data class NavButton(
-        val left: ImageButton,
-        val right: ImageButton,
+        val left: View,
+        val right: View,
         var isHovered: Boolean = false
     )
 
@@ -2529,7 +2529,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
 
-    private fun showButtonClickFeedback(button: ImageButton) {
+    private fun showButtonClickFeedback(button: View) {
         button.isPressed = true
         //Log.d("buttonFeedbackDebug", "button feedback shown")
         Handler(Looper.getMainLooper()).postDelayed({
