@@ -9,142 +9,134 @@
     android:paddingStart="4dp"
     android:paddingEnd="4dp">
 
-    <ImageButton
+    <com.TapLink.app.FontIconView
         android:id="@+id/btnBack"
         android:layout_width="32dp"
         android:layout_height="24dp"
-        android:src="@drawable/ic_arrow_back"
+        android:text="@string/fa_arrow_left"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Go back"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:clickable="true"
+        android:focusable="true"/>
 
     <Space
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"/>
 
-    <ImageButton
+    <com.TapLink.app.FontIconView
         android:id="@+id/btnForward"
         android:layout_width="32dp"
         android:layout_height="24dp"
-        android:src="@drawable/ic_arrow_forward"
+        android:text="@string/fa_arrow_right"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Go forward"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:clickable="true"
+        android:focusable="true"/>
 
     <Space
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"/>
 
-    <ImageButton
+    <com.TapLink.app.FontIconView
         android:id="@+id/btnHome"
         android:layout_width="32dp"
         android:layout_height="24dp"
-        android:src="@drawable/ic_home"
+        android:text="@string/fa_house"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Go home"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:clickable="true"
+        android:focusable="true"/>
 
     <Space
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"/>
 
-    <ImageButton
+    <com.TapLink.app.FontIconView
         android:id="@+id/btnLink"
         android:layout_width="32dp"
         android:layout_height="24dp"
-        android:src="@drawable/ic_link"
+        android:text="@string/fa_link"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Enter URL"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:clickable="true"
+        android:focusable="true"/>
 
     <Space
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"/>
 
-    <ImageButton
+    <com.TapLink.app.FontIconView
         android:id="@+id/btnSettings"
         android:layout_width="32dp"
         android:layout_height="24dp"
-        android:src="@drawable/ic_settings"
+        android:text="@string/fa_gear"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Settings"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:clickable="true"
+        android:focusable="true"/>
 
     <Space
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"/>
 
-    <ImageButton
+    <com.TapLink.app.FontIconView
         android:id="@+id/btnRefresh"
         android:layout_width="32dp"
         android:layout_height="24dp"
-        android:src="@drawable/ic_refresh"
+        android:text="@string/fa_rotate_right"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Refresh page"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:clickable="true"
+        android:focusable="true"/>
 
     <Space
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"/>
 
-    <ImageButton
+    <com.TapLink.app.FontIconView
         android:id="@+id/btnHide"
         android:layout_width="32dp"
         android:layout_height="24dp"
-        android:src="@drawable/ic_visibility_off"
+        android:text="@string/fa_hand"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Hide navigation"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:clickable="true"
+        android:focusable="true"/>
 
     <Space
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"/>
 
-    <ImageButton
+    <com.TapLink.app.FontIconView
         android:id="@+id/btnQuit"
         android:layout_width="32dp"
         android:layout_height="24dp"
-        android:src="@drawable/ic_close"
+        android:text="@string/fa_xmark"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Quit app"
-        android:paddingStart="0dp"
-        android:paddingEnd="0dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:scaleType="fitCenter"/>
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:clickable="true"
+        android:focusable="true"/>
 </LinearLayout>

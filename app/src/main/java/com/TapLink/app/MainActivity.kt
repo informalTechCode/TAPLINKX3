@@ -173,6 +173,7 @@ class MainActivity : AppCompatActivity(),
 
     private var keyboardView: CustomKeyboardView? = null
     private var isKeyboardVisible = false
+    private var wasKeyboardVisibleAtDown = false
 
     private var originalWebViewHeight = 0
 
@@ -212,7 +213,7 @@ class MainActivity : AppCompatActivity(),
 
     private val onBackPressedCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
-            Log.d("MainActivity", "Back key pressed")
+            // Log.d("MainActivity", "Back key pressed")
             when {
                 fullScreenCustomView != null -> {
                     hideFullScreenCustomView()
@@ -422,15 +423,6 @@ class MainActivity : AppCompatActivity(),
         )
 
         // After basic window setup but before using any settings
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-//            if (!Settings.System.canWrite(this)) {
-//                Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
-//                    data = Uri.parse("package:$packageName")
-//                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-//                    startActivity(this)
-//                }
-//            }
-//        }
 
         supportActionBar?.hide()
 
@@ -449,6 +441,27 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.listener = this
         dualWebViewGroup.navigationListener = this
         dualWebViewGroup.maskToggleListener = this
+        
+        // Handle power saving during fullscreen
+        dualWebViewGroup.fullscreenListener = object : DualWebViewGroup.FullscreenListener {
+            override fun onEnterFullscreen() {
+                // Log.d("PowerSaving", "Entering fullscreen: Releasing resources")
+                
+                // 1. Release voice model to save memory and CPU
+                if (sherpaRecognizer != null) {
+                    sherpaRecognizer?.release()
+                    sherpaRecognizer = null
+                    isSherpaInitialized = false
+                }
+            }
+            
+            override fun onExitFullscreen() {
+                // Log.d("PowerSaving", "Exiting fullscreen: Restoring resources")
+                
+                // 1. Restore voice model
+                // initializeSherpaRecognizer() // Lazy load instead to save power
+            }
+        }
         
         // Load saved anchored mode state
         isAnchored = getSharedPreferences(prefsName, MODE_PRIVATE)
@@ -844,16 +857,16 @@ class MainActivity : AppCompatActivity(),
 
 
         webView = dualWebViewGroup.getWebView()
-        Log.d("WebViewDebug", "Initial WebView state - URL: ${webView.url}")
+        // Log.d("WebViewDebug", "Initial WebView state - URL: ${webView.url}")
 
         webView.setOnTouchListener { _, event ->
-            Log.d("TouchDebug", """
+            /* Log.d("TouchDebug", """
         WebView onTouch:
         Action: ${event.action}
         Coordinates: (${event.x}, ${event.y})
         isAnchored: $isAnchored
         isSimulatingTouchEvent: $isSimulatingTouchEvent
-    """.trimIndent())
+    """.trimIndent()) */
 
 
 
@@ -905,7 +918,6 @@ class MainActivity : AppCompatActivity(),
 
 
             if (event.action == MotionEvent.ACTION_UP && !handled) {
-                // webView.performClick() // REMOVED: Caused double clicks on drag release
             }
 
             handled
@@ -966,8 +978,9 @@ class MainActivity : AppCompatActivity(),
 
                 wasKeyboardDismissedByEnter = false
 
+                wasKeyboardDismissedByEnter = false
                 // Log focus state
-                Log.d("WebViewDebug", "WebView focus state: ${view?.isFocused}")
+                // Log.d("WebViewDebug", "WebView focus state: ${view?.isFocused}")
                 
                 // Update scrollbar visibility based on new content
                 dualWebViewGroup.updateScrollBarsVisibility()
@@ -975,7 +988,7 @@ class MainActivity : AppCompatActivity(),
 
             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                 super.doUpdateVisitedHistory(view, url, isReload)
-                Log.d("WebDebug", "History updated - url: $url, canGoBack: ${view?.canGoBack()}")
+                // Log.d("WebDebug", "History updated - url: $url, canGoBack: ${view?.canGoBack()}")
             }
 
 
@@ -1004,7 +1017,7 @@ class MainActivity : AppCompatActivity(),
 
         // Set up the listener
         dualWebViewGroup.linkEditingListener = this
-        Log.d("LinkEditing", "Set MainActivity as linkEditingListener")
+        // Log.d("LinkEditing", "Set MainActivity as linkEditingListener")
 
         // Add after other listener assignments
         dualWebViewGroup.anchorToggleListener = this
@@ -1035,7 +1048,7 @@ class MainActivity : AppCompatActivity(),
         if (isAnchored) {
             rotationSensor?.let { sensor ->
                 sensorEventListener = createSensorEventListener()
-                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_FASTEST)
+                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_GAME)
             }
             dualWebViewGroup.startAnchoring()
         } else {
@@ -1047,7 +1060,7 @@ class MainActivity : AppCompatActivity(),
         // Then try to restore the previous state
         setupWebView()  // This will attempt to load the saved URL
 
-// Only clear cache/history if restoration failed
+        // Only clear cache/history if restoration failed
         if (webView.url == null || webView.url == "about:blank") {
             webView.clearCache(true)
             webView.clearHistory()
@@ -1112,13 +1125,6 @@ class MainActivity : AppCompatActivity(),
         registerReceiver(notificationReceiver, filter)
 
         // Check for notification listener permission
-//        if (!isNotificationListenerEnabled()) {
-//             // On glasses, we can't reliably open the settings screen.
-//             // Just inform the user they need to run the ADB command.
-//             dualWebViewGroup.showToast("Run: adb shell cmd notification allow_listener com.TapLinkX3.app/com.TapLink.app.NotificationService", 5000L)
-//             Log.e("MainActivity", "Notification permission missing. Run: adb shell cmd notification allow_listener com.TapLinkX3.app/com.TapLink.app.NotificationService")
-//        }
-
 
         if (isAnchored) {
             // Re-register the sensor listener
@@ -1179,14 +1185,14 @@ class MainActivity : AppCompatActivity(),
 
         // Start timer if cursor is visible and keyboard isn't
         if (isCursorVisible && !isKeyboardVisible) {
-            Log.d("ScrollModeDebug", "Starting scroll mode timer")
+            // Log.d("ScrollModeDebug", "Starting scroll mode timer")
             scrollModeHandler.postDelayed(scrollModeRunnable, SCROLL_MODE_TIMEOUT)
         } else {
-            Log.d("ScrollModeDebug", """
+            /* Log.d("ScrollModeDebug", """
             Timer not started because:
             Cursor visible: $isCursorVisible
             Keyboard visible: $isKeyboardVisible
-        """.trimIndent())
+        """.trimIndent()) */
         }
     }
 
@@ -1238,12 +1244,12 @@ class MainActivity : AppCompatActivity(),
             val currentText = dualWebViewGroup.getCurrentLinkText()
             val currentPosition = dualWebViewGroup.getCurrentUrlEditField()?.selectionStart ?: currentText.length
 
-            Log.d("LinkEditing", """
+            /* Log.d("LinkEditing", """
             Before character insertion:
             Text: '$currentText'
             Cursor position: $currentPosition
             Character to insert: '$character'
-        """.trimIndent())
+        """.trimIndent()) */
 
             val newText = StringBuilder(currentText)
                 .insert(currentPosition, character)
@@ -1253,12 +1259,12 @@ class MainActivity : AppCompatActivity(),
             dualWebViewGroup.getCurrentUrlEditField()?.setSelection(currentPosition + 1)
 
             // Log after modification
-            Log.d("LinkEditing", """
+            /* Log.d("LinkEditing", """
             After character insertion:
             New text: '$newText'
             Expected cursor position: ${currentPosition + 1}
             Actual cursor position: ${dualWebViewGroup.getCurrentUrlEditField()?.selectionStart}
-        """.trimIndent())
+        """.trimIndent()) */
         }
     }
 
@@ -1304,7 +1310,7 @@ class MainActivity : AppCompatActivity(),
         if (hasFocus) {
             webView.requestFocus()
         }
-        Log.d("FocusDebug", "Window focus changed: $hasFocus")
+        // Log.d("FocusDebug", "Window focus changed: $hasFocus")
     }
 
     // Helper function for quaternion multiplication
@@ -1728,12 +1734,6 @@ class MainActivity : AppCompatActivity(),
                         try {
                             // Try multiple native scroll methods
                             webView.scrollBy(0, (-slowedVelocity).toInt())
-
-//                            // Additional fallback: post a delayed scroll
-//                            Handler(Looper.getMainLooper()).postDelayed({
-//                                webView.scrollBy(0, (-slowedVelocity).toInt())
-//                            }, 16) // One frame delay
-
                         } catch (e: Exception) {
                             Log.e("ScrollDebug", "Native vertical scroll failed", e)
                         }
@@ -1902,9 +1902,6 @@ class MainActivity : AppCompatActivity(),
         webView.parent?.requestLayout()
 
         // Show cursor if not in URL editing mode
-//        if (!dualWebViewGroup.isUrlEditing()) {
-//            toggleCursorVisibility(forceShow = true)
-//        }
 
         isUrlEditing = false
 
@@ -2574,8 +2571,18 @@ class MainActivity : AppCompatActivity(),
             return
         }
 
+        // Check for bookmarks interaction first (prevent click propagation to keyboard/webview)
+        // Bookmarks are re-ordered before keyboard to prevent double-clicks when opening keyboard
+        if (dualWebViewGroup.isBookmarksExpanded()) {
+            if (dualWebViewGroup.isPointInBookmarks(interactionX, interactionY)) {
+                // Handled by DualWebViewGroup.onTouchEvent - just don't dispatch to webview or keyboard
+                Log.d("ClickDebug", "Click consumed by bookmarks window")
+                return
+            }
+        }
+
         // Hit test for custom keyboard
-        if (isKeyboardVisible) {
+        if (isKeyboardVisible && wasKeyboardVisibleAtDown) {
             // In non-anchored mode, taps are handled directly in DualWebViewGroup.onTouchEvent
             // to eliminate double-clicks and reduce latency.
             // Only dispatch from here if we are in anchored mode.
@@ -2589,21 +2596,6 @@ class MainActivity : AppCompatActivity(),
         if (dualWebViewGroup.isPointInScrollbar(interactionX, interactionY)) {
             dualWebViewGroup.dispatchScrollbarTouch(interactionX, interactionY)
             return
-        }
-
-        // Check for bookmarks interaction (prevent click propagation to webview)
-        if (dualWebViewGroup.isBookmarksExpanded()) {
-            val bookmarksLocation = IntArray(2)
-            dualWebViewGroup.getBookmarksView().getLocationOnScreen(bookmarksLocation)
-            val bv = dualWebViewGroup.getBookmarksView()
-            if (interactionX >= bookmarksLocation[0] &&
-                interactionX <= bookmarksLocation[0] + bv.width &&
-                interactionY >= bookmarksLocation[1] &&
-                interactionY <= bookmarksLocation[1] + bv.height) {
-                // Handled by DualWebViewGroup.onTouchEvent - just don't dispatch to webview
-                Log.d("ClickDebug", "Click consumed by bookmarks window")
-                return
-            }
         }
 
         // Handle navigation bar and toggle bar clicks only if visible
@@ -3087,13 +3079,6 @@ class MainActivity : AppCompatActivity(),
             overScrollMode = View.OVER_SCROLL_NEVER
 
             // Ensure WebView can receive input methods
-//          setOnTouchListener { v, event ->
-//                if (!isCursorVisible) {
-//                    // Only handle focus if cursor is not visible
-//                    v.parent.requestDisallowInterceptTouchEvent(true)
-//                }
-//                false  // Always allow event to propagate
-//            }
 
             // Section 2: WebView Settings Configuration
             settings.apply {
@@ -3109,8 +3094,6 @@ class MainActivity : AppCompatActivity(),
 
                 // Security and Access Settings
                 // Security and Access Settings
-                // saveFormData = true // Deprecated
-                // savePassword = true // Deprecated
                 allowFileAccess = true
                 allowContentAccess = true
                 setGeolocationEnabled(true)
@@ -3555,7 +3538,7 @@ class MainActivity : AppCompatActivity(),
             activity.runOnUiThread {
                 // Double check that we're not already showing the keyboard
                 if (!activity.isKeyboardVisible) {
-                    Log.d("InputDebug", "Input focus confirmed via JavaScript")
+                    // Log.d("InputDebug", "Input focus confirmed via JavaScript")
                     activity.showCustomKeyboard()
                 }
             }
@@ -3563,19 +3546,19 @@ class MainActivity : AppCompatActivity(),
 
         @JavascriptInterface
         fun onMediaPlaying(isPlaying: Boolean) {
-            Log.d("MediaControls", "onMediaPlaying called: isPlaying=$isPlaying")
+            // Log.d("MediaControls", "onMediaPlaying called: isPlaying=$isPlaying")
             activity.runOnUiThread {
-                Log.d("MediaControls", "Updating media state in DualWebViewGroup")
+                // Log.d("MediaControls", "Updating media state in DualWebViewGroup")
                 activity.dualWebViewGroup.updateMediaState(isPlaying)
             }
         }
 
         @JavascriptInterface
         fun onMediaDetected(hasMedia: Boolean) {
-            Log.d("MediaControls", "onMediaDetected called: hasMedia=$hasMedia")
+            // Log.d("MediaControls", "onMediaDetected called: hasMedia=$hasMedia")
             activity.runOnUiThread {
                 if (!hasMedia) {
-                    Log.d("MediaControls", "Hiding media controls")
+                    // Log.d("MediaControls", "Hiding media controls")
                     activity.dualWebViewGroup.hideMediaControls()
                 }
             }
@@ -3962,7 +3945,7 @@ class MainActivity : AppCompatActivity(),
             sensorEventListener = createSensorEventListener()
             rotationSensor?.let { sensor ->
                 // Use FASTEST for maximum responsiveness (smoothing handles jitter)
-                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_FASTEST)
+                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_GAME)
             }
             dualWebViewGroup.startAnchoring()
 
@@ -4395,17 +4378,28 @@ class MainActivity : AppCompatActivity(),
 
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        // Track if touch started on bookmarks to prevent double-tap issues later
+        // Track state at start of touch to prevent double-dispatch issues
         if (ev.action == MotionEvent.ACTION_DOWN) {
             wasTouchOnBookmarks = false
-            if (::dualWebViewGroup.isInitialized && dualWebViewGroup.isBookmarksExpanded()) {
-                val bookmarksView = dualWebViewGroup.getBookmarksView()
-                val location = IntArray(2)
-                bookmarksView.getLocationOnScreen(location)
-                val x = ev.rawX
-                val y = ev.rawY
-                if (x >= location[0] && x <= location[0] + bookmarksView.width &&
-                    y >= location[1] && y <= location[1] + bookmarksView.height) {
+            wasKeyboardVisibleAtDown = isKeyboardVisible
+            
+            if (::dualWebViewGroup.isInitialized) {
+                // In anchored mode, use the eye center (look-to-click) for coordinate checks
+                // In non-anchored mode, use the raw touch coordinates
+                val checkX: Float
+                val checkY: Float
+                
+                if (isAnchored) {
+                    val groupLocation = IntArray(2)
+                    dualWebViewGroup.getLocationOnScreen(groupLocation)
+                    checkX = 320f + groupLocation[0]
+                    checkY = 240f + groupLocation[1]
+                } else {
+                    checkX = ev.rawX
+                    checkY = ev.rawY
+                }
+                
+                if (dualWebViewGroup.isPointInBookmarks(checkX, checkY)) {
                     wasTouchOnBookmarks = true
                 }
             }

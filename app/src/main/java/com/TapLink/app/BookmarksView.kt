@@ -689,7 +689,7 @@ class BookmarksView @JvmOverloads constructor(
         }
     }
 
-    private val hitTolerance = 20f
+    private val hitTolerance = 0f
 
     private fun findSelectionIndexAt(localX: Float, localY: Float): Int {
         // Check header (Close button)
@@ -717,7 +717,7 @@ class BookmarksView @JvmOverloads constructor(
                 val child = bookmarksList.getChildAt(i)
                 if (child.visibility != View.VISIBLE) continue
 
-                if (relY >= child.top - 2 && relY <= child.bottom + 2) {
+                if (relY >= child.top && relY <= child.bottom) {
                     if (child is LinearLayout) {
                         val rowRelX = relX - child.left
 
