@@ -387,8 +387,9 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     private fun isWebViewScrollEnabled(): Boolean {
-        // Use WebView scrolling if Anchored OR if in Non-Anchored mode with full scale (no panning needed)
-        return isAnchored || uiScale >= 0.99f
+        // Always return true to ensure scrollbars ONLY scroll the WebView content
+        // and never move the screen position (viewport panning).
+        return true
     }
 
     private fun scrollPageHorizontal(delta: Int) {
@@ -554,23 +555,9 @@ class DualWebViewGroup @JvmOverloads constructor(
             return
         }
 
-        val useWebViewScroll = isWebViewScrollEnabled()
-        val shouldShow = if (useWebViewScroll) {
-             val canScrollVertically = webView.canScrollVertically(-1) || webView.canScrollVertically(1)
-             val canScrollHorizontally = webView.canScrollHorizontally(-1) || webView.canScrollHorizontally(1)
-             canScrollVertically || canScrollHorizontally
-        } else {
-            uiScale < 0.99f
-        }
-
-        // Determine visibility independently
-        val showHorz: Boolean = if (useWebViewScroll) {
-             webView.canScrollHorizontally(-1) || webView.canScrollHorizontally(1)
-        } else shouldShow
-
-        val showVert: Boolean = if (useWebViewScroll) {
-             webView.canScrollVertically(-1) || webView.canScrollVertically(1)
-        } else shouldShow
+        // Always check WebView scrollability since we disabled viewport panning
+        val showHorz = webView.canScrollHorizontally(-1) || webView.canScrollHorizontally(1)
+        val showVert = webView.canScrollVertically(-1) || webView.canScrollVertically(1)
         
         horizontalScrollBar.visibility = if (showHorz) View.VISIBLE else View.GONE
         verticalScrollBar.visibility = if (showVert) View.VISIBLE else View.GONE
@@ -633,10 +620,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         // webView.invalidate()
 
         if (horizontalScrollBar.visibility == View.VISIBLE || verticalScrollBar.visibility == View.VISIBLE) {
-             val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-             val xProgress = if (useWebViewScroll) 0 else prefs.getInt("uiTransXProgress", 50)
-             val yProgress = if (useWebViewScroll) 0 else prefs.getInt("uiTransYProgress", 50)
-             updateScrollBarThumbs(xProgress, yProgress)
+             updateScrollBarThumbs(0, 0)
         }
     }
 
@@ -4099,6 +4083,24 @@ class DualWebViewGroup @JvmOverloads constructor(
         return isSettingsVisible
     }
 
+    fun hideSettings() {
+        if (isSettingsVisible) {
+            isSettingsVisible = false
+            settingsMenu?.visibility = View.GONE
+            settingsScrim?.visibility = View.GONE
+        }
+    }
+
+    // Reset all overlay UI state - call on app startup
+    fun resetUiState() {
+        isSettingsVisible = false
+        settingsMenu?.visibility = View.GONE
+        settingsScrim?.visibility = View.GONE
+        if (::leftBookmarksView.isInitialized) {
+            leftBookmarksView.visibility = View.GONE
+        }
+    }
+
     private fun initializeSettingsBars() {
         settingsMenu?.let { menu ->
             val volumeSeekBar = menu.findViewById<SeekBar>(R.id.volumeSeekBar)
@@ -4146,7 +4148,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
             // Add click handler for close button
-            settingsMenu?.findViewById<Button>(R.id.btnCloseSettings)?.setOnClickListener {
+            settingsMenu?.findViewById<View>(R.id.btnCloseSettings)?.setOnClickListener {
                 // Log.d("SettingsDebug", "Close button clicked")
                 isSettingsVisible = false
                 settingsMenu?.visibility = View.GONE
@@ -4159,6 +4161,8 @@ class DualWebViewGroup @JvmOverloads constructor(
                 // Log.d("SettingsDebug", "Help button clicked")
                 showHelpDialog()
             }
+
+
 
             val layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -4173,74 +4177,75 @@ class DualWebViewGroup @JvmOverloads constructor(
             // Log.d("SettingsDebug", "Menu added with height: ${settingsMenu?.measuredHeight}")
         }
 
-        // Before toggling visibility, update the seek bars with current system values.
-        settingsMenu?.let { menu ->
-            // Initialize volume seekbar
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val volumeSeekBar = menu.findViewById<SeekBar>(R.id.volumeSeekBar)
-            volumeSeekBar?.max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-            volumeSeekBar?.progress = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        // Only initialize seekbars when we are about to SHOW settings (not when closing)
+        if (!isSettingsVisible) {
+            settingsMenu?.let { menu ->
+                // Initialize volume seekbar
+                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                val volumeSeekBar = menu.findViewById<SeekBar>(R.id.volumeSeekBar)
+                volumeSeekBar?.max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                volumeSeekBar?.progress = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
 
-            // Initialize brightness seekbar
-            val brightnessSeekBar = menu.findViewById<SeekBar>(R.id.brightnessSeekBar)
-            brightnessSeekBar?.max = 100
-            val currentBrightness = (context as? Activity)?.window?.attributes?.screenBrightness ?: 0.5f
-            brightnessSeekBar?.progress = (currentBrightness * 100).toInt()
+                // Initialize brightness seekbar
+                val brightnessSeekBar = menu.findViewById<SeekBar>(R.id.brightnessSeekBar)
+                brightnessSeekBar?.max = 100
+                val currentBrightness = (context as? Activity)?.window?.attributes?.screenBrightness ?: 0.5f
+                brightnessSeekBar?.progress = (currentBrightness * 100).toInt()
 
-            // Initialize smoothness seekbar from saved preference
-            val smoothnessSeekBar = menu.findViewById<SeekBar>(R.id.smoothnessSeekBar)
-            val savedSmoothness = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-                .getInt("anchorSmoothness", 80)
-            smoothnessSeekBar?.progress = savedSmoothness
+                // Initialize smoothness seekbar from saved preference
+                val smoothnessSeekBar = menu.findViewById<SeekBar>(R.id.smoothnessSeekBar)
+                val savedSmoothness = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                    .getInt("anchorSmoothness", 80)
+                smoothnessSeekBar?.progress = savedSmoothness
 
-            // Initialize screen size seekbar
-            val screenSizeSeekBar = menu.findViewById<SeekBar>(R.id.screenSizeSeekBar)
-            val savedScaleProgress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-                .getInt("uiScaleProgress", 100)
-            screenSizeSeekBar?.progress = savedScaleProgress
-            
-            // Apply initial scale
-            val initialScale = 0.25f + (savedScaleProgress / 100f) * 0.75f
-            updateUiScale(initialScale)
+                // Initialize screen size seekbar (just update the UI, don't apply scale)
+                val screenSizeSeekBar = menu.findViewById<SeekBar>(R.id.screenSizeSeekBar)
+                val savedScaleProgress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                    .getInt("uiScaleProgress", 100)
+                screenSizeSeekBar?.progress = savedScaleProgress
+                
+                // Calculate scale for position slider visibility check only
+                val currentScale = 0.25f + (savedScaleProgress / 100f) * 0.75f
 
-            // Initialize position sliders
-            val showPosSliders = !isAnchored && initialScale < 0.99f
-            val visibility = if (showPosSliders) View.VISIBLE else View.GONE
+                // Initialize position sliders
+                val showPosSliders = !isAnchored && currentScale < 0.99f
+                val visibility = if (showPosSliders) View.VISIBLE else View.GONE
 
-            menu.findViewById<View>(R.id.settingsPositionLayout)?.visibility = visibility
+                menu.findViewById<View>(R.id.settingsPositionLayout)?.visibility = visibility
 
-            menu.findViewById<SeekBar>(R.id.horizontalPosSeekBar)?.apply {
-                progress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-                    .getInt("uiTransXProgress", 50)
-            }
-
-            menu.findViewById<SeekBar>(R.id.verticalPosSeekBar)?.apply {
-                progress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-                    .getInt("uiTransYProgress", 50)
-            }
-
-            // Initialize font size seekbar (50% = 50, 100% = 100, 200% = 200, slider is 0-150 mapping to 50-200%)
-            val fontSizeSeekBar = menu.findViewById<SeekBar>(R.id.fontSizeSeekBar)
-            val savedFontSize = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-                .getInt("webFontSize", 50) // Default 50 = 100%
-            fontSizeSeekBar?.progress = savedFontSize
-            
-            // Initialize color buttons with visual background indicators
-            // Initialize color wheel with saved color
-            menu.findViewById<ColorWheelView>(R.id.colorWheelView)?.apply {
-                val savedTextColor = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-                    .getString("webTextColor", "#FFFFFF") ?: "#FFFFFF"
-                try {
-                    setColor(Color.parseColor(savedTextColor))
-                } catch (e: Exception) {
-                    setColor(Color.WHITE)
+                menu.findViewById<SeekBar>(R.id.horizontalPosSeekBar)?.apply {
+                    progress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .getInt("uiTransXProgress", 50)
                 }
+
+                menu.findViewById<SeekBar>(R.id.verticalPosSeekBar)?.apply {
+                    progress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .getInt("uiTransYProgress", 50)
+                }
+
+                // Initialize font size seekbar (50% = 50, 100% = 100, 200% = 200, slider is 0-150 mapping to 50-200%)
+                val fontSizeSeekBar = menu.findViewById<SeekBar>(R.id.fontSizeSeekBar)
+                val savedFontSize = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                    .getInt("webFontSize", 50) // Default 50 = 100%
+                fontSizeSeekBar?.progress = savedFontSize
+                
+                // Initialize color buttons with visual background indicators
+                // Initialize color wheel with saved color
+                menu.findViewById<ColorWheelView>(R.id.colorWheelView)?.apply {
+                    val savedTextColor = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .getString("webTextColor", "#FFFFFF") ?: "#FFFFFF"
+                    try {
+                        setColor(Color.parseColor(savedTextColor))
+                    } catch (e: Exception) {
+                        setColor(Color.WHITE)
+                    }
+                }
+                
+                // Apply saved font settings
+                val savedTextColor = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                    .getString("webTextColor", null)
+                applyWebFontSettings(savedFontSize, savedTextColor)
             }
-            
-            // Apply saved font settings
-            val savedTextColor = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-                .getString("webTextColor", null)
-            applyWebFontSettings(savedFontSize, savedTextColor)
         }
 
         // Toggle visibility state
@@ -4293,7 +4298,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val screenSizeSeekBar = menu.findViewById<SeekBar>(R.id.screenSizeSeekBar)
             val horizontalPosSeekBar = menu.findViewById<SeekBar>(R.id.horizontalPosSeekBar)
             val verticalPosSeekBar = menu.findViewById<SeekBar>(R.id.verticalPosSeekBar)
-            val closeButton = menu.findViewById<Button>(R.id.btnCloseSettings)
+            val closeButton = menu.findViewById<View>(R.id.btnCloseSettings)
             val helpButton = menu.findViewById<ImageButton>(R.id.btnHelp)
             val resetButton = menu.findViewById<Button>(R.id.btnResetPosition)
             val resetScreenSizeButton = menu.findViewById<Button>(R.id.btnResetScreenSize)

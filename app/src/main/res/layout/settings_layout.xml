@@ -51,7 +51,21 @@
                 android:padding="4dp"
                 android:clickable="true"
                 android:focusable="true"
-                android:tint="#B0FFFFFF"/>
+                android:tint="#B0FFFFFF"
+                android:layout_marginEnd="8dp"/>
+
+            <com.TapLink.app.FontIconView
+                android:id="@+id/btnCloseSettings"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:background="@drawable/settings_icon_button_background"
+                android:text="@string/fa_xmark"
+                android:textColor="#B0FFFFFF"
+                android:textSize="16sp"
+                android:gravity="center"
+                android:contentDescription="Close"
+                android:clickable="true"
+                android:focusable="true"/>
         </LinearLayout>
 
         <!-- Volume -->
@@ -87,6 +101,27 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:minHeight="28dp"
+            android:layout_marginBottom="10dp"
+            android:progressTint="#82B1FF"
+            android:thumbTint="#FFFFFF"
+            android:progressBackgroundTint="#40FFFFFF"/>
+
+        <!-- Anchor Smoothness -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Anchor Smoothness"
+            android:textColor="#82B1FF"
+            android:textSize="11sp"
+            android:layout_marginBottom="4dp"/>
+
+        <SeekBar
+            android:id="@+id/smoothnessSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="28dp"
+            android:max="100"
+            android:progress="80"
             android:layout_marginBottom="10dp"
             android:progressTint="#82B1FF"
             android:thumbTint="#FFFFFF"
@@ -207,39 +242,7 @@
             android:focusable="true"
             android:layout_marginBottom="12dp"/>
 
-        <!-- Anchor Smoothness -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Anchor Smoothness"
-            android:textColor="#82B1FF"
-            android:textSize="11sp"
-            android:layout_marginBottom="4dp"/>
 
-        <SeekBar
-            android:id="@+id/smoothnessSeekBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="28dp"
-            android:max="100"
-            android:progress="80"
-            android:layout_marginBottom="10dp"
-            android:progressTint="#82B1FF"
-            android:thumbTint="#FFFFFF"
-            android:progressBackgroundTint="#40FFFFFF"/>
-
-        <!-- Close Button -->
-        <Button
-            android:id="@+id/btnCloseSettings"
-            android:layout_width="match_parent"
-            android:layout_height="32dp"
-            android:text="Close"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:background="@drawable/settings_close_button_background"
-            android:textAllCaps="false"
-            android:clickable="true"
-            android:focusable="true"/>
 
     </LinearLayout>
 

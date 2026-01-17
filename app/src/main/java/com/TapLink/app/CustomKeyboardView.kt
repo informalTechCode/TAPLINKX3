@@ -36,7 +36,7 @@ class CustomKeyboardView @JvmOverloads constructor(
     }
 
     private fun dbg(msg: String) {
-        if (DEBUG_TOUCH) android.util.Log.d(TAG_TOUCH, msg)
+        if (DEBUG_TOUCH) DebugLog.d(TAG_TOUCH, msg)
     }
     private var keys: MutableList<Button> = mutableListOf()
     // Change from var to private var
@@ -141,7 +141,7 @@ class CustomKeyboardView @JvmOverloads constructor(
 
 
         post {
-            //Log.d("KeyboardDebug", "Starting keyboard initialization")
+            //DebugLog.d("KeyboardDebug", "Starting keyboard initialization")
             initializeKeys()
             findHideButton()
             findMicButton()
@@ -204,29 +204,29 @@ class CustomKeyboardView @JvmOverloads constructor(
     }
     
     fun handleAnchoredTap(x: Float, y: Float) {
-        Log.d("KeyboardDebug", "handleAnchoredTap at ($x, $y)")
+        DebugLog.d("KeyboardDebug", "handleAnchoredTap at ($x, $y)")
 
         val key = getKeyAtPosition(x, y)
         if (key != null) {
-            Log.d("KeyboardDebug", "Found key: ${key.text}")
+            DebugLog.d("KeyboardDebug", "Found key: ${key.text}")
             handleButtonClick(key)
         } else {
-            Log.d("KeyboardDebug", "No key found at position")
+            DebugLog.d("KeyboardDebug", "No key found at position")
         }
     }
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-//        Log.d("TouchDebug", "CustomKeyboardView: Received dispatch - action: ${getActionString(event.action)}")
+//        DebugLog.d("TouchDebug", "CustomKeyboardView: Received dispatch - action: ${getActionString(event.action)}")
         return super.dispatchTouchEvent(event)
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-        //Log.d("KeyboardDebug", "CustomKeyboardView measured dimensions: ${measuredWidth}x${measuredHeight}")
+        //DebugLog.d("KeyboardDebug", "CustomKeyboardView measured dimensions: ${measuredWidth}x${measuredHeight}")
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
-        //Log.d("KeyboardDebug", "CustomKeyboardView onLayout: ($left, $top, $right, $bottom)")
+        //DebugLog.d("KeyboardDebug", "CustomKeyboardView onLayout: ($left, $top, $right, $bottom)")
 
         // Force redraw of child views after layout
         if (changed) {
@@ -248,7 +248,7 @@ class CustomKeyboardView @JvmOverloads constructor(
     }
 
     override fun onDraw(canvas: Canvas) {
-        Log.d("KeyboardDebug", """
+        DebugLog.d("KeyboardDebug", """
         onDraw called:
         Width: $width
         Height: $height
@@ -283,7 +283,7 @@ class CustomKeyboardView @JvmOverloads constructor(
         val buttonId = button.id
         val buttonLabel = button.text.toString()
 
-        Log.d("KeyboardDebug", "Processing click for button: $buttonLabel")
+        DebugLog.d("KeyboardDebug", "Processing click for button: $buttonLabel")
 
         if (button.isAttachedToWindow) {
             // Provide immediate visual feedback (Light Blue for click)
@@ -302,39 +302,39 @@ class CustomKeyboardView @JvmOverloads constructor(
 
             when (buttonId) {
                 R.id.btn_caps -> {
-                    Log.d("KeyboardDebug", "Handling caps button")
+                    DebugLog.d("KeyboardDebug", "Handling caps button")
                     toggleCase()
                 }
                 R.id.btn_switch -> {
-                    Log.d("KeyboardDebug", "Handling switch button")
+                    DebugLog.d("KeyboardDebug", "Handling switch button")
                     toggleKeyboardMode()
                 }
                 R.id.btn_hide -> {
-                    Log.d("KeyboardDebug", "Handling hide button")
+                    DebugLog.d("KeyboardDebug", "Handling hide button")
                     listener?.onHideKeyboard()
                     // Don't call updateKeyFocus after hiding - keyboard will be gone
                     return@postDelayed
                 }
                 R.id.btn_backspace -> {
-                    Log.d("KeyboardDebug", "Handling backspace")
+                    DebugLog.d("KeyboardDebug", "Handling backspace")
                     listener?.onBackspacePressed()
                 }
                 R.id.btn_enter -> {
-                    Log.d("KeyboardDebug", "Handling enter")
+                    DebugLog.d("KeyboardDebug", "Handling enter")
                     listener?.onEnterPressed()
                     // Don't call updateKeyFocus after enter - keyboard might be gone
                     return@postDelayed
                 }
                 R.id.btn_space -> {
-                    Log.d("KeyboardDebug", "Handling space")
+                    DebugLog.d("KeyboardDebug", "Handling space")
                     listener?.onKeyPressed(" ")
                 }
                 R.id.btn_clear -> {
-                    Log.d("KeyboardDebug", "Handling clear")
+                    DebugLog.d("KeyboardDebug", "Handling clear")
                     listener?.onClearPressed()
                 }
                 R.id.btn_mic -> {
-                    Log.d("KeyboardDebug", "Handling microphone")
+                    DebugLog.d("KeyboardDebug", "Handling microphone")
                     listener?.onMicrophonePressed()
                 }
                 R.id.button_left_dynamic -> handleDynamicButtonClick(button.id)
@@ -345,7 +345,7 @@ class CustomKeyboardView @JvmOverloads constructor(
                     } else if (buttonLabel == ">") {
                         listener?.onMoveCursorRight()
                     } else {
-                        Log.d("KeyboardDebug", "Handling character key: $buttonLabel")
+                        DebugLog.d("KeyboardDebug", "Handling character key: $buttonLabel")
                         listener?.onKeyPressed(buttonLabel)
                     }
                 }
@@ -477,7 +477,7 @@ class CustomKeyboardView @JvmOverloads constructor(
 
     private fun initializeKeys() {
         keys.clear()
-        //Log.d("KeyboardDebug", "Initializing keys. Child count: $childCount")
+        //DebugLog.d("KeyboardDebug", "Initializing keys. Child count: $childCount")
 
         if (childCount > 0) {
             val keyboardLayout = getChildAt(0) as? LinearLayout
@@ -497,7 +497,7 @@ class CustomKeyboardView @JvmOverloads constructor(
                                 it.isFocusable = false
                                 it.setBackgroundColor(Color.DKGRAY)
                                 it.setTextColor(Color.WHITE)
-                                //Log.d("KeyboardDebug", "Added button: ${it.text} with tag: ${it.tag}")
+                                //DebugLog.d("KeyboardDebug", "Added button: ${it.text} with tag: ${it.tag}")
                             }
                         }
                     }
@@ -537,7 +537,7 @@ class CustomKeyboardView @JvmOverloads constructor(
         // In both modes, only highlight the hovered key (cursor-based)
         // No default "focused" key should be highlighted
 
-        // Log.d("KeyboardDebug", "Updating key focus. Mic: $micState, Hovered: ${hoveredKey?.text}")
+        // DebugLog.d("KeyboardDebug", "Updating key focus. Mic: $micState, Hovered: ${hoveredKey?.text}")
         
         keys.forEach { button ->
             if (button == micButton && isMicActive) {
@@ -548,13 +548,13 @@ class CustomKeyboardView @JvmOverloads constructor(
                 button.setBackgroundColor(Color.parseColor("#4488FF"))
                 button.setTextColor(Color.WHITE)
                 if (button == micButton) {
-                     Log.d("KeyboardDebug", "Setting Mic to BLUE (Hovered). isMicActive=$isMicActive")
+                     DebugLog.d("KeyboardDebug", "Setting Mic to BLUE (Hovered). isMicActive=$isMicActive")
                 }
             } else {
                 button.setBackgroundColor(Color.DKGRAY)
                 button.setTextColor(Color.WHITE)
                 if (button == micButton) {
-                     Log.d("KeyboardDebug", "Setting Mic to GRAY. hoveredKey=${hoveredKey?.text}, isMicActive=$isMicActive")
+                     DebugLog.d("KeyboardDebug", "Setting Mic to GRAY. hoveredKey=${hoveredKey?.text}, isMicActive=$isMicActive")
                 }
             }
             button.invalidate()
@@ -574,8 +574,8 @@ class CustomKeyboardView @JvmOverloads constructor(
         // Just find the button reference but DON'T set focus to it
         // Initial focus should stay at row 0, column 0 (first letter key)
         if (hideButton != null) {
-            Log.d("KeyboardDebug", "Found hide button")
-            Log.d("KeyboardDebug", "Hide button not found in keys list")
+            DebugLog.d("KeyboardDebug", "Found hide button")
+            DebugLog.d("KeyboardDebug", "Hide button not found in keys list")
         }
     }
 
@@ -589,9 +589,9 @@ class CustomKeyboardView @JvmOverloads constructor(
         }
 
         if (micButton != null) {
-            Log.d("KeyboardDebug", "Found mic button: ${micButton?.text}")
+            DebugLog.d("KeyboardDebug", "Found mic button: ${micButton?.text}")
         } else {
-            Log.d("KeyboardDebug", "Mic button not found in keys list")
+            DebugLog.d("KeyboardDebug", "Mic button not found in keys list")
         }
     }
     
@@ -631,7 +631,7 @@ class CustomKeyboardView @JvmOverloads constructor(
             val maxColumns = visibleButtons.size
             if (maxColumns > 0) {
                 currentColumn = (currentColumn + 1) % maxColumns
-                //Log.d("KeyboardDebug", "Moved to column: $currentColumn of $maxColumns columns")
+                //DebugLog.d("KeyboardDebug", "Moved to column: $currentColumn of $maxColumns columns")
                 updateKeyFocus()
                 syncWithParent()
             }
@@ -646,7 +646,7 @@ class CustomKeyboardView @JvmOverloads constructor(
             val maxColumns = visibleButtons.size
             if (maxColumns > 0) {
                 currentColumn = (currentColumn - 1) % maxColumns
-                //Log.d("KeyboardDebug", "Moved to column: $currentColumn of $maxColumns columns")
+                //DebugLog.d("KeyboardDebug", "Moved to column: $currentColumn of $maxColumns columns")
                 updateKeyFocus()
                 syncWithParent()
             }
@@ -689,24 +689,24 @@ class CustomKeyboardView @JvmOverloads constructor(
         val horizontalThreshold = 500 // Minimum velocity to consider for horizontal movement
 
         // Log the velocity for debugging
-        Log.d("KeyboardDebug", "Fling detected with velocityX=$velocityX")
+        DebugLog.d("KeyboardDebug", "Fling detected with velocityX=$velocityX")
 
         if (abs(velocityX) > threshold) {
             if (velocityX > horizontalThreshold) {
                 // Strong positive X velocity - move horizontally to the right
-                Log.d("KeyboardDebug", "Forward fling - Moving horizontally")
+                DebugLog.d("KeyboardDebug", "Forward fling - Moving horizontally")
                 moveFocusRight()
             } else if (velocityX < -horizontalThreshold) {
                 // Strong negative X velocity - move horizontally to the left
-                Log.d("KeyboardDebug", "Backward fling - Moving horizontally (left)")
+                DebugLog.d("KeyboardDebug", "Backward fling - Moving horizontally (left)")
                 moveFocusDown()
             } else {
                 // Small negative velocity (close to zero) - ignore or treat as no movement
-                Log.d("KeyboardDebug", "Small velocity - Ignoring fling")
+                DebugLog.d("KeyboardDebug", "Small velocity - Ignoring fling")
             }
         } else {
             // Velocity below threshold - ignore the fling
-            Log.d("KeyboardDebug", "Velocity below threshold - Ignoring fling")
+            DebugLog.d("KeyboardDebug", "Velocity below threshold - Ignoring fling")
         }
 
         // Force update of key focus
@@ -719,7 +719,7 @@ class CustomKeyboardView @JvmOverloads constructor(
     }
 
     fun setAnchoredMode(anchored: Boolean) {
-        Log.d("KeyboardDebug", """
+        DebugLog.d("KeyboardDebug", """
         setAnchoredMode:
         Previous mode: $isAnchoredMode
         New mode: $anchored
@@ -739,12 +739,12 @@ class CustomKeyboardView @JvmOverloads constructor(
         val targetKey = if (!isAnchoredMode) hoveredKey else (hoveredKey ?: getFocusedKey())
         
         targetKey?.let { button ->
-            android.util.Log.d("TouchDebug", "CKV.performFocusedTap on: ${button.text}")
+            DebugLog.d("TouchDebug", "CKV.performFocusedTap on: ${button.text}")
             handleButtonClick(button)
             updateKeyFocus()
             syncWithParent()
         } ?: run {
-            android.util.Log.d("TouchDebug", "CKV.performFocusedTap: no focused/hovered key")
+            DebugLog.d("TouchDebug", "CKV.performFocusedTap: no focused/hovered key")
         }
     }
 
@@ -818,11 +818,11 @@ class CustomKeyboardView @JvmOverloads constructor(
         accumulatedX = 0f
         isDragging = false
         firstMove = true
-        Log.d("FlingDebug", "Drag state reset")
+        DebugLog.d("FlingDebug", "Drag state reset")
     }
 
     private fun handleTap() {
-        Log.d("AnchoringDebug", "isAnchoredMode: $isAnchoredMode")
+        DebugLog.d("AnchoringDebug", "isAnchoredMode: $isAnchoredMode")
         if (!isAnchoredMode) {
              performFocusedTap()
         }
@@ -832,7 +832,7 @@ class CustomKeyboardView @JvmOverloads constructor(
         val shouldLog = false
         
         if (shouldLog) {
-            Log.d("HoverDebug", "=== getKeyAtScreenPosition screen($screenX,$screenY) scale=$uiScale ===")
+            DebugLog.d("HoverDebug", "=== getKeyAtScreenPosition screen($screenX,$screenY) scale=$uiScale ===")
         }
 
         var bestCandidate: Button? = null
@@ -854,13 +854,13 @@ class CustomKeyboardView @JvmOverloads constructor(
             val btnBottom = rect.bottom.toFloat()
 
             if (shouldLog) {
-                Log.d("HoverDebug", "Button '${button.text}': screen bounds ($btnLeft,$btnTop)-($btnRight,$btnBottom)")
+                DebugLog.d("HoverDebug", "Button '${button.text}': screen bounds ($btnLeft,$btnTop)-($btnRight,$btnBottom)")
             }
 
             // --- PASS 1: Strict Hit (screen space) ---
             if (screenX >= btnLeft && screenX < btnRight &&
                 screenY >= btnTop && screenY < btnBottom) {
-                if (shouldLog) Log.d("HoverDebug", "HIT (Strict): ${button.text}")
+                if (shouldLog) DebugLog.d("HoverDebug", "HIT (Strict): ${button.text}")
                 return button
             }
 
@@ -884,7 +884,7 @@ class CustomKeyboardView @JvmOverloads constructor(
         }
         
         if (bestCandidate != null) {
-            if (shouldLog) Log.d("HoverDebug", "HIT (Fuzzy): ${bestCandidate.text} dist=$bestDist")
+            if (shouldLog) DebugLog.d("HoverDebug", "HIT (Fuzzy): ${bestCandidate.text} dist=$bestDist")
             return bestCandidate
         }
 
@@ -892,11 +892,11 @@ class CustomKeyboardView @JvmOverloads constructor(
     }
 
     private fun getKeyAtPosition(x: Float, y: Float): Button? {
-        Log.d("KeyboardDebug", "getKeyAtPosition called with ($x, $y)")
+        DebugLog.d("KeyboardDebug", "getKeyAtPosition called with ($x, $y)")
 
         val keyboard = getKeyboardLayout()
         if (keyboard == null) {
-            Log.d("KeyboardDebug", "No keyboard layout found")
+            DebugLog.d("KeyboardDebug", "No keyboard layout found")
             return null
         }
 
@@ -906,7 +906,7 @@ class CustomKeyboardView @JvmOverloads constructor(
         for (i in 0 until keyboard.childCount) {
             val row = keyboard.getChildAt(i) as? LinearLayout
             if (row == null) {
-                Log.d("KeyboardDebug", "Row $i is not a LinearLayout")
+                DebugLog.d("KeyboardDebug", "Row $i is not a LinearLayout")
                 continue
             }
 
@@ -923,13 +923,13 @@ class CustomKeyboardView @JvmOverloads constructor(
                 // Strict bounds check for X
                 // Check if the relative X position is within this button's horizontal bounds
                 if (rX >= button.left && rX <= button.right) {
-                     Log.d("KeyboardDebug", "Found button by bounds: ${button.text}")
+                     DebugLog.d("KeyboardDebug", "Found button by bounds: ${button.text}")
                      return button
                 }
             }
         }
 
-        Log.d("KeyboardDebug", "No button found at ($x, $y)")
+        DebugLog.d("KeyboardDebug", "No button found at ($x, $y)")
         return null
     }
     

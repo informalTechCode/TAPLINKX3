@@ -86,7 +86,7 @@ class GroqAudioService(private val context: Context) {
 
             isRecording = true
             mainHandler.post { listener?.onRecordingStart() }
-            Log.d(TAG, "Recording started")
+            DebugLog.d(TAG, "Recording started")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start recording", e)
@@ -100,7 +100,7 @@ class GroqAudioService(private val context: Context) {
 
         try {
             mediaRecorder?.stop()
-            Log.d(TAG, "Recording stopped")
+            DebugLog.d(TAG, "Recording stopped")
         } catch (e: RuntimeException) {
             // Can happen if stop is called immediately after start
             Log.e(TAG, "RuntimeException on stop", e)
@@ -134,8 +134,8 @@ class GroqAudioService(private val context: Context) {
 
         Thread {
             try {
-                Log.d(TAG, "Starting transcription...")
-                Log.d(TAG, "API Key length: ${apiKey.length}, starts with: ${apiKey.take(8)}...")
+                DebugLog.d(TAG, "Starting transcription...")
+                DebugLog.d(TAG, "API Key length: ${apiKey.length}, starts with: ${apiKey.take(8)}...")
 
                 val requestBody = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
@@ -153,7 +153,7 @@ class GroqAudioService(private val context: Context) {
 
                 client.newCall(request).execute().use { response ->
                     val responseBody = response.body?.string()
-                    Log.d(TAG, "Response code: ${response.code}")
+                    DebugLog.d(TAG, "Response code: ${response.code}")
                     //Log.d(TAG, "Response body: $responseBody")
 
                     if (!response.isSuccessful) {

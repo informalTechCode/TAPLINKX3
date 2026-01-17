@@ -102,7 +102,7 @@ class BookmarkManager(private val context: Context) {
                 val type = object : TypeToken<List<BookmarkEntry>>() {}.type
                 bookmarks = Gson().fromJson(bookmarksJson, type)
             } catch (e: Exception) {
-                Log.e("BookmarkManager", "Error loading bookmarks", e)
+                DebugLog.e("BookmarkManager", "Error loading bookmarks", e)
                 bookmarks = mutableListOf()
             }
         }
@@ -381,7 +381,7 @@ class BookmarksView @JvmOverloads constructor(
         }
 
         bookmarksList.addView(rowLayout)
-        Log.d(TAG, "Added bookmark view: ${entry.url}, isHome: ${entry.isHome}")
+        DebugLog.d(TAG, "Added bookmark view: ${entry.url}, isHome: ${entry.isHome}")
     }
 
     private fun handleSetAsHome(bookmarkId: String) {
@@ -421,7 +421,7 @@ class BookmarksView @JvmOverloads constructor(
 
 
     fun refreshBookmarks() {
-        Log.d(TAG, "refreshBookmarks() called, current page: $currentPage")
+        DebugLog.d(TAG, "refreshBookmarks() called, current page: $currentPage")
 
         // 1. Clear everything
         bookmarksList.removeAllViews()
@@ -554,11 +554,11 @@ class BookmarksView @JvmOverloads constructor(
     private fun updateAllSelections() {
         // Only proceed if we have views
         if (bookmarkViews.isEmpty()) {
-            Log.d(TAG, "No bookmark views to update")
+            DebugLog.d(TAG, "No bookmark views to update")
             return
         }
 
-        Log.d(TAG, "Updating all selections, current=$currentSelection, total views=${bookmarkViews.size}")
+        DebugLog.d(TAG, "Updating all selections, current=$currentSelection, total views=${bookmarkViews.size}")
 
         // Update all views
         bookmarkViews.forEachIndexed { index, view ->
@@ -566,7 +566,7 @@ class BookmarksView @JvmOverloads constructor(
             updateSelectionBackground(view, isSelected)
 
             if (isSelected) {
-                Log.d(TAG, "View $index is selected")
+                DebugLog.d(TAG, "View $index is selected")
             }
         }
 
@@ -639,7 +639,7 @@ class BookmarksView @JvmOverloads constructor(
 
         bookmarksList.addView(buttonView)
         bookmarkViews.add(buttonView)
-        Log.d(TAG, "Added special button: $text at position $position")
+        DebugLog.d(TAG, "Added special button: $text at position $position")
     }
 
     private fun updateSelectionBackground(view: View, isSelected: Boolean) {
@@ -667,7 +667,7 @@ class BookmarksView @JvmOverloads constructor(
     fun handleFling(isForward: Boolean) {
         // Safety check - don't handle fling if menu isn't visible
         if (visibility != View.VISIBLE || bookmarkViews.isEmpty()) {
-            Log.d(TAG, "Ignoring fling - menu not visible or no views")
+            DebugLog.d(TAG, "Ignoring fling - menu not visible or no views")
             return
         }
 
@@ -678,12 +678,12 @@ class BookmarksView @JvmOverloads constructor(
             else -> bookmarkViews.size - 1
         }
 
-        Log.d(TAG, "Fling: forward=$isForward, old=$oldSelection, new=$currentSelection")
+        DebugLog.d(TAG, "Fling: forward=$isForward, old=$oldSelection, new=$currentSelection")
 
         try {
             updateAllSelections()
         } catch (e: Exception) {
-            Log.e(TAG, "Error during fling handling", e)
+            DebugLog.e(TAG, "Error during fling handling", e)
             // Reset selection to safe value
             currentSelection = 0
         }
@@ -860,7 +860,7 @@ class BookmarksView @JvmOverloads constructor(
 
     fun handleTap(): Boolean {
         if (currentSelection !in bookmarkViews.indices) {
-            Log.e(TAG, "Invalid selection index: $currentSelection")
+            DebugLog.e(TAG, "Invalid selection index: $currentSelection")
             return false
         }
 
@@ -868,11 +868,11 @@ class BookmarksView @JvmOverloads constructor(
         val action = view.tag as? ViewAction
 
         if (action == null) {
-            Log.e(TAG, "No action tag found for view at $currentSelection")
+            DebugLog.e(TAG, "No action tag found for view at $currentSelection")
             return false
         }
 
-        Log.d(TAG, "Handling tap for action: $action")
+        DebugLog.d(TAG, "Handling tap for action: $action")
 
         return when (action.type) {
             ActionType.SET_HOME -> {
@@ -918,10 +918,10 @@ class BookmarksView @JvmOverloads constructor(
 
     fun toggle() {
         if (visibility == View.VISIBLE) {
-            Log.d(TAG, "Hiding bookmarks menu")
+            DebugLog.d(TAG, "Hiding bookmarks menu")
             visibility = View.GONE
         } else {
-            Log.d(TAG, "Showing bookmarks menu")
+            DebugLog.d(TAG, "Showing bookmarks menu")
             // First refresh the bookmarks to create the views
             refreshBookmarks()
 
@@ -952,14 +952,14 @@ class BookmarksView @JvmOverloads constructor(
             if (currentParent is DualWebViewGroup) {
                 // Check if urlEditText is visible, not just the flag
                 val isEditing = currentParent.urlEditText.visibility == View.VISIBLE
-                Log.d("BookmarksDebug", "isEditing() via parent urlEditText visibility: $isEditing")
+                DebugLog.d("BookmarksDebug", "isEditing() via parent urlEditText visibility: $isEditing")
                 return isEditing
             }
             currentParent = currentParent.parent
         }
         // Fallback to internal field check
         val isVisible = editField.visibility == View.VISIBLE
-        Log.d("BookmarksDebug", "isEditing() fallback, editField visibility: $isVisible")
+        DebugLog.d("BookmarksDebug", "isEditing() fallback, editField visibility: $isVisible")
         return isVisible
     }
 
@@ -985,17 +985,17 @@ class BookmarksView @JvmOverloads constructor(
 
 
     fun handleDoubleTap(): Boolean {
-        Log.d(TAG, "handleDoubleTap() called. Current selection: $currentSelection")
+        DebugLog.d(TAG, "handleDoubleTap() called. Current selection: $currentSelection")
 
         val bookmarks = bookmarkManager.getBookmarks()
         if (currentSelection < bookmarks.size) {
             val bookmark = bookmarks[currentSelection]
-            Log.d(TAG, "handleDoubleTap(): About to edit bookmark ${bookmark.id} with URL: ${bookmark.url}")
+            DebugLog.d(TAG, "handleDoubleTap(): About to edit bookmark ${bookmark.id} with URL: ${bookmark.url}")
 
             // Ensure keyboard listener exists and is called
             val listener = keyboardListener
             if (listener == null) {
-                Log.e(TAG, "No keyboard listener set!")
+                DebugLog.e(TAG, "No keyboard listener set!")
                 return false
             }
 
@@ -1003,7 +1003,7 @@ class BookmarksView @JvmOverloads constructor(
             startEditWithId(bookmark.id, bookmark.url)
 
             // Explicitly request keyboard
-            Log.d(TAG, "Requesting keyboard for edit with text: ${bookmark.url}")
+            DebugLog.d(TAG, "Requesting keyboard for edit with text: ${bookmark.url}")
             listener.onShowKeyboardForEdit(bookmark.url)
 
             return true
@@ -1012,11 +1012,11 @@ class BookmarksView @JvmOverloads constructor(
     }
 
     fun logStackTrace(tag: String, message: String) {
-        Log.d(tag, "$message\n" + Log.getStackTraceString(Throwable()))
+        DebugLog.d(tag, "$message\n" + Log.getStackTraceString(Throwable()))
     }
 
     fun startEditWithId(bookmarkId: String?, currentUrl: String) {
-        Log.d(TAG, "startEditWithId local called with id: $bookmarkId, url: $currentUrl")
+        DebugLog.d(TAG, "startEditWithId local called with id: $bookmarkId, url: $currentUrl")
         editingBookmarkId = bookmarkId
 
         // Find parent DualWebViewGroup and use its shared edit field
@@ -1030,7 +1030,7 @@ class BookmarksView @JvmOverloads constructor(
         }
         
         // Fallback: use internal field if parent not found (shouldn't happen)
-        Log.w(TAG, "DualWebViewGroup parent not found, using internal editField")
+        DebugLog.w(TAG, "DualWebViewGroup parent not found, using internal editField")
         editField.apply {
             setText(currentUrl)
             visibility = View.VISIBLE
@@ -1042,7 +1042,7 @@ class BookmarksView @JvmOverloads constructor(
 
     // Method to end editing
     fun endEdit() {
-        Log.d(TAG, "endEdit called")
+        DebugLog.d(TAG, "endEdit called")
         editingBookmarkId = null
         editField.visibility = View.GONE
 
@@ -1060,7 +1060,7 @@ class BookmarksView @JvmOverloads constructor(
     }
 
     fun onEnterPressed() {
-        Log.d(TAG, "onEnterPressed - starting")
+        DebugLog.d(TAG, "onEnterPressed - starting")
         // Get parent DualWebViewGroup
         var dualWebViewGroup: DualWebViewGroup? = null
         var currentParent = parent
@@ -1077,7 +1077,7 @@ class BookmarksView @JvmOverloads constructor(
             val newUrl = dualWebViewGroup.getCurrentLinkText()
             val bookmarkId = editingBookmarkId
 
-            Log.d(TAG, "Processing enter - bookmarkId: $bookmarkId, newUrl: $newUrl")
+            DebugLog.d(TAG, "Processing enter - bookmarkId: $bookmarkId, newUrl: $newUrl")
 
             // Handle new bookmark
             if (bookmarkId == "NEW_BOOKMARK" || bookmarkId == null) {
@@ -1086,7 +1086,7 @@ class BookmarksView @JvmOverloads constructor(
                 }
 
                 if (urlToAdd.isNotEmpty()) {
-                    Log.d(TAG, "Adding new bookmark with URL: $urlToAdd")
+                    DebugLog.d(TAG, "Adding new bookmark with URL: $urlToAdd")
                     bookmarkManager.addBookmark(urlToAdd)
                 }
                 endEdit()
@@ -1154,7 +1154,7 @@ class BookmarksView @JvmOverloads constructor(
             }
 
             // Log the edit field state for debugging
-            Log.d(TAG, """
+            DebugLog.d(TAG, """
             Edit field state:
             Text: ${editField.text}
             Selection: ${editField.selectionStart}-${editField.selectionEnd}
@@ -1172,7 +1172,7 @@ class BookmarksView @JvmOverloads constructor(
     }
 
     fun setKeyboardListener(listener: BookmarkKeyboardListener) {
-        Log.d(TAG, "Setting keyboard listener: $listener")
+        DebugLog.d(TAG, "Setting keyboard listener: $listener")
         keyboardListener = listener
     }
 

@@ -3,11 +3,11 @@ package com.TapLinkX3.app
 import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import android.util.Log
 
 class NotificationService : NotificationListenerService() {
 
     companion object {
+        private const val TAG = "NotificationService"
         const val ACTION_NOTIFICATION_POSTED = "com.TapLinkX3.app.NOTIFICATION_POSTED"
         const val EXTRA_PACKAGE = "package"
         const val EXTRA_TITLE = "title"
@@ -22,7 +22,7 @@ class NotificationService : NotificationListenerService() {
             val title = extras.getString("android.title")
             val text = extras.getCharSequence("android.text")?.toString()
 
-            Log.d("NotificationService", "Notification received: $packageName - $title: $text")
+            DebugLog.d(TAG, "Notification received: $packageName - $title: $text")
 
             val intent = Intent(ACTION_NOTIFICATION_POSTED).apply {
                 putExtra(EXTRA_PACKAGE, packageName)
@@ -35,6 +35,6 @@ class NotificationService : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         super.onNotificationRemoved(sbn)
-        Log.d("NotificationService", "Notification removed: ${sbn?.packageName}")
+        DebugLog.d(TAG, "Notification removed: ${sbn?.packageName}")
     }
 }

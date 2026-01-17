@@ -28,4 +28,5 @@
     <string name="fa_gauge">&#xf624;</string>            <!-- Dashboard/Gauge -->
     <string name="fa_glasses">&#xf530;</string>          <!-- Glasses -->
     <string name="fa_hand">&#xf256;</string>             <!-- Hand/Scroll Mode -->
+    <string name="fa_expand">&#xf065;</string>           <!-- Fullscreen/Expand -->
 </resources>

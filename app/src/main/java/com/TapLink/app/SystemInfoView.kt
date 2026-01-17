@@ -41,7 +41,7 @@ class SystemInfoView @JvmOverloads constructor(
                     }
                 }
             } catch (e: Exception) {
-                Log.e("SystemInfoView", "Battery update error", e)
+                DebugLog.e("SystemInfoView", "Battery update error", e)
             }
         }
     }
@@ -53,7 +53,7 @@ class SystemInfoView @JvmOverloads constructor(
                     post { updateTimeAndDate() }
                 }
             } catch (e: Exception) {
-                Log.e("SystemInfoView", "Time update error", e)
+                DebugLog.e("SystemInfoView", "Time update error", e)
             }
         }
     }
@@ -70,7 +70,7 @@ class SystemInfoView @JvmOverloads constructor(
 
             setupViews()
         } catch (e: Exception) {
-            Log.e("SystemInfoView", "Initialization error", e)
+            DebugLog.e("SystemInfoView", "Initialization error", e)
         }
     }
 
@@ -143,7 +143,7 @@ class SystemInfoView @JvmOverloads constructor(
                 }
             }, 1000)
         } catch (e: Exception) {
-            Log.e("SystemInfoView", "Error starting updates", e)
+            DebugLog.e("SystemInfoView", "Error starting updates", e)
         }
     }
 
@@ -169,7 +169,7 @@ class SystemInfoView @JvmOverloads constructor(
             }
             connectivityIcon?.setImageResource(iconResource)
         } catch (e: Exception) {
-            Log.e("SystemInfoView", "Connectivity update error", e)
+            DebugLog.e("SystemInfoView", "Connectivity update error", e)
             connectivityIcon?.setImageResource(R.drawable.wifi_off)
         }
     }
@@ -185,7 +185,7 @@ class SystemInfoView @JvmOverloads constructor(
             }
             batteryIcon?.setImageResource(iconResource)
         } catch (e: Exception) {
-            Log.e("SystemInfoView", "Battery update error", e)
+            DebugLog.e("SystemInfoView", "Battery update error", e)
             batteryIcon?.setImageResource(R.drawable.battery_full)
         }
     }
@@ -199,7 +199,7 @@ class SystemInfoView @JvmOverloads constructor(
             timeText?.text = timeFormat.format(now.time)
             dateText?.text = dateFormat.format(now.time)
         } catch (e: Exception) {
-            Log.e("SystemInfoView", "Time/date update error", e)
+            DebugLog.e("SystemInfoView", "Time/date update error", e)
             timeText?.text = "--:--"
             dateText?.text = "--- -- --- ----"
         }
@@ -211,10 +211,10 @@ class SystemInfoView @JvmOverloads constructor(
             val hasTun = interfaces.any { networkInterface ->
                 networkInterface.name == "tun0" && networkInterface.isUp
             }
-            //Log.d("SystemInfoView", "Has TUN interface: $hasTun")
+            //DebugLog.d("SystemInfoView", "Has TUN interface: $hasTun")
             hasTun
         } catch (e: Exception) {
-            Log.e("SystemInfoView", "Error checking TUN interface", e)
+            DebugLog.e("SystemInfoView", "Error checking TUN interface", e)
             false
         }
     }
@@ -230,7 +230,7 @@ class SystemInfoView @JvmOverloads constructor(
                 context.unregisterReceiver(batteryReceiver)
                 context.unregisterReceiver(timeReceiver)
             } catch (e: Exception) {
-                Log.e("SystemInfoView", "Error unregistering receivers", e)
+                DebugLog.e("SystemInfoView", "Error unregistering receivers", e)
             } finally {
                 updatesStarted = false
             }
