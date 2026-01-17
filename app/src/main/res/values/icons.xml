@@ -1,0 +1,31 @@
+<resources>
+    <!-- Font Awesome Solid Icons (900) -->
+    <string name="fa_mobile_screen">&#xf3cd;</string>    <!-- Mobile/Desktop Toggle -->
+    <string name="fa_desktop">&#xf108;</string>          <!-- Mobile/Desktop Toggle -->
+    <string name="fa_bookmark">&#xf02e;</string>         <!-- Bookmarks -->
+    <string name="fa_magnifying_glass_minus">&#xf010;</string> <!-- Zoom Out -->
+    <string name="fa_magnifying_glass_plus">&#xf00e;</string>  <!-- Zoom In -->
+    <string name="fa_eye_slash">&#xf070;</string>        <!-- Mask/Hide -->
+    <string name="fa_eye">&#xf06e;</string>              <!-- Unmask/Show -->
+    <string name="fa_anchor">&#xf13d;</string>           <!-- Anchor -->
+    <string name="fa_anchor_circle_xmark">&#xe4ac;</string> <!-- Anchor Barred/Off -->
+    
+    <string name="fa_arrow_left">&#xf060;</string>       <!-- Back -->
+    <string name="fa_arrow_right">&#xf061;</string>      <!-- Forward -->
+    <string name="fa_arrow_up">&#xf062;</string>         <!-- Up -->
+    <string name="fa_arrow_down">&#xf063;</string>       <!-- Down -->
+    
+    <string name="fa_house">&#xf015;</string>            <!-- Home -->
+    <string name="fa_link">&#xf0c1;</string>             <!-- Link -->
+    <string name="fa_gear">&#xf013;</string>             <!-- Settings -->
+    <string name="fa_rotate_right">&#xf2f9;</string>     <!-- Refresh -->
+    <string name="fa_xmark">&#xf00d;</string>            <!-- Quit/Close -->
+    
+    <!-- Font Awesome Brands (400) -->
+    <string name="fa_youtube">&#xf167;</string>          <!-- YouTube -->
+    
+    <!-- Additional icons -->
+    <string name="fa_gauge">&#xf624;</string>            <!-- Dashboard/Gauge -->
+    <string name="fa_glasses">&#xf530;</string>          <!-- Glasses -->
+    <string name="fa_hand">&#xf256;</string>             <!-- Hand/Scroll Mode -->
+</resources>

@@ -44,6 +44,7 @@ import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
 import kotlin.math.roundToInt
+import com.TapLink.app.FontIconView
 
 @SuppressLint("ClickableViewAccessibility")
 class DualWebViewGroup @JvmOverloads constructor(
@@ -81,8 +82,9 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var velocityTracker: android.view.VelocityTracker? = null
     private val refreshHandler = Handler(Looper.getMainLooper())
-    private val refreshInterval = 16L // ~60fps for smooth mirroring
+    private var refreshInterval = 16L // ~60fps for smooth mirroring
     private var lastCaptureTime = 0L
+    private var lastScrollBarCheckTime = 0L
     private val MIN_CAPTURE_INTERVAL = 16L  // Cap at ~60fps
     private var lastCursorUpdateTime = 0L
     private val CURSOR_UPDATE_INTERVAL = 16L  // 60fps cap for cursor updates
@@ -171,6 +173,10 @@ class DualWebViewGroup @JvmOverloads constructor(
     })
 
     var isAnchored = false
+        set(value) {
+            field = value
+            updateRefreshRate()
+        }
     private var isHoveringAnchorToggle = false
 
     private val bitmapLock = Any()
@@ -188,6 +194,13 @@ class DualWebViewGroup @JvmOverloads constructor(
     interface AnchorToggleListener {
         fun onAnchorTogglePressed()
     }
+
+    interface FullscreenListener {
+        fun onEnterFullscreen()
+        fun onExitFullscreen()
+    }
+
+    var fullscreenListener: FullscreenListener? = null
 
     private var hideProgressBarRunnable: Runnable? = null
 
@@ -216,16 +229,16 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     private data class NavButton(
-        val left: ImageButton,
-        val right: ImageButton,
+        val left: FontIconView,
+        val right: FontIconView,
         var isHovered: Boolean = false
     )
 
-    private fun ImageButton.configureToggleButton(iconRes: Int) {
+    private fun FontIconView.configureToggleButton(iconRes: Int) {
         visibility = View.VISIBLE
-        setImageResource(iconRes)
+        setText(iconRes)
         setBackgroundResource(R.drawable.nav_button_background)
-        scaleType = ImageView.ScaleType.FIT_CENTER
+        gravity = android.view.Gravity.CENTER
         setPadding(8, 8, 8, 8)
         alpha = 1.0f
         elevation = 2f
@@ -492,7 +505,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     fun updateScrollBarsVisibility() {
-        Log.d("ScrollDebug", "updateScrollBarsVisibility called. isAnchored=$isAnchored, isInScrollMode=$isInScrollMode, uiScale=$uiScale")
+        // Log.d("ScrollDebug", "updateScrollBarsVisibility called. isAnchored=$isAnchored, isInScrollMode=$isInScrollMode, uiScale=$uiScale")
 
         // Determine mode-specific base constraints
         val isScrollModeActive = isInScrollMode
@@ -510,17 +523,33 @@ class DualWebViewGroup @JvmOverloads constructor(
             verticalScrollBar.visibility = View.GONE
             
             (webView.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
+                var targetWidth = 0
+                var targetHeight = 0
                 if (isScrollModeActive) {
-                    p.width = containerWidth
-                    p.height = 480
+                    targetWidth = containerWidth
+                    targetHeight = 480
                 } else {
-                    p.width = containerWidth - baseLeftMargin // 640 - 40 = 600
-                    p.height = FrameLayout.LayoutParams.MATCH_PARENT
+                    targetWidth = containerWidth - baseLeftMargin // 640 - 40 = 600
+                    targetHeight = FrameLayout.LayoutParams.MATCH_PARENT
                 }
-                p.leftMargin = baseLeftMargin
-                p.rightMargin = 0
-                p.bottomMargin = baseBottomMargin
-                webView.layoutParams = p
+                
+                var changed = false
+                if (p.width != targetWidth) changed = true
+                if (p.height != targetHeight) changed = true
+                if (p.leftMargin != baseLeftMargin) changed = true
+                if (p.rightMargin != 0) changed = true
+                if (p.bottomMargin != baseBottomMargin) changed = true
+                
+                if (changed) {
+                    p.width = targetWidth
+                    p.height = targetHeight
+                    p.leftMargin = baseLeftMargin
+                    p.rightMargin = 0
+                    p.bottomMargin = baseBottomMargin
+                    webView.layoutParams = p
+                    webView.requestLayout()
+                    webView.invalidate()
+                }
             }
             return
         }
@@ -578,19 +607,30 @@ class DualWebViewGroup @JvmOverloads constructor(
                  targetBottomMargin = baseBottomMargin + bottomMarginShift // 40 + shift
             }
             
-            p.width = targetWidth
-            p.height = targetHeight
-            p.leftMargin = targetLeftMargin
-            p.rightMargin = targetRightMargin
-            p.bottomMargin = targetBottomMargin
-            
-            Log.d("ScrollDebug", "Applying Layout: Mode=${if(isScrollModeActive)"Scroll" else "Normal"}, [${p.width} x ${p.height}], Margins: L=${p.leftMargin}, R=${p.rightMargin}, B=${p.bottomMargin}")
-            webView.layoutParams = p
-        }
+            var changed = false
+            if (p.width != targetWidth) changed = true
+            if (p.height != targetHeight) changed = true
+            if (p.leftMargin != targetLeftMargin) changed = true
+            if (p.rightMargin != targetRightMargin) changed = true
+            if (p.bottomMargin != targetBottomMargin) changed = true
 
-        // Force both requestLayout AND invalidate to ensure redraw
-        webView.requestLayout()
-        webView.invalidate()
+            if (changed) {
+                p.width = targetWidth
+                p.height = targetHeight
+                p.leftMargin = targetLeftMargin
+                p.rightMargin = targetRightMargin
+                p.bottomMargin = targetBottomMargin
+                
+                // Log.d("ScrollDebug", "Applying Layout: Mode=${if(isScrollModeActive)"Scroll" else "Normal"}, [${p.width} x ${p.height}], Margins: L=${p.leftMargin}, R=${p.rightMargin}, B=${p.bottomMargin}")
+                webView.layoutParams = p
+                webView.requestLayout()
+                webView.invalidate()
+            }
+        }
+        
+        // Remove unconditional requestLayout/invalidate here
+        // webView.requestLayout()
+        // webView.invalidate()
 
         if (horizontalScrollBar.visibility == View.VISIBLE || verticalScrollBar.visibility == View.VISIBLE) {
              val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
@@ -684,10 +724,10 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
         try {
-            context.resources.getDrawable(R.drawable.ic_arrow_up, null)
-            Log.d("ResourceDebug", "ic_arrow_up found")
+            // context.resources.getDrawable(R.drawable.ic_arrow_up, null) // Removed as drawable is gone
+            // Log.d("ResourceDebug", "ic_arrow_up check skipped")
         } catch (e: Exception) {
-            Log.e("ResourceDebug", "ic_arrow_up not found", e)
+            Log.e("ResourceDebug", "ic_arrow_up check failed", e)
         }
 
         // Set the background of the entire DualWebViewGroup to black
@@ -734,7 +774,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             setOnScrollChangeListener { _, _, _, _, _ ->
                 if (isWebViewScrollEnabled()) {
                     updateScrollBarThumbs(0, 0)
-                    updateScrollBarsVisibility()
+                    // REMOVED: updateScrollBarsVisibility() - moved to onPageFinished manually
+                    // updateScrollBarsVisibility() 
                 }
             }
         }
@@ -778,10 +819,10 @@ class DualWebViewGroup @JvmOverloads constructor(
             visibility = View.GONE
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener {
-                Log.d("KeyboardDebug", "leftKeyboardContainer clicked")
+                // Log.d("KeyboardDebug", "leftKeyboardContainer clicked")
             }
             setOnTouchListener { _, event ->
-                Log.d("KeyboardDebug", "leftKeyboardContainer received touch event: ${event.action}")
+                // Log.d("KeyboardDebug", "leftKeyboardContainer received touch event: ${event.action}")
                 true
             }
         }
@@ -862,7 +903,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
 
-        Log.d("ViewDebug", "Toggle bar initialized with hash: ${leftToggleBar.hashCode()}")
+        // Log.d("ViewDebug", "Toggle bar initialized with hash: ${leftToggleBar.hashCode()}")
 
 
 
@@ -886,20 +927,20 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
         // Set up the toggle buttons with explicit configurations
-        leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle).apply {
-            configureToggleButton(R.drawable.ic_mode_mobile)
+        leftToggleBar.findViewById<FontIconView>(R.id.btnModeToggle).apply {
+            configureToggleButton(R.string.fa_mobile_screen)
         }
 
-        leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube).apply {
-            configureToggleButton(R.drawable.ic_dashboard)
+        leftToggleBar.findViewById<FontIconView>(R.id.btnYouTube).apply {
+            configureToggleButton(R.string.fa_glasses)
         }
 
 
-        leftToggleBar.findViewById<ImageButton>(R.id.btnBookmarks).apply {
+        leftToggleBar.findViewById<FontIconView>(R.id.btnBookmarks).apply {
             visibility = View.VISIBLE
-            setImageResource(R.drawable.ic_bookmarks)
+            setText(R.string.fa_bookmark)
             setBackgroundResource(R.drawable.nav_button_background)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            gravity = android.view.Gravity.CENTER
             setPadding(8, 8, 8, 8)
             alpha = 1.0f
             elevation = 2f
@@ -985,14 +1026,14 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
             override fun onGlobalLayout() {
-                Log.d("TouchDebug", """
+                /* Log.d("TouchDebug", """
                 Toggle Bar Layout:
                 Width: ${leftToggleBar.width}
                 Height: ${leftToggleBar.height}
                 Left: ${leftToggleBar.left}
                 Top: ${leftToggleBar.top}
                 Translation: (${leftToggleBar.translationX}, ${leftToggleBar.translationY})
-            """.trimIndent())
+            """.trimIndent()) */
                 viewTreeObserver.removeOnGlobalLayoutListener(this)
             }
         })
@@ -1028,7 +1069,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 bottomMargin = 40 // Account for nav bar
             })
             addView(leftToggleBar)
-            Log.d("ViewDebug", "Toggle bar added to UI container with hash: ${leftToggleBar.hashCode()}")
+            // Log.d("ViewDebug", "Toggle bar added to UI container with hash: ${leftToggleBar.hashCode()}")
 
             addView(leftNavigationBar.apply{
                 elevation = 101f
@@ -1088,12 +1129,14 @@ class DualWebViewGroup @JvmOverloads constructor(
             isFocusable = true
 
             // Left arrow button
-            val btnLeft = ImageButton(context).apply {
+            // Left arrow button
+            val btnLeft = FontIconView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(20, 20)
-                setImageResource(R.drawable.ic_arrow_left)
+                setText(R.string.fa_arrow_left)
                 setBackgroundColor(Color.parseColor("#404040"))
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(2, 2, 2, 2)
+                gravity = Gravity.CENTER
+                textSize = 10f
+                setPadding(0, 0, 0, 0)
             }
             addView(btnLeft)
 
@@ -1113,12 +1156,14 @@ class DualWebViewGroup @JvmOverloads constructor(
             addView(trackContainer)
 
             // Right arrow button
-            val btnRight = ImageButton(context).apply {
+            // Right arrow button
+            val btnRight = FontIconView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(20, 20)
-                setImageResource(R.drawable.ic_arrow_right)
+                setText(R.string.fa_arrow_right)
                 setBackgroundColor(Color.parseColor("#404040"))
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(2, 2, 2, 2)
+                gravity = Gravity.CENTER
+                textSize = 10f
+                setPadding(0, 0, 0, 0)
             }
             addView(btnRight)
 
@@ -1163,12 +1208,14 @@ class DualWebViewGroup @JvmOverloads constructor(
             isFocusable = true
 
             // Up arrow button
-            val btnUp = ImageButton(context).apply {
+            // Up arrow button
+            val btnUp = FontIconView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(20, 20)
-                setImageResource(R.drawable.ic_arrow_up)
+                setText(R.string.fa_arrow_up)
                 setBackgroundColor(Color.parseColor("#404040"))
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(2, 2, 2, 2)
+                gravity = Gravity.CENTER
+                textSize = 10f
+                setPadding(0, 0, 0, 0)
             }
             addView(btnUp)
 
@@ -1188,12 +1235,14 @@ class DualWebViewGroup @JvmOverloads constructor(
             addView(trackContainer)
 
             // Down arrow button
-            val btnDown = ImageButton(context).apply {
+            // Down arrow button
+            val btnDown = FontIconView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(20, 20)
-                setImageResource(R.drawable.ic_arrow_down)
+                setText(R.string.fa_arrow_down)
                 setBackgroundColor(Color.parseColor("#404040"))
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(2, 2, 2, 2)
+                gravity = Gravity.CENTER
+                textSize = 10f
+                setPadding(0, 0, 0, 0)
             }
             addView(btnDown)
 
@@ -1262,7 +1311,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val isSameView = viewHashCode == lastFullscreenViewHashCode
         lastFullscreenViewHashCode = viewHashCode
         
-        Log.d("FullscreenDebug", """
+        /* Log.d("FullscreenDebug", """
             showFullScreenOverlay called:
               Entry count: $fullscreenEntryCount
               View class: ${view.javaClass.simpleName}
@@ -1271,17 +1320,17 @@ class DualWebViewGroup @JvmOverloads constructor(
               View attached: ${view.isAttachedToWindow}
               View parent: ${view.parent?.javaClass?.simpleName ?: "null"}
               Container child count before: ${fullScreenOverlayContainer.childCount}
-        """.trimIndent())
+        """.trimIndent()) */
         
         // Remove from current parent if any
         if (view.parent is ViewGroup) {
-            Log.d("FullscreenDebug", "  Removing view from parent: ${(view.parent as ViewGroup).javaClass.simpleName}")
+            // Log.d("FullscreenDebug", "  Removing view from parent: ${(view.parent as ViewGroup).javaClass.simpleName}")
             (view.parent as ViewGroup).removeView(view)
         }
 
         // Clear any existing children
         if (fullScreenOverlayContainer.childCount > 0) {
-            Log.d("FullscreenDebug", "  Clearing ${fullScreenOverlayContainer.childCount} existing children from container")
+            // Log.d("FullscreenDebug", "  Clearing ${fullScreenOverlayContainer.childCount} existing children from container")
             fullScreenOverlayContainer.removeAllViews()
         }
         
@@ -1294,7 +1343,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             )
         )
         
-        Log.d("FullscreenDebug", "  View added. Container child count: ${fullScreenOverlayContainer.childCount}")
+        // Log.d("FullscreenDebug", "  View added. Container child count: ${fullScreenOverlayContainer.childCount}")
 
         previousFullScreenVisibility.clear()
         Log.d("FullscreenDebug", "Hiding ${fullScreenHiddenViews.size} UI elements")
@@ -1308,9 +1357,10 @@ class DualWebViewGroup @JvmOverloads constructor(
                 urlEditText -> "urlEditText"
                 else -> "unknown"
             }
-            Log.d("FullscreenDebug", "  Hiding $name (was ${if (target.visibility == View.VISIBLE) "VISIBLE" else "GONE/INVISIBLE"})")
+            // Log.d("FullscreenDebug", "  Hiding $name (was ${if (target.visibility == View.VISIBLE) "VISIBLE" else "GONE/INVISIBLE"})")
             previousFullScreenVisibility[target] = target.visibility
-            target.visibility = if (target == webView) View.INVISIBLE else View.GONE
+            // Use GONE for everything to maximize power saving (remove from layout)
+            target.visibility = View.GONE
         }
 
         fullScreenOverlayContainer.visibility = View.VISIBLE
@@ -1322,19 +1372,23 @@ class DualWebViewGroup @JvmOverloads constructor(
             fullScreenOverlayContainer.invalidate()
             fullScreenOverlayContainer.requestLayout()
             startRefreshing()
-            Log.d("FullscreenDebug", "  Post-show refresh triggered")
+            // Log.d("FullscreenDebug", "  Post-show refresh triggered")
         }
         
-        Log.d("FullscreenDebug", "About to call hideSystemUI()")
+        // Log.d("FullscreenDebug", "About to call hideSystemUI()")
         hideSystemUI()
+
+        // Power saving: reduce refresh rate and notify listener
+        fullscreenListener?.onEnterFullscreen()
+        updateRefreshRate()
     }
 
     fun hideFullScreenOverlay() {
-        Log.d("FullscreenDebug", """
+        /* Log.d("FullscreenDebug", """
             hideFullScreenOverlay called:
               Container child count: ${fullScreenOverlayContainer.childCount}
               Container visibility: ${if (fullScreenOverlayContainer.visibility == View.VISIBLE) "VISIBLE" else "GONE/INVISIBLE"}
-        """.trimIndent())
+        """.trimIndent()) */
         
         // Get reference to the view being removed for logging
         val removedView = if (fullScreenOverlayContainer.childCount > 0) {
@@ -1342,7 +1396,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         } else null
         
         if (removedView != null) {
-            Log.d("FullscreenDebug", "  Removing view: ${removedView.javaClass.simpleName}, hashCode: ${removedView.hashCode()}")
+            // Log.d("FullscreenDebug", "  Removing view: ${removedView.javaClass.simpleName}, hashCode: ${removedView.hashCode()}")
         }
         
         fullScreenOverlayContainer.removeAllViews()
@@ -1362,7 +1416,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 urlEditText -> "urlEditText"
                 else -> "unknown"
             }
-            Log.d("FullscreenDebug", "  Restoring $name to ${if (visibility == View.VISIBLE) "VISIBLE" else "GONE/INVISIBLE"}")
+            // Log.d("FullscreenDebug", "  Restoring $name to ${if (visibility == View.VISIBLE) "VISIBLE" else "GONE/INVISIBLE"}")
             target.visibility = visibility
         }
         previousFullScreenVisibility.clear()
@@ -1378,11 +1432,26 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Restart the mirroring refresh
         post {
             startRefreshing()
-            Log.d("FullscreenDebug", "  Post-hide refresh triggered")
+            // Log.d("FullscreenDebug", "  Post-hide refresh triggered")
         }
         
         showSystemUI()
-        Log.d("FullscreenDebug", "hideFullScreenOverlay complete")
+        
+        // Restore normal refresh rate and notify listener
+        fullscreenListener?.onExitFullscreen()
+        updateRefreshRate()
+        
+        // Log.d("FullscreenDebug", "hideFullScreenOverlay complete")
+    }
+
+    private fun updateRefreshRate() {
+        val isFullscreen = fullScreenOverlayContainer.visibility == View.VISIBLE
+        // Logic: 
+        // - Non-anchored: 30fps (33ms)
+        // - Anchored + Fullscreen (Video): ~24fps (42ms) for power saving
+        // - Anchored + Normal: 60fps (16ms)
+        refreshInterval = if (isAnchored && !isFullscreen) 16L else 42L
+        // Log.d("PowerSaving", "Refresh rate updated: ${if (refreshInterval == 16L) "60fps" else if (refreshInterval == 33L) "30fps" else "24fps"} (Anchored=$isAnchored, Fullscreen=$isFullscreen)")
     }
 
     private fun hideSystemUI() {
@@ -1466,7 +1535,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         maskOverlay.visibility = View.VISIBLE
         maskOverlay.bringToFront()
         // Hide both cursor views
-        leftToggleBar.findViewById<ImageButton>(R.id.btnMask)?.setImageResource(R.drawable.ic_visibility_off)
+        leftToggleBar.findViewById<FontIconView>(R.id.btnMask)?.setText(R.string.fa_eye_slash)
     }
 
     fun unmaskScreen() {
@@ -1474,7 +1543,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         maskOverlay.visibility = View.GONE
         // Let MainActivity handle cursor visibility restoration - cursors will be shown
         // if they were visible before masking through updateCursorPosition call
-        leftToggleBar.findViewById<ImageButton>(R.id.btnMask)?.setImageResource(R.drawable.ic_visibility_on)
+        leftToggleBar.findViewById<FontIconView>(R.id.btnMask)?.setText(R.string.fa_eye)
     }
 
     fun isScreenMasked() = isScreenMasked
@@ -1488,7 +1557,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val localX = screenX - location[0]
         val localY = screenY - location[1]
         
-        Log.d("MediaControls", "dispatchMaskOverlayTouch at local ($localX, $localY), scale: $scale")
+        // Log.d("MediaControls", "dispatchMaskOverlayTouch at local ($localX, $localY), scale: $scale")
         
         // Check unmask button hit (account for scale in button dimensions)
         val unmaskLocation = IntArray(2)
@@ -1497,7 +1566,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val unmaskHeight = btnMaskUnmask.height * scale
         if (screenX >= unmaskLocation[0] && screenX <= unmaskLocation[0] + unmaskWidth &&
             screenY >= unmaskLocation[1] && screenY <= unmaskLocation[1] + unmaskHeight) {
-            Log.d("MediaControls", "Unmask button pressed")
+            // Log.d("MediaControls", "Unmask button pressed")
             unmaskScreen()
             return
         }
@@ -1519,14 +1588,14 @@ class DualWebViewGroup @JvmOverloads constructor(
                 
                 if (screenX >= btnLocation[0] && screenX <= btnLocation[0] + btnWidth &&
                     screenY >= btnLocation[1] && screenY <= btnLocation[1] + btnHeight) {
-                    Log.d("MediaControls", "Media button $i pressed")
+                    // Log.d("MediaControls", "Media button $i pressed")
                     button.performClick()
                     return
                 }
             }
         }
         
-        Log.d("MediaControls", "Touch on mask overlay but not on any button")
+        // Log.d("MediaControls", "Touch on mask overlay but not on any button")
     }
 
 
@@ -1688,7 +1757,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     fun handleBookmarkTap(): Boolean {
         if (leftBookmarksView.visibility != View.VISIBLE) {
-            Log.d("BookmarksDebug", "No tap handling - bookmarks not visible")
+            // Log.d("BookmarksDebug", "No tap handling - bookmarks not visible")
             return false
         }
 
@@ -1703,7 +1772,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     fun handleBookmarkDoubleTap(): Boolean {
         return if (leftBookmarksView.visibility == View.VISIBLE) {
-            Log.d("BookmarksDebug", "handleBookmarkDoubleTap() called. leftVisibility=${leftBookmarksView.visibility}")
+            // Log.d("BookmarksDebug", "handleBookmarkDoubleTap() called. leftVisibility=${leftBookmarksView.visibility}")
             val handled = leftBookmarksView.handleDoubleTap()
             if (handled) {
                 leftBookmarksView.logStackTrace("BookmarksDebug", "handleBookmarkDoubleTap(): double tap handled")
@@ -1879,11 +1948,17 @@ class DualWebViewGroup @JvmOverloads constructor(
                 // Get the current bitmap after potential setup
                 val bitmapToUse = bitmap ?: return
 
-                // Check scrollbar visibility periodically (every frame is fine as checks are cheap)
-                updateScrollBarsVisibility()
+                // Check scrollbar visibility periodically (once per second)
+                // Skip if in fullscreen mode to save power
+                val isFullScreen = fullScreenOverlayContainer.visibility == View.VISIBLE
+                
+                if (!isFullScreen && currentTime - lastScrollBarCheckTime > 1000) {
+                    updateScrollBarsVisibility()
+                    lastScrollBarCheckTime = currentTime
+                }
 
-                // Force cursor refresh if editing
-                if (isUrlEditing && urlEditText.isFocused) {
+                // Force cursor refresh if editing - skip in fullscreen
+                if (!isFullScreen && isUrlEditing && urlEditText.isFocused) {
                     urlEditText.invalidate()
                 }
 
@@ -1964,7 +2039,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             // Log every 2 seconds to avoid spam
             val now = System.currentTimeMillis()
             if (now - lastRefreshLogTime > 2000) {
-                Log.d("MirrorDebug", "RefreshLoop running, count=$refreshCount, isRefreshing=$isRefreshing, webViewAttached=${webView.isAttachedToWindow}, fsOverlayVisible=${fullScreenOverlayContainer.visibility == View.VISIBLE}")
+                // Log.d("MirrorDebug", "RefreshLoop running, count=$refreshCount, isRefreshing=$isRefreshing, webViewAttached=${webView.isAttachedToWindow}, fsOverlayVisible=${fullScreenOverlayContainer.visibility == View.VISIBLE}")
                 lastRefreshLogTime = now
             }
             
@@ -2382,9 +2457,9 @@ class DualWebViewGroup @JvmOverloads constructor(
         maskOverlay.visibility = if (isScreenMasked) View.VISIBLE else View.GONE
 
         // Update the mask button icon
-        leftToggleBar.findViewById<ImageButton>(R.id.btnMask)?.let { button ->
-            button.setImageResource(
-                if (isScreenMasked) R.drawable.ic_visibility_off else R.drawable.ic_visibility_on
+        leftToggleBar.findViewById<FontIconView>(R.id.btnMask)?.let { button ->
+            button.text = context.getString(
+                if (isScreenMasked) R.string.fa_eye else R.string.fa_eye_slash
             )
         }
     }
@@ -2455,7 +2530,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     // Add keyboard mirror handling
     fun setKeyboard(originalKeyboard: CustomKeyboardView) {
-        Log.d("KeyboardDebug", "setKeyboard called with keyboard: ${originalKeyboard.hashCode()}")
+        // Log.d("KeyboardDebug", "setKeyboard called with keyboard: ${originalKeyboard.hashCode()}")
 
         // Clear container
         keyboardContainer.removeAllViews()
@@ -2501,7 +2576,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     override fun dispatchDraw(canvas: Canvas) {
         super.dispatchDraw(canvas)
         // Force redraw of toggle buttons
-        leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle)?.invalidate()
+        leftToggleBar.findViewById<View>(R.id.btnModeToggle)?.invalidate()
     }
 
     private fun getCursorInContainerCoords(): Pair<Float, Float> {
@@ -2524,7 +2599,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private fun computeAnchoredKeyboardCoordinates(): Pair<Float, Float>? {
         val keyboard = keyboardContainer
         if (keyboard.width == 0 || keyboard.height == 0) {
-            Log.d("TouchDebug", "computeAnchoredKeyboardCoordinates: keyboard not laid out")
+            // Log.d("TouchDebug", "computeAnchoredKeyboardCoordinates: keyboard not laid out")
             return null
         }
 
@@ -2542,10 +2617,10 @@ class DualWebViewGroup @JvmOverloads constructor(
         val localX = localXContainer - kbView.x
         val localY = localYContainer - kbView.y
 
-        Log.d(
+        /* Log.d(
             "TouchDebug",
             "Anchored cursor mapped to keyboard local=($localX, $localY) kbSize=(${kbView.width}, ${kbView.height})"
-        )
+        ) */
 
         return Pair(localX, localY)
     }
@@ -2574,7 +2649,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
-        Log.d("GestureDebug", "DualWebViewGroup onInterceptTouchEvent: ${ev.action}")
+        // Log.d("GestureDebug", "DualWebViewGroup onInterceptTouchEvent: ${ev.action}")
 
         if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
             // Allow interactions with menus that are on top
@@ -2610,7 +2685,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     cursorY >= leftBookmarksView.top && cursorY <= leftBookmarksView.bottom) {
                     isOverTarget = true
                     anchoredTarget = 2
-                    Log.d("TouchDebug", "Intercepting anchored tap for bookmarks")
+                    // Log.d("TouchDebug", "Intercepting anchored tap for bookmarks")
                 }
             }
 
@@ -2623,7 +2698,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                         anchoredTouchStartY = cursorY
                         lastAnchoredY = cursorY
                         isAnchoredDrag = false
-                        Log.d("TouchDebug", "Intercepting anchored ACTION_DOWN target=$anchoredTarget")
+                        // Log.d("TouchDebug", "Intercepting anchored ACTION_DOWN target=$anchoredTarget")
                         return true
                     }
                 }
@@ -2636,7 +2711,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 }
                 MotionEvent.ACTION_UP -> {
                     if (anchoredGestureActive || isOverTarget) {
-                        Log.d("TouchDebug", "Intercepting anchored ACTION_UP")
+                        // Log.d("TouchDebug", "Intercepting anchored ACTION_UP")
                         return true
                     }
                 }
@@ -2810,7 +2885,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                                 }
                                 2 -> { // Bookmarks
                                     if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
-                                        Log.d("TouchDebug", "Dispatching anchored tap to bookmarks")
+                                        // Log.d("TouchDebug", "Dispatching anchored tap to bookmarks")
                                         leftBookmarksView.handleAnchoredTap(cursorX - leftBookmarksView.left, cursorY - leftBookmarksView.top)
                                     }
                                 }
@@ -2852,8 +2927,13 @@ class DualWebViewGroup @JvmOverloads constructor(
                 val travelX = kotlin.math.abs(event.x - downX)
                 val travelY = kotlin.math.abs(event.y - downY)
                 val wasTap = dur < 300 && travelX < 8 && travelY < 8
-                android.util.Log.d("TouchDebug",
-                    "DWG UP: wasTap=$wasTap dur=${dur}ms travel=(${travelX},${travelY}) kbVisible=$kbVisible isAnchored=$isAnchored")
+                /* android.util.Log.d("TouchDebug",
+                    "DWG UP: wasTap=$wasTap dur=${dur}ms travel=(${travelX},${travelY}) kbVisible=$kbVisible isAnchored=$isAnchored") */
+                
+                if (wasTap && !isAnchored) {
+                    // Check for potential content changes
+                    postDelayed({ updateScrollBarsVisibility() }, 500)
+                }
                 
                 // Handle non-anchored tap for keyboard
                 if (kbVisible && !isAnchored && wasTap) {
@@ -2896,6 +2976,16 @@ class DualWebViewGroup @JvmOverloads constructor(
     fun getLogicalKeyboardLocation(location: IntArray) {
         location[0] = keyboardContainer.left
         location[1] = keyboardContainer.top
+    }
+
+    fun isPointInBookmarks(screenX: Float, screenY: Float): Boolean {
+        if (!::leftBookmarksView.isInitialized || leftBookmarksView.visibility != View.VISIBLE) return false
+        
+        val bookmarksLocation = IntArray(2)
+        leftBookmarksView.getLocationOnScreen(bookmarksLocation)
+        
+        return screenX >= bookmarksLocation[0] && screenX <= bookmarksLocation[0] + leftBookmarksView.width &&
+               screenY >= bookmarksLocation[1] && screenY <= bookmarksLocation[1] + leftBookmarksView.height
     }
 
     fun isPointInKeyboard(screenX: Float, screenY: Float): Boolean {
@@ -2973,7 +3063,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val finalX = localX - keyboardContainer.left
         val finalY = localY - keyboardContainer.top
 
-        Log.d("KeyboardDebug", "Keyboard tap: screen($screenX, $screenY) -> local($finalX, $finalY)")
+        // Log.d("KeyboardDebug", "Keyboard tap: screen($screenX, $screenY) -> local($finalX, $finalY)")
         kbView.handleAnchoredTap(finalX, finalY)
     }
 
@@ -3020,9 +3110,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Update toggle button icons
         webView.post {
-            val leftButton = leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle)
-            val newResource = if (isDesktop) R.drawable.ic_mode_desktop else R.drawable.ic_mode_mobile
-            leftButton?.setImageResource(newResource)
+            val leftButton = leftToggleBar.findViewById<FontIconView>(R.id.btnModeToggle)
+            leftButton?.text = context.getString(if (isDesktop) R.string.fa_desktop else R.string.fa_mobile_screen)
         }
     }
 
@@ -3083,14 +3172,14 @@ class DualWebViewGroup @JvmOverloads constructor(
             setSelection(text.length)
             bringToFront()
             // Add logging to verify state
-            Log.d("DualWebViewGroup", """
+            /* Log.d("DualWebViewGroup", """
             Edit field state:
             Text: $text
             Visibility: $visibility
             Parent: ${parent?.javaClass?.simpleName}
             Position: ($x, $y)
             Width: $width, Height: $height
-        """.trimIndent())
+        """.trimIndent()) */
         }
         // Make sure we're in edit mode
         isBookmarkEditing = true
@@ -3104,7 +3193,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
 
-    private fun showButtonClickFeedback(button: ImageButton) {
+    private fun showButtonClickFeedback(button: View) {
         button.isPressed = true
         //Log.d("buttonFeedbackDebug", "button feedback shown")
         Handler(Looper.getMainLooper()).postDelayed({
@@ -3117,7 +3206,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             keyboardListener?.onHideKeyboard()
         }
 
-        val button = leftToggleBar.findViewById<ImageButton>(buttonId)
+        val button = leftToggleBar.findViewById<View>(buttonId)
 
         when (buttonId) {
             R.id.btnModeToggle -> {
@@ -3239,12 +3328,12 @@ class DualWebViewGroup @JvmOverloads constructor(
         )
         
         for ((buttonId, name, setHoverFlag) in toggleBarButtons) {
-            val button = leftToggleBar.findViewById<ImageButton>(buttonId)
+            val button = leftToggleBar.findViewById<View>(buttonId)
             if (isOver(button)) {
                 button?.isHovered = true
                 setHoverFlag()
                 clearNavigationButtonStates()
-                Log.d("HoverDebug", "Hovering over toggle button: $name")
+                // Log.d("HoverDebug", "Hovering over toggle button: $name")
                 customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
                 return  // Found the hovered button, stop checking
             }
@@ -3260,10 +3349,9 @@ class DualWebViewGroup @JvmOverloads constructor(
                     R.id.screenSizeSeekBar,
                     R.id.btnResetScreenSize,
                     R.id.fontSizeSeekBar,
-                    R.id.btnColorWhite,
-                    R.id.btnColorGray,
-                    R.id.btnColorAccent,
-                    R.id.btnColorYellow,
+                    R.id.fontSizeSeekBar,
+                    R.id.colorWheelView,
+                    R.id.horizontalPosSeekBar,
                     R.id.horizontalPosSeekBar,
                     R.id.verticalPosSeekBar,
                     R.id.btnResetPosition,
@@ -3274,7 +3362,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     val view = menu.findViewById<View>(id)
                     if (isOver(view)) {
                         view?.isHovered = true
-                        Log.d("HoverDebug", "Hovering over settings element: $id")
+                        // Log.d("HoverDebug", "Hovering over settings element: $id")
                         customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
                         return // Found the hovered element, stop checking
                     }
@@ -3293,7 +3381,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                         val button = container.getChildAt(i)
                         if (isOver(button)) {
                             button.isHovered = true
-                            Log.d("HoverDebug", "Hovering over dialog button: $i")
+                            // Log.d("HoverDebug", "Hovering over dialog button: $i")
                             customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
                             return
                         }
@@ -3326,7 +3414,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                      val child = horizontalScrollBar.getChildAt(i)
                      if (isOver(child)) {
                          child.isHovered = true
-                         Log.d("HoverDebug", "Hovering over horizontal scrollbar element: $i")
+                         // Log.d("HoverDebug", "Hovering over horizontal scrollbar element: $i")
                      }
                  }
                  customKeyboard?.updateHover(-1f, -1f)
@@ -3344,7 +3432,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                      val child = verticalScrollBar.getChildAt(i)
                      if (isOver(child)) {
                          child.isHovered = true
-                         Log.d("HoverDebug", "Hovering over vertical scrollbar element: $i")
+                         // Log.d("HoverDebug", "Hovering over vertical scrollbar element: $i")
                      }
                  }
                  customKeyboard?.updateHover(-1f, -1f)
@@ -3395,7 +3483,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             R.id.btnAnchor
 
         ).forEach { id ->
-            leftToggleBar.findViewById<ImageButton>(id)?.isHovered = false
+            leftToggleBar.findViewById<View>(id)?.isHovered = false
         }
         
         // Clear settings hover states
@@ -3408,10 +3496,9 @@ class DualWebViewGroup @JvmOverloads constructor(
                     R.id.screenSizeSeekBar,
                     R.id.btnResetScreenSize,
                     R.id.fontSizeSeekBar,
-                    R.id.btnColorWhite,
-                    R.id.btnColorGray,
-                    R.id.btnColorAccent,
-                    R.id.btnColorYellow,
+                    R.id.fontSizeSeekBar,
+                    R.id.colorWheelView,
+                    R.id.horizontalPosSeekBar,
                     R.id.horizontalPosSeekBar,
                     R.id.verticalPosSeekBar,
                     R.id.btnResetPosition,
@@ -3561,7 +3648,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         """.trimIndent()
 
         webView.evaluateJavascript(script) { result ->
-            Log.d("ScrollDebug", "Viewport scroll result: $result")
+            // Log.d("ScrollDebug", "Viewport scroll result: $result")
         }
     }
 
@@ -3597,14 +3684,14 @@ class DualWebViewGroup @JvmOverloads constructor(
         val localX = x % halfWidth
         val toggleBarWidth = 40
 
-        Log.d("TouchDebug", """
+        /* Log.d("TouchDebug", """
         handleNavigationClick:
         Coordinates: ($x, $y)
         Toggle bar width: $toggleBarWidth
         Is in toggle bar area: ${x < toggleBarWidth}
         Button height: $buttonHeight
         Current button row: ${(y / buttonHeight).toInt()}
-    """.trimIndent())
+    """.trimIndent()) */
 
         // First check if settings menu is visible and if click is within its bounds
         if (isSettingsVisible && settingsMenu != null) {
@@ -3612,10 +3699,10 @@ class DualWebViewGroup @JvmOverloads constructor(
             settingsMenu?.getLocationOnScreen(menuLocation)
             val menuWidth = settingsMenu?.width ?: 0
             val menuHeight = settingsMenu?.height ?: 0
-            Log.d("SettingsDebug", """x: $x, y: $y, menuLocation: ${menuLocation[0]}, ${menuLocation[1]},menuWidth: $menuWidth, menuHeight: $menuHeight""")
+            // Log.d("SettingsDebug", """x: $x, y: $y, menuLocation: ${menuLocation[0]}, ${menuLocation[1]},menuWidth: $menuWidth, menuHeight: $menuHeight""")
             if (x <= menuWidth &&
                 y <= menuHeight) {
-                Log.d("SettingsDebug", "Dispatching the event to settings")
+                // Log.d("SettingsDebug", "Dispatching the event to settings")
 
                 // Click is within settings menu bounds - dispatch touch event to settings menu
                 dispatchSettingsTouchEvent(lastCursorX, lastCursorY)
@@ -3648,7 +3735,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         if (y >= height - 40) {
             keyboardListener?.onHideKeyboard()
-            Log.d("AnchoredTouchDebug","handling navigation click")
+            // Log.d("AnchoredTouchDebug","handling navigation click")
                     navButtons.entries.find { it.value.isHovered }?.let { (key, button) ->
                         showButtonClickFeedback(button.left)
                         showButtonClickFeedback(button.right)
@@ -3772,7 +3859,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         // Use unbarred anchor icon when anchored
-        leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)?.setImageResource(R.drawable.ic_anchor)
+        leftToggleBar.findViewById<FontIconView>(R.id.btnAnchor)?.text = context.getString(R.string.fa_anchor)
     }
 
     fun stopAnchoring() {
@@ -3794,7 +3881,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftBookmarksView.setAnchoredMode(false)
         }
 
-        leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)?.setImageResource(R.drawable.ic_anchor_barred)
+        leftToggleBar.findViewById<FontIconView>(R.id.btnAnchor)?.text = context.getString(R.string.fa_anchor_circle_xmark)
         webView.visibility = View.VISIBLE
         rightEyeView.visibility = View.VISIBLE
 
@@ -3899,13 +3986,13 @@ class DualWebViewGroup @JvmOverloads constructor(
 """.trimIndent())
 
         // Get references to all buttons
-        val leftModeToggleButton   = leftToggleBar.findViewById<ImageButton>(R.id.btnModeToggle)
-        val leftDashboardButton    = leftToggleBar.findViewById<ImageButton>(R.id.btnYouTube)
-        val leftBookmarksButton    = leftToggleBar.findViewById<ImageButton>(R.id.btnBookmarks)
-        val leftZoomInButton       = leftToggleBar.findViewById<ImageButton>(R.id.btnZoomIn)
-        val leftZoomOutButton      = leftToggleBar.findViewById<ImageButton>(R.id.btnZoomOut)
-        val leftMaskButton         = leftToggleBar.findViewById<ImageButton>(R.id.btnMask)
-        val leftAnchorButton       = leftToggleBar.findViewById<ImageButton>(R.id.btnAnchor)
+        val leftModeToggleButton   = leftToggleBar.findViewById<FontIconView>(R.id.btnModeToggle)
+        val leftDashboardButton    = leftToggleBar.findViewById<FontIconView>(R.id.btnYouTube)
+        val leftBookmarksButton    = leftToggleBar.findViewById<FontIconView>(R.id.btnBookmarks)
+        val leftZoomInButton       = leftToggleBar.findViewById<FontIconView>(R.id.btnZoomIn)
+        val leftZoomOutButton      = leftToggleBar.findViewById<FontIconView>(R.id.btnZoomOut)
+        val leftMaskButton         = leftToggleBar.findViewById<FontIconView>(R.id.btnMask)
+        val leftAnchorButton       = leftToggleBar.findViewById<FontIconView>(R.id.btnAnchor)
 
 
         // Calculate positioning constants
@@ -3935,7 +4022,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     layoutParams = params
                     visibility = View.VISIBLE
                     background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    // Icon already set via XML text attribute
                     setPadding(8, 8, 8, 8)
                     elevation = 4f
                     alpha = 1f
@@ -3947,7 +4034,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                         val parentLocation = IntArray(2)
                         leftToggleBar.getLocationOnScreen(parentLocation)
 
-                        Log.d("TouchDebug", """
+                        /* Log.d("TouchDebug", """
                     Button Touch (${v.id}):
                     Raw touch: (${event.rawX}, ${event.rawY})
                     Button screen location: (${location[0]}, ${location[1]})
@@ -3956,7 +4043,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     Button relative to parent: (${v.x}, ${v.y})
                     Y Position in setup: $yPosition
                     Layout bounds: ($left, $top, $right, $bottom)
-                """.trimIndent())
+                """.trimIndent()) */
 
                         false
                     }
@@ -3971,8 +4058,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             layoutParams = LinearLayout.LayoutParams(buttonWidth, buttonHeight)
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            setImageResource(R.drawable.ic_zoom_out)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            // Icon already set via XML text attribute
             setPadding(6, 6, 6, 6)
             elevation = 4f
             alpha = 1f
@@ -3983,8 +4069,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             layoutParams = LinearLayout.LayoutParams(buttonWidth, buttonHeight)
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            setImageResource(R.drawable.ic_zoom_in)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            // Icon already set via XML text attribute
             setPadding(6, 6, 6, 6)
             elevation = 4f
             alpha = 1f
@@ -3996,8 +4081,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             layoutParams = LinearLayout.LayoutParams(buttonWidth, buttonHeight)
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
-            setImageResource(R.drawable.ic_visibility_on)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            // Icon already set via XML text attribute
             setPadding(8, 8, 8, 8)
             elevation = 4f
             alpha = 1f
@@ -4009,8 +4093,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             visibility = View.VISIBLE
             background = ContextCompat.getDrawable(context, R.drawable.nav_button_background)
             // Check anchored state and set appropriate icon
-            setImageResource(if (isAnchored) R.drawable.ic_anchor else R.drawable.ic_anchor_barred)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            text = context.getString(if (isAnchored) R.string.fa_anchor else R.string.fa_anchor_circle_xmark)
             setPadding(8, 8, 8, 8)
             elevation = 4f
             alpha = 1f
@@ -4050,7 +4133,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
             volumeSeekBar?.max = maxVolume
             volumeSeekBar?.progress = currentVolume
-            Log.d("SettingsDebug", "Volume: $currentVolume of $maxVolume")
+            // Log.d("SettingsDebug", "Volume: $currentVolume of $maxVolume")
 
             // Initialize Brightness from System Settings:
             try {
@@ -4062,7 +4145,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 // Scale to a 0–100 range for your seek bar
                 brightnessSeekBar?.max = 100
                 brightnessSeekBar?.progress = ((currentBrightness / 255f) * 100).toInt()
-                Log.d("SettingsDebug", "Brightness: $currentBrightness (scaled to ${brightnessSeekBar?.progress})")
+                // Log.d("SettingsDebug", "Brightness: $currentBrightness (scaled to ${brightnessSeekBar?.progress})")
             } catch (e: Exception) {
                 Log.e("SettingsDebug", "Error retrieving screen brightness", e)
             }
@@ -4072,7 +4155,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
     fun showSettings() {
-        Log.d("SettingsDebug", "showSettings() called, isSettingsVisible: $isSettingsVisible")
+        // Log.d("SettingsDebug", "showSettings() called, isSettingsVisible: $isSettingsVisible")
 
         if (settingsMenu == null) {
             settingsMenu = LayoutInflater.from(context)
@@ -4087,7 +4170,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             // Add click handler for close button
             settingsMenu?.findViewById<Button>(R.id.btnCloseSettings)?.setOnClickListener {
-                Log.d("SettingsDebug", "Close button clicked")
+                // Log.d("SettingsDebug", "Close button clicked")
                 isSettingsVisible = false
                 settingsMenu?.visibility = View.GONE
                 settingsScrim?.visibility = View.GONE
@@ -4096,7 +4179,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             // Add click handler for help button
             settingsMenu?.findViewById<ImageButton>(R.id.btnHelp)?.setOnClickListener {
-                Log.d("SettingsDebug", "Help button clicked")
+                // Log.d("SettingsDebug", "Help button clicked")
                 showHelpDialog()
             }
 
@@ -4110,7 +4193,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftEyeUIContainer.addView(settingsMenu, layoutParams)
             settingsMenu?.elevation = 1001f
 
-            Log.d("SettingsDebug", "Menu added with height: ${settingsMenu?.measuredHeight}")
+            // Log.d("SettingsDebug", "Menu added with height: ${settingsMenu?.measuredHeight}")
         }
 
         // Before toggling visibility, update the seek bars with current system values.
@@ -4166,17 +4249,15 @@ class DualWebViewGroup @JvmOverloads constructor(
             fontSizeSeekBar?.progress = savedFontSize
             
             // Initialize color buttons with visual background indicators
-            menu.findViewById<Button>(R.id.btnColorWhite)?.apply {
-                setBackgroundColor(0xFFFFFFFF.toInt())
-            }
-            menu.findViewById<Button>(R.id.btnColorGray)?.apply {
-                setBackgroundColor(0xFF9DB3D1.toInt())
-            }
-            menu.findViewById<Button>(R.id.btnColorAccent)?.apply {
-                setBackgroundColor(0xFF69F0AE.toInt())
-            }
-            menu.findViewById<Button>(R.id.btnColorYellow)?.apply {
-                setBackgroundColor(0xFFFFD54F.toInt())
+            // Initialize color wheel with saved color
+            menu.findViewById<ColorWheelView>(R.id.colorWheelView)?.apply {
+                val savedTextColor = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                    .getString("webTextColor", "#FFFFFF") ?: "#FFFFFF"
+                try {
+                    setColor(Color.parseColor(savedTextColor))
+                } catch (e: Exception) {
+                    setColor(Color.WHITE)
+                }
             }
             
             // Apply saved font settings
@@ -4240,10 +4321,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             val resetButton = menu.findViewById<Button>(R.id.btnResetPosition)
             val resetScreenSizeButton = menu.findViewById<Button>(R.id.btnResetScreenSize)
             val fontSizeSeekBar = menu.findViewById<SeekBar>(R.id.fontSizeSeekBar)
-            val colorWhiteButton = menu.findViewById<Button>(R.id.btnColorWhite)
-            val colorGrayButton = menu.findViewById<Button>(R.id.btnColorGray)
-            val colorAccentButton = menu.findViewById<Button>(R.id.btnColorAccent)
-            val colorYellowButton = menu.findViewById<Button>(R.id.btnColorYellow)
+            val colorWheelView = menu.findViewById<ColorWheelView>(R.id.colorWheelView)
+            val resetTextColorButton = menu.findViewById<Button>(R.id.btnResetTextColor)
 
             // Get screen locations
             val volumeLocation = IntArray(2)
@@ -4257,10 +4336,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             val resetLocation = IntArray(2)
             val resetScreenSizeLocation = IntArray(2)
             val fontSizeLocation = IntArray(2)
-            val colorWhiteLocation = IntArray(2)
-            val colorGrayLocation = IntArray(2)
-            val colorAccentLocation = IntArray(2)
-            val colorYellowLocation = IntArray(2)
+            val colorWheelLocation = IntArray(2)
+            val resetTextColorLocation = IntArray(2)
 
             val menuLocation = IntArray(2)
             menu.getLocationOnScreen(menuLocation)
@@ -4276,10 +4353,8 @@ class DualWebViewGroup @JvmOverloads constructor(
             resetButton?.getLocationOnScreen(resetLocation)
             resetScreenSizeButton?.getLocationOnScreen(resetScreenSizeLocation)
             fontSizeSeekBar?.getLocationOnScreen(fontSizeLocation)
-            colorWhiteButton?.getLocationOnScreen(colorWhiteLocation)
-            colorGrayButton?.getLocationOnScreen(colorGrayLocation)
-            colorAccentButton?.getLocationOnScreen(colorAccentLocation)
-            colorYellowButton?.getLocationOnScreen(colorYellowLocation)
+            colorWheelView?.getLocationOnScreen(colorWheelLocation)
+            resetTextColorButton?.getLocationOnScreen(resetTextColorLocation)
 
             val slop = 5 // Reduced from 40 to 5 to prevent overlapping touch targets
 
@@ -4613,54 +4688,51 @@ class DualWebViewGroup @JvmOverloads constructor(
                     return
                 }
 
-                // Check if click is on white color button
-                if (colorWhiteButton != null &&
-                    x >= colorWhiteLocation[0] - slop && x <= colorWhiteLocation[0] + (colorWhiteButton.width * uiScale) + slop &&
-                    y >= colorWhiteLocation[1] - slop && y <= colorWhiteLocation[1] + (colorWhiteButton.height * uiScale) + slop) {
+                // Check if click is on color wheel
+                if (colorWheelView != null &&
+                    x >= colorWheelLocation[0] - slop && x <= colorWheelLocation[0] + (colorWheelView.width * uiScale) + slop &&
+                    y >= colorWheelLocation[1] - slop && y <= colorWheelLocation[1] + (colorWheelView.height * uiScale) + slop) {
 
+                    // Calculate relative position
+                    val relativeX = (x - colorWheelLocation[0]) / uiScale
+                    val relativeY = (y - colorWheelLocation[1]) / uiScale
+
+                    val selectedColor = colorWheelView.calculateColorFromCoordinates(relativeX, relativeY)
+                    
+                    // Update visual indicator
+                    colorWheelView.setColor(selectedColor)
+
+                    // Apply color
+                    val hexColor = String.format("#%06X", (0xFFFFFF and selectedColor))
+                    applyTextColor(hexColor)
+
+                    // Visual feedback
+                    colorWheelView.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        colorWheelView.isPressed = false
+                    }, 100)
+                    return
+                }
+
+                // Check if click is on reset text color button
+                if (resetTextColorButton != null &&
+                    x >= resetTextColorLocation[0] - slop && x <= resetTextColorLocation[0] + (resetTextColorButton.width * uiScale) + slop &&
+                    y >= resetTextColorLocation[1] - slop && y <= resetTextColorLocation[1] + (resetTextColorButton.height * uiScale) + slop) {
+
+                    // Reset color to white
+                    colorWheelView?.setColor(Color.WHITE)
                     applyTextColor("#FFFFFF")
-                    colorWhiteButton.isPressed = true
+                    
+                    // Save preference
+                    context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putString("webTextColor", "#FFFFFF")
+                        .apply()
+
+                    // Visual feedback
+                    resetTextColorButton.isPressed = true
                     Handler(Looper.getMainLooper()).postDelayed({
-                        colorWhiteButton.isPressed = false
-                    }, 100)
-                    return
-                }
-
-                // Check if click is on gray color button
-                if (colorGrayButton != null &&
-                    x >= colorGrayLocation[0] - slop && x <= colorGrayLocation[0] + (colorGrayButton.width * uiScale) + slop &&
-                    y >= colorGrayLocation[1] - slop && y <= colorGrayLocation[1] + (colorGrayButton.height * uiScale) + slop) {
-
-                    applyTextColor("#9DB3D1")
-                    colorGrayButton.isPressed = true
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        colorGrayButton.isPressed = false
-                    }, 100)
-                    return
-                }
-
-                // Check if click is on accent color button
-                if (colorAccentButton != null &&
-                    x >= colorAccentLocation[0] - slop && x <= colorAccentLocation[0] + (colorAccentButton.width * uiScale) + slop &&
-                    y >= colorAccentLocation[1] - slop && y <= colorAccentLocation[1] + (colorAccentButton.height * uiScale) + slop) {
-
-                    applyTextColor("#69F0AE")
-                    colorAccentButton.isPressed = true
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        colorAccentButton.isPressed = false
-                    }, 100)
-                    return
-                }
-
-                // Check if click is on yellow color button
-                if (colorYellowButton != null &&
-                    x >= colorYellowLocation[0] - slop && x <= colorYellowLocation[0] + (colorYellowButton.width * uiScale) + slop &&
-                    y >= colorYellowLocation[1] - slop && y <= colorYellowLocation[1] + (colorYellowButton.height * uiScale) + slop) {
-
-                    applyTextColor("#FFD54F")
-                    colorYellowButton.isPressed = true
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        colorYellowButton.isPressed = false
+                        resetTextColorButton.isPressed = false
                     }, 100)
                     return
                 }
@@ -4683,13 +4755,13 @@ class DualWebViewGroup @JvmOverloads constructor(
                     return
                 }
 
-                Log.d("SettingsDebug", """
+                /* Log.d("SettingsDebug", """
             Touch at ($x, $y)
             Volume seekbar at (${volumeLocation[0]}, ${volumeLocation[1]}) size ${volumeSeekBar?.width}x${volumeSeekBar?.height}
             Brightness seekbar at (${brightnessLocation[0]}, ${brightnessLocation[1]}) size ${brightnessSeekBar?.width}x${brightnessSeekBar?.height}
             Smoothness seekbar at (${smoothnessLocation[0]}, ${smoothnessLocation[1]}) size ${smoothnessSeekBar?.width}x${smoothnessSeekBar?.height}
             Close button at (${closeLocation[0]}, ${closeLocation[1]}) size ${closeButton?.width}x${closeButton?.height}
-        """.trimIndent())
+        """.trimIndent()) */
             }
             else {
                 return
@@ -4788,7 +4860,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     fun setScrollMode(enabled: Boolean) {
-        Log.d("ScrollMode", "setScrollMode called with enabled=$enabled, current isInScrollMode=$isInScrollMode")
+        // Log.d("ScrollMode", "setScrollMode called with enabled=$enabled, current isInScrollMode=$isInScrollMode")
 
         if (isInScrollMode == enabled) return
         isInScrollMode = enabled
@@ -5161,10 +5233,10 @@ class DualWebViewGroup @JvmOverloads constructor(
      * @param durationMs How long to show the toast (default 2000ms)
      */
     fun showToast(message: String, durationMs: Long = 2000L) {
-        Log.d("Toast", "showToast called with message: $message")
+        // Log.d("Toast", "showToast called with message: $message")
         // Ensure we're on the UI thread
         post {
-            Log.d("Toast", "Inside post block, creating toast view")
+            // Log.d("Toast", "Inside post block, creating toast view")
             // Cancel any existing toast
             toastRunnable?.let { toastHandler?.removeCallbacks(it) }
             dialogContainer.removeAllViews()
@@ -5203,7 +5275,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             dialogContainer.bringToFront()
             dialogContainer.isClickable = false  // Allow clicks to pass through
 
-            Log.d("Toast", "Toast view added, dialogContainer visible: ${dialogContainer.visibility == View.VISIBLE}, child count: ${dialogContainer.childCount}")
+            // Log.d("Toast", "Toast view added, dialogContainer visible: ${dialogContainer.visibility == View.VISIBLE}, child count: ${dialogContainer.childCount}")
 
             // Ensure rendering updates
             requestLayout()
@@ -5337,21 +5409,21 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     fun updateMediaState(isPlaying: Boolean) {
-        Log.d("MediaControls", "updateMediaState called: isPlaying=$isPlaying, isScreenMasked=$isScreenMasked")
+        // Log.d("MediaControls", "updateMediaState called: isPlaying=$isPlaying, isScreenMasked=$isScreenMasked")
         post {
             if (isPlaying) {
-                Log.d("MediaControls", "Setting to playing state")
+                // Log.d("MediaControls", "Setting to playing state")
                 btnMaskPlay.visibility = View.GONE
                 btnMaskPause.visibility = View.VISIBLE
                 maskMediaControlsContainer.visibility = View.VISIBLE
-                Log.d("MediaControls", "Controls container visibility: ${maskMediaControlsContainer.visibility}, parent: ${maskMediaControlsContainer.parent}")
+                // Log.d("MediaControls", "Controls container visibility: ${maskMediaControlsContainer.visibility}, parent: ${maskMediaControlsContainer.parent}")
             } else {
-                Log.d("MediaControls", "Setting to paused state")
+                // Log.d("MediaControls", "Setting to paused state")
                 btnMaskPlay.visibility = View.VISIBLE
                 btnMaskPause.visibility = View.GONE
                 // Keep controls visible if we know media exists
                 maskMediaControlsContainer.visibility = View.VISIBLE
-                Log.d("MediaControls", "Controls container visibility: ${maskMediaControlsContainer.visibility}")
+                // Log.d("MediaControls", "Controls container visibility: ${maskMediaControlsContainer.visibility}")
             }
         }
     }
