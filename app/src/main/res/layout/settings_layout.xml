@@ -125,6 +125,20 @@
             android:clickable="true"
             android:focusable="true"/>
 
+        <!-- Groq API Key Button -->
+        <Button
+            android:id="@+id/btnGroqApiKey"
+            android:layout_width="match_parent"
+            android:layout_height="28dp"
+            android:text="Enter Groq API Key"
+            android:textColor="#82B1FF"
+            android:textSize="10sp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/settings_outlined_button_background"
+            android:textAllCaps="false"
+            android:clickable="true"
+            android:focusable="true"/>
+
     </LinearLayout>
 
     <!-- Divider -->
