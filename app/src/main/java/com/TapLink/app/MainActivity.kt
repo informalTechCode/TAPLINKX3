@@ -2006,7 +2006,7 @@ class MainActivity : AppCompatActivity(),
     }
 
     private var isListeningForSpeech = false
-    private var grokAudioService: GrokAudioService? = null
+    private var groqAudioService: GroqAudioService? = null
 
     override fun onMicrophonePressed() {
         Log.d("SpeechRecognition", "onMicrophonePressed called, isListening: $isListeningForSpeech")
@@ -2017,36 +2017,39 @@ class MainActivity : AppCompatActivity(),
                  return@runOnUiThread
             }
 
-            if (grokAudioService == null) {
-                initializeGrokService()
+            if (groqAudioService == null) {
+                initializeGroqService()
             }
             
-            if (!grokAudioService!!.hasApiKey()) {
-                showGrokKeyDialog()
+            if (!groqAudioService!!.hasApiKey()) {
+                showGroqKeyDialog()
                 return@runOnUiThread
             }
 
-            if (grokAudioService!!.isRecording()) {
+            if (groqAudioService!!.isRecording()) {
                 // Stop listening
-                Log.d("SpeechRecognition", "Stopping Grok recording")
-                grokAudioService?.stopRecording()
+                Log.d("SpeechRecognition", "Stopping Groq recording")
+                groqAudioService?.stopRecording()
                 dualWebViewGroup.showToast("Processing...")
             } else {
                 // Start listening
-                Log.d("SpeechRecognition", "Starting Grok recording")
-                grokAudioService?.startRecording()
+                Log.d("SpeechRecognition", "Starting Groq recording")
+                groqAudioService?.startRecording()
                 dualWebViewGroup.showToast("Listening...")
             }
         }
     }
 
-    fun showGrokKeyDialog() {
-        val currentKey = grokAudioService?.getApiKey()
+    fun showGroqKeyDialog() {
+        if (groqAudioService == null) {
+            initializeGroqService()
+        }
+        val currentKey = groqAudioService?.getApiKey()
         dualWebViewGroup.showPromptDialog(
-            "Enter Grok API Key",
+            "Enter Groq API Key",
             currentKey,
             { key ->
-                grokAudioService?.setApiKey(key)
+                groqAudioService?.setApiKey(key)
                 dualWebViewGroup.showToast("API Key Saved")
             },
             {
@@ -2055,11 +2058,11 @@ class MainActivity : AppCompatActivity(),
         )
     }
 
-    private fun initializeGrokService() {
-        grokAudioService = GrokAudioService(this).apply {
-            setListener(object : GrokAudioService.TranscriptionListener {
+    private fun initializeGroqService() {
+        groqAudioService = GroqAudioService(this).apply {
+            setListener(object : GroqAudioService.TranscriptionListener {
                 override fun onTranscriptionResult(text: String) {
-                    Log.d("SpeechRecognition", "Grok result: $text")
+                    Log.d("SpeechRecognition", "Groq result: $text")
                     runOnUiThread {
                         handleVoiceResult(text)
                         dualWebViewGroup.showToast("Success")
@@ -2068,18 +2071,18 @@ class MainActivity : AppCompatActivity(),
                 }
 
                 override fun onError(message: String) {
-                    Log.e("SpeechRecognition", "Grok error: $message")
+                    Log.e("SpeechRecognition", "Groq error: $message")
                     runOnUiThread {
                         dualWebViewGroup.showToast("Voice Error: $message")
                         keyboardView?.setMicActive(false)
                         if (message.contains("No API Key")) {
-                            showGrokKeyDialog()
+                            showGroqKeyDialog()
                         }
                     }
                 }
 
                 override fun onRecordingStart() {
-                    Log.d("SpeechRecognition", "Grok recording started")
+                    Log.d("SpeechRecognition", "Groq recording started")
                     runOnUiThread {
                          isListeningForSpeech = true
                          keyboardView?.setMicActive(true)
@@ -2087,7 +2090,7 @@ class MainActivity : AppCompatActivity(),
                 }
 
                 override fun onRecordingStop() {
-                     Log.d("SpeechRecognition", "Grok recording stopped")
+                     Log.d("SpeechRecognition", "Groq recording stopped")
                      runOnUiThread {
                          isListeningForSpeech = false
                          // Don't turn off mic indicator yet, wait for processing result

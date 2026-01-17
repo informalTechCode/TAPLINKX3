@@ -124,12 +124,12 @@
             android:clickable="true"
             android:focusable="true"/>
 
-        <!-- Grok API Key Button -->
+        <!-- Groq API Key Button -->
         <Button
-            android:id="@+id/btnGrokApiKey"
+            android:id="@+id/btnGroqApiKey"
             android:layout_width="match_parent"
             android:layout_height="28dp"
-            android:text="Enter Grok API Key"
+            android:text="Enter Groq API Key"
             android:textColor="#82B1FF"
             android:textSize="10sp"
             android:layout_marginTop="8dp"

@@ -3,6 +3,8 @@ package com.TapLinkX3.app
 import android.content.Context
 import android.media.MediaRecorder
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -15,7 +17,7 @@ import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class GrokAudioService(private val context: Context) {
+class GroqAudioService(private val context: Context) {
 
     private var mediaRecorder: MediaRecorder? = null
     private var outputFile: File? = null
@@ -25,6 +27,8 @@ class GrokAudioService(private val context: Context) {
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
+
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     interface TranscriptionListener {
         fun onTranscriptionResult(text: String)
@@ -41,18 +45,18 @@ class GrokAudioService(private val context: Context) {
 
     fun hasApiKey(): Boolean {
         val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-        val key = prefs.getString("grok_api_key", null)
+        val key = prefs.getString("groq_api_key", null)
         return !key.isNullOrBlank()
     }
 
     fun getApiKey(): String? {
         val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-        return prefs.getString("grok_api_key", null)
+        return prefs.getString("groq_api_key", null)?.trim()
     }
 
     fun setApiKey(key: String) {
         val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-        prefs.edit().putString("grok_api_key", key).apply()
+        prefs.edit().putString("groq_api_key", key.trim()).apply()
     }
 
     fun startRecording() {
@@ -81,12 +85,12 @@ class GrokAudioService(private val context: Context) {
             }
 
             isRecording = true
-            listener?.onRecordingStart()
+            mainHandler.post { listener?.onRecordingStart() }
             Log.d(TAG, "Recording started")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start recording", e)
-            listener?.onError("Failed to start recording: ${e.message}")
+            mainHandler.post { listener?.onError("Failed to start recording: ${e.message}") }
             releaseRecorder()
         }
     }
@@ -103,14 +107,14 @@ class GrokAudioService(private val context: Context) {
         } finally {
             releaseRecorder()
             isRecording = false
-            listener?.onRecordingStop()
+            mainHandler.post { listener?.onRecordingStop() }
 
             // Transcribe immediately after stopping
             outputFile?.let { file ->
                 if (file.exists() && file.length() > 0) {
                     transcribeAudio(file)
                 } else {
-                    listener?.onError("Recording failed: File empty")
+                    mainHandler.post { listener?.onError("Recording failed: File empty") }
                 }
             }
         }
@@ -124,19 +128,20 @@ class GrokAudioService(private val context: Context) {
     private fun transcribeAudio(file: File) {
         val apiKey = getApiKey()
         if (apiKey.isNullOrBlank()) {
-            listener?.onError("No API Key found")
+            mainHandler.post { listener?.onError("No API Key found") }
             return
         }
 
         Thread {
             try {
                 Log.d(TAG, "Starting transcription...")
+                Log.d(TAG, "API Key length: ${apiKey.length}, starts with: ${apiKey.take(8)}...")
 
                 val requestBody = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
                     .addFormDataPart("file", file.name,
                         file.asRequestBody("audio/m4a".toMediaType()))
-                    .addFormDataPart("model", "whisper-large-v3-turbo")
+                    .addFormDataPart("model", "whisper-large-v3")
                     .addFormDataPart("response_format", "json")
                     .build()
 
@@ -152,7 +157,7 @@ class GrokAudioService(private val context: Context) {
                     //Log.d(TAG, "Response body: $responseBody")
 
                     if (!response.isSuccessful) {
-                        listener?.onError("API Error: ${response.code} - $responseBody")
+                        mainHandler.post { listener?.onError("API Error: ${response.code} - $responseBody") }
                         return@use
                     }
 
@@ -161,21 +166,21 @@ class GrokAudioService(private val context: Context) {
                             val json = JSONObject(responseBody)
                             val text = json.optString("text", "")
                             if (text.isNotBlank()) {
-                                listener?.onTranscriptionResult(text)
+                                mainHandler.post { listener?.onTranscriptionResult(text) }
                             } else {
-                                listener?.onError("No text transcribed")
+                                mainHandler.post { listener?.onError("No text transcribed") }
                             }
                         } catch (e: Exception) {
-                            listener?.onError("JSON Parse Error: ${e.message}")
+                            mainHandler.post { listener?.onError("JSON Parse Error: ${e.message}") }
                         }
                     } else {
-                        listener?.onError("Empty response from API")
+                        mainHandler.post { listener?.onError("Empty response from API") }
                     }
                 }
 
             } catch (e: Exception) {
                 Log.e(TAG, "Transcription failed", e)
-                listener?.onError("Network Error: ${e.message}")
+                mainHandler.post { listener?.onError("Network Error: ${e.message}") }
             } finally {
                 // Cleanup file
                 try {
@@ -190,6 +195,6 @@ class GrokAudioService(private val context: Context) {
     fun isRecording(): Boolean = isRecording
 
     companion object {
-        private const val TAG = "GrokAudioService"
+        private const val TAG = "GroqAudioService"
     }
 }
