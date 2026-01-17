@@ -2562,23 +2562,22 @@ class MainActivity : AppCompatActivity(),
             return
         }
 
-        // Check for bookmarks interaction first (prevent click propagation to keyboard/webview)
-        // Bookmarks are re-ordered before keyboard to prevent double-clicks when opening keyboard
-        if (dualWebViewGroup.isBookmarksExpanded()) {
-            if (dualWebViewGroup.isPointInBookmarks(interactionX, interactionY)) {
-                // Handled by DualWebViewGroup.onTouchEvent - just don't dispatch to webview or keyboard
-                DebugLog.d("ClickDebug", "Click consumed by bookmarks window")
-                return
-            }
-        }
-
-        // Hit test for custom keyboard
+        // Hit test for custom keyboard first so keyboard stays interactive when bookmarks are open
         if (isKeyboardVisible && wasKeyboardVisibleAtDown) {
             // In non-anchored mode, taps are handled directly in DualWebViewGroup.onTouchEvent
             // to eliminate double-clicks and reduce latency.
             // Only dispatch from here if we are in anchored mode.
             if (isAnchored && dualWebViewGroup.isPointInKeyboard(interactionX, interactionY)) {
                 dualWebViewGroup.dispatchKeyboardTap(interactionX, interactionY)
+                return
+            }
+        }
+
+        // Check for bookmarks interaction (prevent click propagation to webview)
+        if (dualWebViewGroup.isBookmarksExpanded()) {
+            if (dualWebViewGroup.isPointInBookmarks(interactionX, interactionY)) {
+                // Handled by DualWebViewGroup.onTouchEvent - just don't dispatch to webview
+                DebugLog.d("ClickDebug", "Click consumed by bookmarks window")
                 return
             }
         }
@@ -4386,8 +4385,20 @@ class MainActivity : AppCompatActivity(),
                     checkX = 320f + groupLocation[0]
                     checkY = 240f + groupLocation[1]
                 } else {
-                    checkX = ev.rawX
-                    checkY = ev.rawY
+                    // In non-anchored mode, check if the CURSOR (not the touch) is over the bookmarks
+                    // This matches the logic in dispatchTouchEventAtCursor
+                    val scale = dualWebViewGroup.uiScale
+                    val transX = dualWebViewGroup.leftEyeUIContainer.translationX
+                    val transY = dualWebViewGroup.leftEyeUIContainer.translationY
+                    
+                    val visualX = 320f + (lastCursorX - 320f) * scale + transX
+                    val visualY = 240f + (lastCursorY - 240f) * scale + transY
+                    
+                    val groupLocation = IntArray(2)
+                    dualWebViewGroup.getLocationOnScreen(groupLocation)
+                    
+                    checkX = visualX + groupLocation[0]
+                    checkY = visualY + groupLocation[1]
                 }
                 
                 if (dualWebViewGroup.isPointInBookmarks(checkX, checkY)) {

@@ -224,7 +224,7 @@ class BookmarksView @JvmOverloads constructor(
             textSize = 20f
             setTextColor(Color.WHITE)
             setPadding(16, 8, 16, 8)
-            setOnClickListener { visibility = View.GONE }
+            setOnClickListener { closeMenu() }
             // Add a highlight view for hover consistency later if needed
             tag = ViewAction(ActionType.CLOSE)
         }
@@ -240,6 +240,11 @@ class BookmarksView @JvmOverloads constructor(
         setPadding(8, 4, 8, 4)
         gravity = Gravity.CENTER_VERTICAL
         minimumHeight = 64
+    }
+
+    private fun closeMenu() {
+        if (visibility == View.GONE) return
+        post { visibility = View.GONE }
     }
 
     init {
@@ -881,7 +886,7 @@ class BookmarksView @JvmOverloads constructor(
             }
             ActionType.OPEN -> {
                 action.url?.let { bookmarkListener?.onBookmarkSelected(it) }
-                visibility = View.GONE
+                closeMenu()
                 true
             }
             ActionType.DELETE -> {
@@ -894,7 +899,7 @@ class BookmarksView @JvmOverloads constructor(
                 true
             }
             ActionType.CLOSE -> {
-                visibility = View.GONE
+                closeMenu()
                 true
             }
             ActionType.PREV -> {
