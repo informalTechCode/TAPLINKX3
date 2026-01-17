@@ -4385,8 +4385,20 @@ class MainActivity : AppCompatActivity(),
                     checkX = 320f + groupLocation[0]
                     checkY = 240f + groupLocation[1]
                 } else {
-                    checkX = ev.rawX
-                    checkY = ev.rawY
+                    // In non-anchored mode, check if the CURSOR (not the touch) is over the bookmarks
+                    // This matches the logic in dispatchTouchEventAtCursor
+                    val scale = dualWebViewGroup.uiScale
+                    val transX = dualWebViewGroup.leftEyeUIContainer.translationX
+                    val transY = dualWebViewGroup.leftEyeUIContainer.translationY
+                    
+                    val visualX = 320f + (lastCursorX - 320f) * scale + transX
+                    val visualY = 240f + (lastCursorY - 240f) * scale + transY
+                    
+                    val groupLocation = IntArray(2)
+                    dualWebViewGroup.getLocationOnScreen(groupLocation)
+                    
+                    checkX = visualX + groupLocation[0]
+                    checkY = visualY + groupLocation[1]
                 }
                 
                 if (dualWebViewGroup.isPointInBookmarks(checkX, checkY)) {
