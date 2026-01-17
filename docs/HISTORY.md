@@ -6,7 +6,7 @@ The original TapLink builds and documentation were published through the release
 
 - **Source code**: Repository current
 - **New features**:
-  - Offline Voice Recognition: Added Sherpa-onnx support for offline speech recognition.
+
   - Enhanced Input Handling: Improved text injection and cursor movement.
   - Stability Improvements: Various bug fixes and performance enhancements.
 - **Maintenance**:

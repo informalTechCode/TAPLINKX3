@@ -19,13 +19,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    androidResources {
-        noCompress += "onnx"
-        noCompress += "txt" // for tokens.txt
-    }
-
-
-
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"  // Add this line

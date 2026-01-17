@@ -190,7 +190,6 @@ class MainActivity : AppCompatActivity(),
     private var pendingPermissionRequest: PermissionRequest? = null
     private var audioManager: AudioManager? = null
     private var speechRecognizer: SpeechRecognizer? = null
-    private var sherpaRecognizer: SherpaSpeechRecognizer? = null
     private lateinit var cameraManager: CameraManager
     private var cameraDevice: CameraDevice? = null
     private var imageReader: ImageReader? = null
@@ -441,27 +440,6 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.listener = this
         dualWebViewGroup.navigationListener = this
         dualWebViewGroup.maskToggleListener = this
-        
-        // Handle power saving during fullscreen
-        dualWebViewGroup.fullscreenListener = object : DualWebViewGroup.FullscreenListener {
-            override fun onEnterFullscreen() {
-                // Log.d("PowerSaving", "Entering fullscreen: Releasing resources")
-                
-                // 1. Release voice model to save memory and CPU
-                if (sherpaRecognizer != null) {
-                    sherpaRecognizer?.release()
-                    sherpaRecognizer = null
-                    isSherpaInitialized = false
-                }
-            }
-            
-            override fun onExitFullscreen() {
-                // Log.d("PowerSaving", "Exiting fullscreen: Restoring resources")
-                
-                // 1. Restore voice model
-                // initializeSherpaRecognizer() // Lazy load instead to save power
-            }
-        }
         
         // Load saved anchored mode state
         isAnchored = getSharedPreferences(prefsName, MODE_PRIVATE)
