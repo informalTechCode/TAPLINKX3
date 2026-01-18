@@ -3883,7 +3883,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     fun handleAnchoredFling(velocity: Float) {
         if (isBookmarksExpanded()) {
-            leftBookmarksView.handleAnchoredFling(velocity)
+            // No-op for bookmarks in anchored mode (pagination used)
         } else {
             // Forward to general handleFling which handles WebView scroll
             handleFling(velocity)
