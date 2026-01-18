@@ -44,6 +44,7 @@ import android.view.WindowManager
 import android.view.inputmethod.BaseInputConnection
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
+import android.webkit.GeolocationPermissions
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
@@ -142,7 +143,10 @@ class MainActivity : AppCompatActivity(),
 
     private val CAMERA_REQUEST_CODE = 1001
     private val CAMERA_PERMISSION_CODE = 100
+    private val LOCATION_PERMISSION_REQUEST_CODE = 1002
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    private var pendingGeolocationCallback: GeolocationPermissions.Callback? = null
+    private var pendingGeolocationOrigin: String? = null
     private val FILE_CHOOSER_REQUEST_CODE = 999  // Any unique code
     private var cameraImageUri: Uri? = null
     private var isCapturing = false  // Add this flag to prevent multiple captures
@@ -3361,6 +3365,16 @@ class MainActivity : AppCompatActivity(),
                     audioManager?.setParameters("audio_source_record=off")
                 }
 
+                override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
+                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                        callback.invoke(origin, true, false)
+                    } else {
+                        pendingGeolocationCallback = callback
+                        pendingGeolocationOrigin = origin
+                        requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), LOCATION_PERMISSION_REQUEST_CODE)
+                    }
+                }
+
                 // From second client
                 override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
                     if (view == null) {
@@ -3821,6 +3835,15 @@ class MainActivity : AppCompatActivity(),
                         null
                     )
                 }
+            }
+            LOCATION_PERMISSION_REQUEST_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    pendingGeolocationCallback?.invoke(pendingGeolocationOrigin, true, false)
+                } else {
+                    pendingGeolocationCallback?.invoke(pendingGeolocationOrigin, false, false)
+                }
+                pendingGeolocationCallback = null
+                pendingGeolocationOrigin = null
             }
         }
     }
