@@ -1,4 +1,4 @@
-package com.TapLink.app
+package com.TapLinkX3.app
 
 import android.content.Context
 import android.graphics.Typeface

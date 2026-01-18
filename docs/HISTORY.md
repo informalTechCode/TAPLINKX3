@@ -6,12 +6,13 @@ The original TapLink builds and documentation were published through the release
 
 - **Source code**: Repository current
 - **New features**:
-
   - Enhanced Input Handling: Improved text injection and cursor movement.
   - Stability Improvements: Various bug fixes and performance enhancements.
 - **Maintenance**:
   - Code Cleanup: Removed unused code and comments.
   - Dependency Updates: Updated internal library references.
+  - Refactored codebase to use consistent package naming.
+  - Improved constant management.
 
 ### TapLink 1.2.1
 
