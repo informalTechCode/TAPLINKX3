@@ -136,14 +136,10 @@ class DualWebViewGroup @JvmOverloads constructor(
     @Volatile private var isRefreshing = false
     private val refreshLock = Any()
 
-    // Near the top of the class
     private var isDesktopMode = false
     private var isHoveringModeToggle = false
-    private var isHoveringScrollToggle = false
     private var isHoveringDashboardToggle = false
     private var isHoveringBookmarksMenu = false
-    private val desktopUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-    private val mobileUserAgent = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
 
     private lateinit var leftBookmarksView: BookmarksView
 
@@ -290,9 +286,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         isClickable = true
         isFocusable = true
     }
-    
-    // Track scroll mode state before fullscreen
-    private var wasInScrollModeBeforeFullscreen = false
     
     // UI scale factor (0.5 to 1.0) - controlled by screen size slider
     var uiScale = 1.0f
@@ -1566,15 +1559,6 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
 
-    private fun clearNavigationButtonHoverStates() {
-        navButtons.values.forEach { navButton ->
-            navButton.isHovered = false
-            navButton.left.isHovered = false
-            navButton.right.isHovered = false
-        }
-    }
-
-
 
 
     private fun drawBitmapToSurface() {
@@ -2417,18 +2401,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Layout the UI container to cover just the left half
         leftEyeUIContainer.layout(0, 0, halfWidth, height)
-    }
-
-    private fun toggleScreenMask() {
-        isScreenMasked = !isScreenMasked
-        maskOverlay.visibility = if (isScreenMasked) View.VISIBLE else View.GONE
-
-        // Update the mask button icon
-        leftToggleBar.findViewById<FontIconView>(R.id.btnMask)?.let { button ->
-            button.text = context.getString(
-                if (isScreenMasked) R.string.fa_eye else R.string.fa_eye_slash
-            )
-        }
     }
 
     fun cleanupResources() {
@@ -3594,42 +3566,6 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
 
-    private fun scrollViewportByFraction(directionMultiplier: Int) {
-        val script = """
-            (function() {
-                const fallbackViewportHeight = window.innerHeight
-                    || (document.documentElement && document.documentElement.clientHeight)
-                    || (document.body && document.body.clientHeight)
-                    || 0;
-                const hud = document.querySelector('.hud');
-                const target = (hud && hud.scrollHeight > hud.clientHeight) ? hud : window;
-                const targetHeight = (target === hud && hud && hud.clientHeight) ? hud.clientHeight : fallbackViewportHeight;
-                const scrollAmount = targetHeight * $verticalScrollFraction;
-                const delta = scrollAmount * $directionMultiplier;
-
-                if (target === window) {
-                    window.scrollBy({ top: delta, behavior: 'smooth' });
-                    return delta;
-                }
-
-                const start = target.scrollTop;
-                if (typeof target.scrollBy === 'function') {
-                    target.scrollBy({ top: delta, behavior: 'smooth' });
-                } else {
-                    target.scrollTop += delta;
-                }
-                return target.scrollTop - start;
-            })();
-        """.trimIndent()
-
-        webView.evaluateJavascript(script) { result ->
-            // Log.d("ScrollDebug", "Viewport scroll result: $result")
-        }
-    }
-
-
-
-
     fun isNavBarVisible(): Boolean {
         // Check both visibility AND scroll mode - in scroll mode, bars are hidden even during fade animation
         return !isInScrollMode && leftNavigationBar.visibility == View.VISIBLE
@@ -4104,36 +4040,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         settingsScrim?.visibility = View.GONE
         if (::leftBookmarksView.isInitialized) {
             leftBookmarksView.visibility = View.GONE
-        }
-    }
-
-    private fun initializeSettingsBars() {
-        settingsMenu?.let { menu ->
-            val volumeSeekBar = menu.findViewById<SeekBar>(R.id.volumeSeekBar)
-            val brightnessSeekBar = menu.findViewById<SeekBar>(R.id.brightnessSeekBar)
-
-            // Initialize Volume from AudioManager:
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-            val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-            volumeSeekBar?.max = maxVolume
-            volumeSeekBar?.progress = currentVolume
-            // Log.d("SettingsDebug", "Volume: $currentVolume of $maxVolume")
-
-            // Initialize Brightness from System Settings:
-            try {
-                // Read brightness from system settings (0–255)
-                val currentBrightness = android.provider.Settings.System.getInt(
-                    (context as Activity).contentResolver,
-                    android.provider.Settings.System.SCREEN_BRIGHTNESS
-                )
-                // Scale to a 0–100 range for your seek bar
-                brightnessSeekBar?.max = 100
-                brightnessSeekBar?.progress = ((currentBrightness / 255f) * 100).toInt()
-                // Log.d("SettingsDebug", "Brightness: $currentBrightness (scaled to ${brightnessSeekBar?.progress})")
-            } catch (e: Exception) {
-                Log.e("SettingsDebug", "Error retrieving screen brightness", e)
-            }
         }
     }
 

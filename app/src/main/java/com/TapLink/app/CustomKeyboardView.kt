@@ -29,17 +29,12 @@ class CustomKeyboardView @JvmOverloads constructor(
     private var currentRow = 0
     private var currentColumn = 0
 
-    private val movementThreshold = 40f  // Adjust this for sensitivity
-
     // Add these properties to track the current position pre-commit
     private var tempRow = 0
     private var tempColumn = 0
 
 
     private var isAnchoredMode = false
-
-    private val clickThreshold = 10f
-    private val clickTimeout = 300L // milliseconds
 
     private enum class KeyboardMode {
         LETTERS,

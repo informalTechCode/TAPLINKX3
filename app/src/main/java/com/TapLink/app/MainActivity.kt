@@ -203,7 +203,6 @@ class MainActivity : AppCompatActivity(),
     private var imageReader: ImageReader? = null
     private val cameraThread = HandlerThread("CameraThread").apply { start() }
     private val cameraHandler = Handler(cameraThread.looper)
-    private var capturedImageData: ByteArray? = null
 
     private var fullScreenCustomView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
@@ -259,7 +258,6 @@ class MainActivity : AppCompatActivity(),
         }
 
     // Smoothing and performance parameters for anchored mode
-    private var firstSensorReading = true
     private val TRANSLATION_SCALE = 2000f // Adjusted for better visual stability (approx 36 deg FOV)
     
     // Dynamic smoothing factors (controlled by user preference)
@@ -378,8 +376,6 @@ class MainActivity : AppCompatActivity(),
     }
 
     private val cursorToggleLock = Any()
-    private val MINIMUM_FLING_VELOCITY = 50f
-    private val MINIMUM_FLING_DISTANCE = 10f    // Minimum distance the finger must move
     private var potentialTapEvent: MotionEvent? = null
 
     private var pendingTouchHandler: Handler? = null
@@ -758,45 +754,6 @@ class MainActivity : AppCompatActivity(),
 
                 onNavigationBackPressed()
             }
-
-            // Update for smoother, responsive movement with clamping
-            private val updateCursorRunnable = object : Runnable {
-                override fun run() {
-                    if (abs(currentVelocityX) < 0.1f && abs(currentVelocityY) < 0.1f) {
-                        handler.removeCallbacks(this)
-                    } else {
-                        // Use single eye dimensions (640x480), not full dual display width
-                        val maxW = 640f
-                        val maxH = 480f
-
-                        // Update position
-                        var nextX = lastCursorX + currentVelocityX
-                        var nextY = lastCursorY + currentVelocityY
-
-                        // Clamp to screen boundaries
-                        // Subtract 1 to ensure it doesn't sit exactly on the edge if that causes issues, 
-                        // though typically maxW is fine. Using 0 to maxW is standard.
-                        nextX = nextX.coerceIn(0f, maxW)
-                        nextY = nextY.coerceIn(0f, maxH)
-
-                        // If we hit a wall, zero out velocity in that direction (optional polish)
-                        if (nextX == 0f || nextX == maxW) currentVelocityX = 0f
-                        if (nextY == 0f || nextY == maxH) currentVelocityY = 0f
-
-                        lastCursorX = nextX
-                        lastCursorY = nextY
-
-                        // Update cursor position
-                        refreshCursor()
-
-                        // Apply decay
-                        currentVelocityX *= movementDecay
-                        currentVelocityY *= movementDecay
-
-                        handler.postDelayed(this, updateInterval)
-                    }
-                }
-            }
         })
 
 
@@ -1134,6 +1091,9 @@ class MainActivity : AppCompatActivity(),
         val filter = IntentFilter(NotificationService.ACTION_NOTIFICATION_POSTED)
         registerReceiver(notificationReceiver, filter)
 
+        // Restart mirroring to right eye
+        dualWebViewGroup.startRefreshing()
+
         // Check for notification listener permission
 
         if (isAnchored) {
@@ -1461,72 +1421,6 @@ class MainActivity : AppCompatActivity(),
         showCustomKeyboard()
     }
 
-    private fun adjustViewportForKeyboard() {
-        val totalHeight = 480 // Total screen height
-        val keyboardHeight = 220 // Keyboard height
-        val inputFieldHeight = 48 // Standard height for input fields
-        //val safeZone = 20 // Extra padding above keyboard
-        val visibleHeight = totalHeight - keyboardHeight
-
-        fun positionInputField(fieldY: Int) {
-            val adjustment = when {
-                // Field is below the safe visible area
-                fieldY > (visibleHeight - inputFieldHeight ) -> {
-                    -(fieldY - (visibleHeight - inputFieldHeight))
-                }
-
-                // Field is already in visible area
-                else -> 0
-            }
-
-            // Delegate viewport adjustments to DualWebViewGroup
-            dualWebViewGroup.adjustViewportAndFields(adjustment.toFloat())
-        }
-
-        // Get the current input field location
-        val currentField = when {
-            dualWebViewGroup.isUrlEditing() -> dualWebViewGroup.getCurrentUrlEditField()
-            dualWebViewGroup.isBookmarksExpanded() -> dualWebViewGroup.getBookmarksView().getCurrentEditField()
-            else -> {
-                // WebView input fields code remains the same
-                webView.evaluateJavascript("""
-                (function() {
-                    var element = document.activeElement;
-                    if (!element) return null;
-                    var rect = element.getBoundingClientRect();
-                    return JSON.stringify({
-                        top: rect.top,
-                        bottom: rect.bottom
-                    });
-                })();
-            """) { result ->
-                    if (result != "null") {
-                        try {
-                            val metrics = JSONObject(result.trim('"'))
-                            positionInputField(metrics.getInt("top"))
-                        } catch (e: Exception) {
-                            DebugLog.e("ViewportAdjust", "Error parsing field position", e)
-                        }
-                    }
-                }
-                return
-            }
-        }
-
-        // Get the Y position of the current field
-        currentField?.let { field ->
-            val location = IntArray(2)
-            field.getLocationOnScreen(location)
-            positionInputField(location[1])
-        } ?: run {
-            // If no field is found, just adjust to show the top of the viewport
-            positionInputField(0)
-        }
-
-        // Delegate animation to DualWebViewGroup
-        dualWebViewGroup.animateViewportAdjustment()
-    }
-
     override fun onShowLinkEditing() {
         DebugLog.d("LinkEditing", "onShowLinkEditing called")
         isUrlEditing = true  // Make sure this state is set
@@ -1600,115 +1494,6 @@ class MainActivity : AppCompatActivity(),
 
 
 
-    private fun handleScroll(velocityX: Float) {
-        if (!isCursorVisible || isAnchored || (isRingConnected && isRingSwitchEnabled)) {
-            val slowedVelocity = velocityX * 0.15
-
-            // Enhanced vertical scroll handling
-            webView.evaluateJavascript(
-                    """
-            (function() {
-                // Force layout recalculation
-                document.body.offsetHeight;
-                
-                // Ensure proper viewport setup
-                let viewport = document.querySelector('meta[name="viewport"]');
-                if (!viewport) {
-                    viewport = document.createElement('meta');
-                    viewport.name = 'viewport';
-                    document.head.appendChild(viewport);
-                }
-                viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
-
-                // Remove any position:fixed elements that might interfere with scrolling
-                const style = document.createElement('style');
-                style.textContent = `
-                    body { min-height: 100vh; }
-                    .scrollable-content { overflow-y: auto; -webkit-overflow-scrolling: touch; }
-                `;
-                document.head.appendChild(style);
-
-                // Try all possible scroll containers
-                function getAllScrollableElements() {
-                    const elements = [];
-                    const allElements = document.getElementsByTagName('*');
-                    
-                    for (let element of allElements) {
-                        const style = window.getComputedStyle(element);
-                        if (
-                            element.scrollHeight > element.clientHeight &&
-                            (style.overflow === 'auto' || 
-                             style.overflow === 'scroll' ||
-                             style.overflowY === 'auto' ||
-                             style.overflowY === 'scroll' ||
-                             element.classList.contains('scrollable') ||
-                             /scroll|content|main|article|wrapper/i.test(element.className))
-                        ) {
-                            elements.push(element);
-                        }
-                    }
-                    return elements;
-                }
-
-                // Enhanced scroll attempt with multiple fallbacks
-                function attemptScroll(amount) {
-                    let scrolled = false;
-                    const scrollableElements = getAllScrollableElements();
-                    
-                    // Try each scrollable container
-                    for (let element of scrollableElements) {
-                        const originalScroll = element.scrollTop;
-                        element.scrollBy({
-                            top: amount,
-                            behavior: 'smooth'
-                        });
-                        if (element.scrollTop !== originalScroll) {
-                            scrolled = true;
-                            break;
-                        }
-                    }
-
-                    // Fallback methods if no container scroll worked
-                    if (!scrolled) {
-                        // Try window scroll
-                        const windowOriginalScroll = window.scrollY;
-                        window.scrollBy({
-                            top: amount,
-                            behavior: 'smooth'
-                        });
-                        scrolled = window.scrollY !== windowOriginalScroll;
-
-                        // Try document scroll
-                        if (!scrolled) {
-                            const docOriginalScroll = document.documentElement.scrollTop;
-                            document.documentElement.scrollBy({
-                                top: amount,
-                                behavior: 'smooth'
-                            });
-                            scrolled = document.documentElement.scrollTop !== docOriginalScroll;
-                        }
-                    }
-
-                    return scrolled;
-                }
-
-                const scrollAmount = ${(-slowedVelocity).toInt()};
-                return attemptScroll(scrollAmount);
-            })();
-            """) { result ->
-                    // If JavaScript scroll failed, try native scroll as fallback
-                    if (result == "false") {
-                        try {
-                            // Try multiple native scroll methods
-                            webView.scrollBy(0, (-slowedVelocity).toInt())
-                        } catch (e: Exception) {
-                            DebugLog.e("ScrollDebug", "Native vertical scroll failed", e)
-                        }
-                    }
-                }
-        }
-    }
-
     private fun initializeSpeechRecognition() {
         // Check if speech recognition is available
         val isAvailable = SpeechRecognizer.isRecognitionAvailable(this)
@@ -1744,22 +1529,22 @@ class MainActivity : AppCompatActivity(),
 
                                             // Insert the text at cursor position
                                             val newText = StringBuilder(currentText)
-                                                .insert(cursorPosition, text + " ")
+                                                .insert(cursorPosition, text)
                                                 .toString()
 
                                             // Set text and move cursor after inserted text
-                                            dualWebViewGroup.setLinkText(newText, cursorPosition + text.length + 1)
+                                            dualWebViewGroup.setLinkText(newText, cursorPosition + text.length)
                                         }
                                         dualWebViewGroup.getDialogInput() != null -> {
                                             val input = dualWebViewGroup.getDialogInput()!!
                                             val currentText = input.text.toString()
                                             val cursorPosition = input.selectionStart
-                                            val newText = StringBuilder(currentText).insert(cursorPosition, text + " ").toString()
+                                            val newText = StringBuilder(currentText).insert(cursorPosition, text).toString()
                                             input.setText(newText)
-                                            input.setSelection(cursorPosition + text.length + 1)
+                                            input.setSelection(cursorPosition + text.length)
                                         }
                                         else -> {
-                                            sendTextToWebView(text + " ")
+                                            sendTextToWebView(text)
                                         }
                                     }
                                 }
@@ -2079,20 +1864,20 @@ class MainActivity : AppCompatActivity(),
                 val currentText = dualWebViewGroup.getCurrentLinkText()
                 val cursorPosition = dualWebViewGroup.urlEditText.selectionStart.coerceAtLeast(0)
                 val newText = StringBuilder(currentText)
-                    .insert(cursorPosition, text + " ")
+                    .insert(cursorPosition, text)
                     .toString()
-                dualWebViewGroup.setLinkText(newText, cursorPosition + text.length + 1)
+                dualWebViewGroup.setLinkText(newText, cursorPosition + text.length)
             }
             dualWebViewGroup.getDialogInput() != null -> {
                 val input = dualWebViewGroup.getDialogInput()!!
                 val currentText = input.text.toString()
                 val cursorPosition = input.selectionStart.coerceAtLeast(0)
-                val newText = StringBuilder(currentText).insert(cursorPosition, text + " ").toString()
+                val newText = StringBuilder(currentText).insert(cursorPosition, text).toString()
                 input.setText(newText)
-                input.setSelection((cursorPosition + text.length + 1).coerceAtMost(newText.length))
+                input.setSelection((cursorPosition + text.length).coerceAtMost(newText.length))
             }
             else -> {
-                sendTextToWebView(text + " ")
+                sendTextToWebView(text)
             }
         }
         
@@ -2897,32 +2682,6 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
-    private fun showClickIndicator(x: Float, y: Float) {
-        webView.evaluateJavascript("""
-        (function() {
-            const existingIndicator = document.getElementById('click-indicator');
-            if (existingIndicator) existingIndicator.remove();
-            
-            const indicator = document.createElement('div');
-            indicator.id = 'click-indicator';
-            indicator.style.cssText = `
-                position: absolute;
-                width: 20px;
-                height: 20px;
-                background-color: red;
-                border-radius: 50%;
-                opacity: 0.5;
-                pointer-events: none;
-                z-index: 10000;
-                left: ${x}px;
-                top: ${y}px;
-            `;
-            document.body.appendChild(indicator);
-            setTimeout(() => indicator.remove(), 1000);
-        })();
-    """, null)
-    }
-
 
     private fun sendEnterToWebView() {
         if (dualWebViewGroup.isUrlEditing()) {
@@ -3446,17 +3205,36 @@ class MainActivity : AppCompatActivity(),
 
         try {
             val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+            val savedState = prefs.getString(Constants.KEY_WEBVIEW_STATE, null)
             val lastUrl = prefs.getString(keyLastUrl, null)
             DebugLog.d("WebViewDebug", "Last saved URL: $lastUrl")
 
             val defaultDashboardUrl = "file:///android_asset/AR_Dashboard_Landscape_Sidebar.html"
+            var restored = false
 
-            if (lastUrl != null && !lastUrl.startsWith("about:blank")) {
-                DebugLog.d("WebViewDebug", "Loading saved URL: $lastUrl")
-                webView.loadUrl(lastUrl)
-            } else {
-                DebugLog.d("WebViewDebug", "No valid saved URL, loading default AR dashboard")
-                webView.loadUrl(defaultDashboardUrl)
+            if (!savedState.isNullOrBlank()) {
+                try {
+                    val data = Base64.decode(savedState, Base64.DEFAULT)
+                    val parcel = Parcel.obtain()
+                    parcel.unmarshall(data, 0, data.size)
+                    parcel.setDataPosition(0)
+                    val bundle = Bundle.CREATOR.createFromParcel(parcel)
+                    parcel.recycle()
+                    restored = webView.restoreState(bundle) != null
+                    DebugLog.d("WebViewDebug", "WebView state restored: $restored")
+                } catch (e: Exception) {
+                    DebugLog.e("WebViewDebug", "Error restoring WebView state", e)
+                }
+            }
+
+            if (!restored) {
+                if (lastUrl != null && !lastUrl.startsWith("about:blank")) {
+                    DebugLog.d("WebViewDebug", "Loading saved URL: $lastUrl")
+                    webView.loadUrl(lastUrl)
+                } else {
+                    DebugLog.d("WebViewDebug", "No valid saved URL, loading default AR dashboard")
+                    webView.loadUrl(defaultDashboardUrl)
+                }
             }
         } catch (e: Exception) {
             DebugLog.e("WebViewDebug", "Error restoring session", e)
@@ -4501,13 +4279,10 @@ class MainActivity : AppCompatActivity(),
 
 
 
-    private fun isNotificationListenerEnabled(): Boolean {
-        val packageName = packageName
-        val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
-        return flat?.contains(packageName) == true
-    }
     override fun onDestroy() {
         super.onDestroy()
+        speechRecognizer?.destroy()
+        speechRecognizer = null
         cameraDevice?.close()
         imageReader?.close()
         cameraThread.quitSafely()

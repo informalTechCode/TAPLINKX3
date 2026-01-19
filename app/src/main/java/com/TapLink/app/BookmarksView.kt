@@ -108,12 +108,6 @@ class BookmarkManager(private val context: Context) {
         }
     }
 
-    fun copyDataFrom(sourceManager: BookmarkManager) {
-        bookmarks.clear()
-        bookmarks.addAll(sourceManager.getBookmarks())
-        saveBookmarks()
-    }
-
     private fun saveBookmarks() {
         val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val bookmarksJson = Gson().toJson(bookmarks)
