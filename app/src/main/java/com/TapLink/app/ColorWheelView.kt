@@ -33,8 +33,8 @@ class ColorWheelView @JvmOverloads constructor(
     init {
         // Create a sweep gradient for the color wheel
         val colors = intArrayOf(
-            Color.RED, Color.MAGENTA, Color.BLUE, Color.CYAN,
-            Color.GREEN, Color.YELLOW, Color.RED
+            Color.RED, Color.YELLOW, Color.GREEN, Color.CYAN,
+            Color.BLUE, Color.MAGENTA, Color.RED
         )
         // Ensure shader is created in onSizeChanged/onDraw where dimensions are known, 
         // or just rely on draw logic. 
@@ -48,8 +48,8 @@ class ColorWheelView @JvmOverloads constructor(
         radius = min(w, h) / 2f - 10f // Padding
 
         val colors = intArrayOf(
-            Color.RED, Color.MAGENTA, Color.BLUE, Color.CYAN,
-            Color.GREEN, Color.YELLOW, Color.RED
+            Color.RED, Color.YELLOW, Color.GREEN, Color.CYAN,
+            Color.BLUE, Color.MAGENTA, Color.RED
         )
         val sweepGradient = SweepGradient(centerX, centerY, colors, null)
         colorPaint.shader = sweepGradient

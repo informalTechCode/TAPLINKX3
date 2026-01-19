@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -26,6 +27,7 @@ class SystemInfoView @JvmOverloads constructor(
 
     private var connectivityIcon: ImageView? = null
     private var batteryIcon: ImageView? = null
+    private var batteryText: TextView? = null
     private var timeText: TextView? = null
     private var dateText: TextView? = null
 
@@ -80,8 +82,9 @@ class SystemInfoView @JvmOverloads constructor(
         // Create and add connectivity icon
         connectivityIcon = createIconView().also { addView(it) }
 
-        // Create and add battery icon
+        // Create and add battery icon and text
         batteryIcon = createIconView().also { addView(it) }
+        batteryText = createTextView().also { addView(it) }
 
         // Create and add text views
         timeText = createTextView().also { addView(it) }
@@ -90,6 +93,7 @@ class SystemInfoView @JvmOverloads constructor(
         // Set initial values
         connectivityIcon?.setImageResource(R.drawable.wifi_off)
         batteryIcon?.setImageResource(R.drawable.battery_full)
+        batteryText?.text = "--%"
         timeText?.text = "--:--"
         dateText?.text = "--/--"
     }
@@ -184,9 +188,25 @@ class SystemInfoView @JvmOverloads constructor(
                 else -> R.drawable.battery_low
             }
             batteryIcon?.setImageResource(iconResource)
+            batteryText?.text = "$level%"
         } catch (e: Exception) {
             DebugLog.e("SystemInfoView", "Battery update error", e)
             batteryIcon?.setImageResource(R.drawable.battery_full)
+            batteryText?.text = "--%"
+        }
+    }
+
+    fun setTextColor(color: Int) {
+        try {
+            timeText?.setTextColor(color)
+            dateText?.setTextColor(color)
+            batteryText?.setTextColor(color)
+            
+            val tint = ColorStateList.valueOf(color)
+            connectivityIcon?.imageTintList = tint
+            batteryIcon?.imageTintList = tint
+        } catch (e: Exception) {
+            DebugLog.e("SystemInfoView", "Error setting text color", e)
         }
     }
 

@@ -217,7 +217,7 @@
             android:id="@+id/btnResetFontSize"
             android:layout_width="match_parent"
             android:layout_height="28dp"
-            android:text="Reset 100%"
+            android:text="Reset Font Size"
             android:textColor="#82B1FF"
             android:textSize="10sp"
             android:background="@drawable/settings_outlined_button_background"

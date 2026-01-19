@@ -73,7 +73,8 @@ class GroqAudioService(private val context: Context) {
             }
 
             mediaRecorder?.apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
+                // Use the voice recognition source to get built-in AGC on supported devices.
+                setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                 setOutputFile(outputFile?.absolutePath)

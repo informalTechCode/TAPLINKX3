@@ -73,7 +73,6 @@ import kotlin.math.abs
 import kotlin.math.asin
 import kotlin.math.atan2
 import com.ffalconxr.mercury.ipc.Launcher
-import com.ffalconxr.mercury.ipc.helpers.RingIPCHelper
 import com.ffalconxr.mercury.ipc.helpers.GPSIPCHelper
 import com.ffalcon.mercury.android.sdk.util.DeviceUtil
 import androidx.core.content.edit
@@ -145,6 +144,7 @@ class MainActivity : AppCompatActivity(),
     private val CAMERA_REQUEST_CODE = 1001
     private val CAMERA_PERMISSION_CODE = 100
     private val LOCATION_PERMISSION_REQUEST_CODE = 1002
+    private var cameraPermissionGranted = false
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var pendingGeolocationCallback: GeolocationPermissions.Callback? = null
     private var pendingGeolocationOrigin: String? = null
@@ -205,8 +205,8 @@ class MainActivity : AppCompatActivity(),
     private lateinit var cameraManager: CameraManager
     private var cameraDevice: CameraDevice? = null
     private var imageReader: ImageReader? = null
-    private val cameraThread = HandlerThread("CameraThread").apply { start() }
-    private val cameraHandler = Handler(cameraThread.looper)
+    private var cameraThread: HandlerThread? = null
+    private var cameraHandler: Handler? = null
 
     private var fullScreenCustomView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
@@ -266,7 +266,7 @@ class MainActivity : AppCompatActivity(),
     
     // Dynamic smoothing factors (controlled by user preference)
     // Range: 0 (fastest/least smooth) to 100 (slowest/most smooth)
-    private var smoothnessLevel = 80 // Default: fairly smooth
+    private var smoothnessLevel = 40 // Default: fairly smooth
     private var anchorSmoothingFactor = 0.08f // Calculated from smoothnessLevel
     private var velocitySmoothing = 0.15f // Calculated from smoothnessLevel
     
@@ -283,7 +283,7 @@ class MainActivity : AppCompatActivity(),
     private var shouldResetInitialQuaternion = false
     private var pendingDoubleTapAction = false
 
-    private val SCROLL_MODE_TIMEOUT = 30000L // 30 seconds in milliseconds
+    private val SCROLL_MODE_TIMEOUT = 60000L // 60 seconds in milliseconds
     private var scrollModeHandler = Handler(Looper.getMainLooper())
     private var scrollModeRunnable = Runnable {
         if (isCursorVisible && !isKeyboardVisible) {
@@ -293,14 +293,8 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
-    private lateinit var mLauncher: Launcher
-    private var isRingConnected = false
-    private var imuStatus = -1
-
-    private var initialQuaternion: Quaternion? = null
-    private var lastQuaternion: Quaternion? = null
-
-    private data class Quaternion(val w: Double, val x: Double, val y: Double, val z: Double)
+    private var ipcLauncher: Launcher? = null
+    private var gpsUpdatesRegistered = false
 
     private val doubleTapLock = Any()
     private var isProcessingDoubleTap = false
@@ -314,68 +308,28 @@ class MainActivity : AppCompatActivity(),
     private val TRIPLE_TAP_TIMEOUT = 500L  // Total window for triple-tap sequence
     private var isTripleTapInProgress = false
 
-    private var isRingSwitchEnabled = false
     private var settingsMenu: View? = null
 
-    private val ringResponseListener = Launcher.OnResponseListener { response ->
+    private val gpsResponseListener = Launcher.OnResponseListener { response ->
         if (response?.data == null) return@OnResponseListener
 
-        if (isCursorVisible) {
+        try {
+            val jo = JSONObject(response.data)
+            if (jo.has("mLatitude") && jo.has("mLongitude")) {
+                val mLatitude = jo.getDouble("mLatitude")
+                val mLongitude = jo.getDouble("mLongitude")
 
-            try {
-                val jo = JSONObject(response.data)
-                val datatype = jo.optString("datatype", "no datatype")
+                // Save for page reloads
+                lastGpsLat = mLatitude
+                lastGpsLon = mLongitude
 
-                when (datatype) {
-                    "ring_info" -> {
-                        isRingConnected = jo.getBoolean("ring_connected")
-                        imuStatus = jo.getInt("ring_imu_status")
-
-                        isRingSwitchEnabled = isRingConnected
-
-                        if (isRingConnected && imuStatus != 1) {
-                            RingIPCHelper.setRingIMU(this, true)
-                        }
-                    }
-
-                    "ring_quaternion" -> {
-                        // Skip logging quaternion data - it's too verbose
-                        // Only process it
-                        val w = jo.getDouble("w")
-                        val x = jo.getDouble("x")
-                        val y = jo.getDouble("y")
-                        val z = jo.getDouble("z")
-                        handleRingOrientation(w, x, y, z)
-                    }
-
-                    else -> {
-                        // Check for GPS data
-                        if (jo.has("mLatitude") && jo.has("mLongitude") && jo.has("mAltitude")) {
-                            val mLatitude = jo.getDouble("mLatitude")
-                            val mLongitude = jo.getDouble("mLongitude")
-                            
-                            // Save for page reloads
-                            lastGpsLat = mLatitude
-                            lastGpsLon = mLongitude
-
-                            // Inject location into WebView on UI thread
-                            runOnUiThread {
-                                dualWebViewGroup.injectLocation(mLatitude, mLongitude)
-                            }
-                        } else {
-                            // Log any non-quaternion events in detail
-                            DebugLog.d("RingData", """
-                            New Ring Event:
-                            Type: $datatype
-                            Raw data: ${response.data}
-                            Available keys: ${jo.keys().asSequence().toList()}
-                        """.trimIndent())
-                        }
-                    }
+                // Inject location into WebView on UI thread
+                runOnUiThread {
+                    dualWebViewGroup.injectLocation(mLatitude, mLongitude)
                 }
-            } catch (e: Exception) {
-                DebugLog.e("RingData", "Error processing ring data: ${e.message}")
             }
+        } catch (e: Exception) {
+            DebugLog.e("GpsData", "Error processing GPS data: ${e.message}")
         }
     }
 
@@ -429,13 +383,9 @@ class MainActivity : AppCompatActivity(),
         setContentView(R.layout.activity_main)
 
 
-
         findViewById<View>(android.R.id.content).setBackgroundColor(Color.BLACK)
 
         mainContainer = findViewById(R.id.mainContainer)
-
-        initializeRing()
-        GPSIPCHelper.registerGPSInfo(this)
 
         onBackPressedDispatcher.addCallback(this, onBackPressedCallback)
 
@@ -999,7 +949,7 @@ class MainActivity : AppCompatActivity(),
 
         // Load preferences (use TapLinkPrefs for settings that are saved there)
         val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
-        smoothnessLevel = prefs.getInt(Constants.KEY_ANCHOR_SMOOTHNESS, 80)
+        smoothnessLevel = prefs.getInt(Constants.KEY_ANCHOR_SMOOTHNESS, 40)
         updateSmoothnessFactors(smoothnessLevel)
         
         // Note: isAnchored is already loaded earlier from BrowserPrefs
@@ -1040,7 +990,7 @@ class MainActivity : AppCompatActivity(),
         // Initialize camera after WebView setup
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED) {
-            initializeCamera()
+            cameraPermissionGranted = true
         } else {
             // Request camera permission if we don't have it
             requestPermissions(arrayOf(android.Manifest.permission.CAMERA), CAMERA_PERMISSION_CODE)
@@ -1049,7 +999,6 @@ class MainActivity : AppCompatActivity(),
 
         // Call permission check during setup
         checkAndRequestPermissions()
-
 
         rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         if (rotationSensor == null) {
@@ -1108,12 +1057,25 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
-    // Add this to your onCreate after setContentView
-    private fun initializeRing() {
-        mLauncher = Launcher.getInstance(this)
-        mLauncher.addOnResponseListener(ringResponseListener)
-        RingIPCHelper.registerRingInfo(this)
-        RingIPCHelper.setRingIMU(this, true) // Enable IMU for orientation data
+    private fun ensureGpsUpdates() {
+        if (gpsUpdatesRegistered) return
+
+        if (ipcLauncher == null) {
+            ipcLauncher = Launcher.getInstance(this)
+        }
+        ipcLauncher?.addOnResponseListener(gpsResponseListener)
+        GPSIPCHelper.registerGPSInfo(this)
+        gpsUpdatesRegistered = true
+    }
+
+    private fun stopGpsUpdates() {
+        if (!gpsUpdatesRegistered) return
+
+        GPSIPCHelper.unRegisterGPSInfo(this)
+        ipcLauncher?.removeOnResponseListener(gpsResponseListener)
+        ipcLauncher?.disConnect()
+        ipcLauncher = null
+        gpsUpdatesRegistered = false
     }
 
 
@@ -1164,49 +1126,6 @@ class MainActivity : AppCompatActivity(),
         if (isCursorVisible && !isKeyboardVisible) {
             scrollModeHandler.postDelayed(scrollModeRunnable, SCROLL_MODE_TIMEOUT)
         }
-    }
-
-    // Handle ring orientation data to move cursor
-    private fun handleRingOrientation(w: Double, x: Double, y: Double, z: Double) {
-        if (!isRingConnected) return
-
-        if (!shouldUseRingControls() || !isRingSwitchEnabled) {
-            return  // Don't process ring data if disabled or switch is off
-        }
-
-        val currentQuaternion = Quaternion(w, x, y, z)
-
-        // Store initial orientation when we start
-        if (initialQuaternion == null) {
-            initialQuaternion = currentQuaternion
-            lastQuaternion = currentQuaternion
-            return
-        }
-
-        // Calculate relative movement
-        var deltaX = (currentQuaternion.y - lastQuaternion!!.y)
-        var deltaY = (currentQuaternion.x - lastQuaternion!!.x)
-        val sensitivity = 1000.0
-
-        synchronized(cursorToggleLock) {
-            if (isCursorVisible) {
-                lastCursorX = (lastCursorX + (deltaX * sensitivity).toFloat()).coerceIn(0f, 640f)
-                lastCursorY = (lastCursorY + (deltaY * sensitivity).toFloat()).coerceIn(0f, 480f)
-                scheduleCursorUpdate()
-            }
-        }
-
-        // Update last known position outside the lock since it's independent
-        lastQuaternion = currentQuaternion
-    }
-
-    private fun shouldUseRingControls(): Boolean {
-        return isRingConnected && imuStatus == 1 && isRingSwitchEnabled
-    }
-
-    private fun resetRingReference() {
-        initialQuaternion = null
-        lastQuaternion = null
     }
 
     override fun onSendCharacterToLink(character: String) {
@@ -1336,7 +1255,18 @@ class MainActivity : AppCompatActivity(),
     }
 
 
+    private fun ensureCameraThread() {
+        if (cameraThread != null) return
+        cameraThread = HandlerThread("CameraThread").apply { start() }
+        cameraHandler = Handler(cameraThread!!.looper)
+    }
+
     private fun initializeCamera() {
+        if (imageReader != null) return
+
+        ensureCameraThread()
+        val handler = cameraHandler ?: Handler(Looper.getMainLooper())
+
         try{
             cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
 
@@ -1385,7 +1315,7 @@ class MainActivity : AppCompatActivity(),
                     } finally {
                         image.close()
                     }
-                }, cameraHandler)
+                }, handler)
             }
         } catch (e: Exception) {
             DebugLog.e("Camera", "Failed to initialize camera system", e)
@@ -1758,8 +1688,16 @@ class MainActivity : AppCompatActivity(),
 
     private var isListeningForSpeech = false
     private var groqAudioService: GroqAudioService? = null
+    private var lastMicPressTime = 0L
 
     override fun onMicrophonePressed() {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastMicPressTime < 500) {
+            DebugLog.d("SpeechRecognition", "Ignoring rapid microphone press")
+            return
+        }
+        lastMicPressTime = currentTime
+
         DebugLog.d("SpeechRecognition", "onMicrophonePressed called, isListening: $isListeningForSpeech")
         runOnUiThread {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -1781,10 +1719,12 @@ class MainActivity : AppCompatActivity(),
                 // Stop listening
                 DebugLog.d("SpeechRecognition", "Stopping Groq recording")
                 groqAudioService?.stopRecording()
+                audioManager?.setParameters("audio_source_record=off")
                 dualWebViewGroup.showToast("Processing...")
             } else {
                 // Start listening
                 DebugLog.d("SpeechRecognition", "Starting Groq recording")
+                audioManager?.setParameters("audio_source_record=voiceassistant")
                 groqAudioService?.startRecording()
                 dualWebViewGroup.showToast("Listening...")
             }
@@ -1825,6 +1765,7 @@ class MainActivity : AppCompatActivity(),
                 override fun onError(message: String) {
                     DebugLog.e("SpeechRecognition", "Groq error: $message")
                     runOnUiThread {
+                        audioManager?.setParameters("audio_source_record=off")
                         dualWebViewGroup.showToast("Voice Error: $message")
                         keyboardView?.setMicActive(false)
                         if (message.contains("No API Key")) {
@@ -3130,6 +3071,7 @@ class MainActivity : AppCompatActivity(),
 
                 override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
                     // Always grant permission for WebView content so our injected GPS logic takes over
+                    ensureGpsUpdates()
                     callback.invoke(origin, true, false)
                 }
 
@@ -3357,6 +3299,9 @@ class MainActivity : AppCompatActivity(),
         if (cameraIntent.resolveActivity(packageManager) == null) {
             // No camera activity on device
             return null
+        }
+        if (cameraPermissionGranted) {
+            initializeCamera()
         }
         // Create a file/URI to store the image
         val imageFile = createTempImageFile() ?: return null
@@ -3605,11 +3550,10 @@ class MainActivity : AppCompatActivity(),
 
         when (requestCode) {
             CAMERA_PERMISSION_CODE -> {
-                if (grantResults.isNotEmpty() &&
-                    grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // Initialize camera once we have permission
-                    initializeCamera()
-                } else {
+                cameraPermissionGranted = grantResults.isNotEmpty() &&
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED
+
+                if (!cameraPermissionGranted) {
                     DebugLog.e("Camera", "Camera permission denied")
                     // Inform user that camera features won't work
                     webView.evaluateJavascript(
@@ -3944,8 +3888,6 @@ class MainActivity : AppCompatActivity(),
                 dualWebViewGroup.setScrollMode(!isCursorVisible)
 
                 if (isCursorVisible) {
-                    resetRingReference()
-
                     if (!isAnchored) {
                         lastCursorX = lastKnownCursorX
                         lastCursorY = lastKnownCursorY
@@ -4245,8 +4187,8 @@ class MainActivity : AppCompatActivity(),
             // triple click menu fling logic was here
         }
 
-        // If gesture detector handled it, or if ring controls are active, consume the event
-        return handled || shouldUseRingControls() || super.onTouchEvent(event)
+        // If gesture detector handled it, consume the event
+        return handled || super.onTouchEvent(event)
     }
 
     // In the implementation of NavigationListener
@@ -4339,12 +4281,11 @@ class MainActivity : AppCompatActivity(),
         speechRecognizer = null
         cameraDevice?.close()
         imageReader?.close()
-        cameraThread.quitSafely()
+        cameraThread?.quitSafely()
+        cameraThread = null
+        cameraHandler = null
         sensorManager.unregisterListener(sensorEventListener)
-        mLauncher.removeOnResponseListener(ringResponseListener)
-        RingIPCHelper.unRegisterRingInfo(this)
-        GPSIPCHelper.unRegisterGPSInfo(this)
-        mLauncher.disConnect()
+        stopGpsUpdates()
     }
 
 

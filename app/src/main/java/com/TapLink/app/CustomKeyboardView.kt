@@ -498,17 +498,25 @@ class CustomKeyboardView @JvmOverloads constructor(
     fun updateKeyFocus() {
         // In both modes, only highlight the hovered key (cursor-based)
         // No default "focused" key should be highlighted
-        
+
+        val defaultBackground = Color.DKGRAY
+        val hoverBackground = Color.parseColor("#4488FF")
+
         keys.forEach { button ->
-            if (button == micButton && isMicActive) {
-                // Active mic gets priority over hover
-                button.setBackgroundColor(Color.GREEN)
-                button.setTextColor(Color.BLACK)
-            } else if (button == hoveredKey) {
-                button.setBackgroundColor(Color.parseColor("#4488FF"))
-                button.setTextColor(defaultTextColor)
-                button.setBackgroundColor(Color.DKGRAY)
-                button.setTextColor(defaultTextColor)
+            when {
+                button == micButton && isMicActive -> {
+                    // Active mic gets priority over hover
+                    button.setBackgroundColor(Color.GREEN)
+                    button.setTextColor(Color.BLACK)
+                }
+                button == hoveredKey -> {
+                    button.setBackgroundColor(hoverBackground)
+                    button.setTextColor(defaultTextColor)
+                }
+                else -> {
+                    button.setBackgroundColor(defaultBackground)
+                    button.setTextColor(defaultTextColor)
+                }
             }
             button.invalidate()
         }
