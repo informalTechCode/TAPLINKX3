@@ -467,7 +467,7 @@ class MainActivity : AppCompatActivity(),
         
         // Load saved anchored mode state
         isAnchored = getSharedPreferences(prefsName, MODE_PRIVATE)
-            .getBoolean("isAnchored", true) // Default to true on first run
+            .getBoolean("isAnchored", false) // Default to false on first run
             
         dualWebViewGroup.isAnchored = isAnchored
         

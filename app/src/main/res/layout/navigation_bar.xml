@@ -2,17 +2,17 @@
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="24dp"
+    android:layout_height="35dp"
     android:orientation="horizontal"
     android:background="@drawable/nav_bar_background"
-    android:gravity="center_vertical"
-    android:paddingStart="4dp"
-    android:paddingEnd="4dp">
+    android:gravity="center_vertical">
 
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnBack"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
         android:text="@string/fa_arrow_left"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Go back"
@@ -21,15 +21,12 @@
         android:clickable="true"
         android:focusable="true"/>
 
-    <Space
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"/>
-
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnForward"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
         android:text="@string/fa_arrow_right"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Go forward"
@@ -38,15 +35,12 @@
         android:clickable="true"
         android:focusable="true"/>
 
-    <Space
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"/>
-
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnHome"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
         android:text="@string/fa_house"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Go home"
@@ -55,15 +49,12 @@
         android:clickable="true"
         android:focusable="true"/>
 
-    <Space
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"/>
-
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnLink"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
         android:text="@string/fa_link"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Enter URL"
@@ -72,15 +63,12 @@
         android:clickable="true"
         android:focusable="true"/>
 
-    <Space
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"/>
-
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnSettings"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
         android:text="@string/fa_gear"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Settings"
@@ -89,15 +77,12 @@
         android:clickable="true"
         android:focusable="true"/>
 
-    <Space
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"/>
-
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnRefresh"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
         android:text="@string/fa_rotate_right"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Refresh page"
@@ -106,15 +91,12 @@
         android:clickable="true"
         android:focusable="true"/>
 
-    <Space
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"/>
-
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnHide"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
         android:text="@string/fa_expand"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Fullscreen mode"
@@ -123,15 +105,12 @@
         android:clickable="true"
         android:focusable="true"/>
 
-    <Space
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"/>
-
     <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnQuit"
-        android:layout_width="32dp"
-        android:layout_height="24dp"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
         android:text="@string/fa_xmark"
         android:background="@drawable/nav_button_background"
         android:contentDescription="Quit app"
@@ -139,4 +118,5 @@
         android:textSize="14sp"
         android:clickable="true"
         android:focusable="true"/>
+
 </LinearLayout>

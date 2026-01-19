@@ -91,7 +91,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var leftSystemInfoView: SystemInfoView
 
-    var leftNavigationBar: View
+    lateinit var leftNavigationBar: View
     private val verticalBarSize = 480 - 30
     private val nButtons    = 7
     private val buttonHeight = verticalBarSize / nButtons
@@ -107,7 +107,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var isAnchoredDrag = false
     private val ANCHORED_TOUCH_SLOP = 10f
 
-    var leftToggleBar: View
+    lateinit var leftToggleBar: View
     var progressBar: android.widget.ProgressBar = android.widget.ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 4)
         progressDrawable.setTint(Color.BLUE)
@@ -137,6 +137,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private val refreshLock = Any()
 
     private var isDesktopMode = false
+    private var currentWebZoom = 1.0f
     private var isHoveringModeToggle = false
     private var isHoveringDashboardToggle = false
     private var isHoveringBookmarksMenu = false
@@ -258,7 +259,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var leftEditField: EditText
     private var rightEditField: EditText
-    private var isUrlEditing = false
+    private var _isUrlEditing = false
 
     // Keyboard listener interface
     interface KeyboardListener {
@@ -705,12 +706,10 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
 
-        try {
-            // context.resources.getDrawable(R.drawable.ic_arrow_up, null) // Removed as drawable is gone
-            // Log.d("ResourceDebug", "ic_arrow_up check skipped")
-        } catch (e: Exception) {
-            Log.e("ResourceDebug", "ic_arrow_up check failed", e)
-        }
+        val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+        isDesktopMode = prefs.getBoolean("isDesktopMode", false)
+        currentWebZoom = prefs.getFloat("webZoomLevel", 1.0f)
+        updateBrowsingMode(isDesktopMode)
 
         // Set the background of the entire DualWebViewGroup to black
         setBackgroundColor(Color.BLACK)
@@ -781,6 +780,27 @@ class DualWebViewGroup @JvmOverloads constructor(
                 override fun onJsBeforeUnload(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
                     showConfirmDialog(message ?: "Are you sure you want to leave this page?", { result?.confirm() }, { result?.cancel() })
                     return true
+                }
+            }
+
+            webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    
+                    // Re-apply font settings
+                    val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                    val savedFontSize = prefs.getInt("webFontSize", 50)
+                    val savedTextColor = prefs.getString("webTextColor", null)
+                    applyWebFontSettings(savedFontSize, savedTextColor)
+                    
+                    // Re-apply zoom
+                     webView.evaluateJavascript("""
+                        (function() {
+                            document.body.style.zoom = "$currentWebZoom";
+                        })();
+                    """, null)
+                    
+                    updateScrollBarsVisibility()
                 }
             }
         }
@@ -1124,7 +1144,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val btnLeft = FontIconView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(20, 20)
                 setText(R.string.fa_arrow_left)
-                setBackgroundColor(Color.parseColor("#404040"))
+                setBackgroundResource(R.drawable.scroll_button_background)
                 gravity = Gravity.CENTER
                 textSize = 10f
                 setPadding(0, 0, 0, 0)
@@ -1141,7 +1161,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     gravity = Gravity.CENTER_VERTICAL
                     leftMargin = 0
                 }
-                setBackgroundColor(Color.parseColor("#808080"))
+                setBackgroundResource(R.drawable.scroll_button_background)
             }
             trackContainer.addView(hScrollThumb)
             addView(trackContainer)
@@ -1151,7 +1171,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val btnRight = FontIconView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(20, 20)
                 setText(R.string.fa_arrow_right)
-                setBackgroundColor(Color.parseColor("#404040"))
+                setBackgroundResource(R.drawable.scroll_button_background)
                 gravity = Gravity.CENTER
                 textSize = 10f
                 setPadding(0, 0, 0, 0)
@@ -1203,7 +1223,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val btnUp = FontIconView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(20, 20)
                 setText(R.string.fa_arrow_up)
-                setBackgroundColor(Color.parseColor("#404040"))
+                setBackgroundResource(R.drawable.scroll_button_background)
                 gravity = Gravity.CENTER
                 textSize = 10f
                 setPadding(0, 0, 0, 0)
@@ -1220,7 +1240,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     gravity = Gravity.CENTER_HORIZONTAL
                     topMargin = 0
                 }
-                setBackgroundColor(Color.parseColor("#808080"))
+                setBackgroundResource(R.drawable.scroll_button_background)
             }
             trackContainer.addView(vScrollThumb)
             addView(trackContainer)
@@ -1230,7 +1250,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             val btnDown = FontIconView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(20, 20)
                 setText(R.string.fa_arrow_down)
-                setBackgroundColor(Color.parseColor("#404040"))
+                setBackgroundResource(R.drawable.scroll_button_background)
                 gravity = Gravity.CENTER
                 textSize = 10f
                 setPadding(0, 0, 0, 0)
@@ -1625,7 +1645,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     fun toggleIsUrlEditing(isEditing: Boolean) {
-        isUrlEditing = isEditing
+        _isUrlEditing = isEditing
         //Log.d("LinkEditing", "DualWebViewGroup isUrlEditing toggled to: $isEditing")
     }
 
@@ -1669,7 +1689,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
     fun getCurrentUrlEditField(): EditText? {
-        return if (isUrlEditing) urlEditText else null
+        return if (_isUrlEditing) urlEditText else null
     }
 
     fun animateViewportAdjustment() {
@@ -1683,8 +1703,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     // Method to show link editing UI
     fun showLinkEditing() {
-        if (!isUrlEditing) {
-            isUrlEditing = true
+        if (!_isUrlEditing) {
+            _isUrlEditing = true
 
             val currentUrl = webView.url ?: ""
             urlEditText.apply {
@@ -1704,7 +1724,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     fun isUrlEditing(): Boolean {
         //Log.d("LinkEditing", "isUrlEditing check, value: $isUrlEditing")
-        return isUrlEditing
+        return _isUrlEditing
     }
 
     fun isBookmarksExpanded(): Boolean {
@@ -1940,7 +1960,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 }
 
                 // Force cursor refresh if editing - skip in fullscreen
-                if (!isFullScreen && isUrlEditing && urlEditText.isFocused) {
+                if (!isFullScreen && _isUrlEditing && urlEditText.isFocused) {
                     urlEditText.invalidate()
                 }
 
@@ -2224,7 +2244,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             // Position bookmarks menu if visible
             if (::leftBookmarksView.isInitialized && leftBookmarksView.visibility == View.VISIBLE) {
                 val bookmarksHeight = leftBookmarksView.measuredHeight
-                val isEditingAnywhere = isUrlEditing || leftBookmarksView.isEditing()
+                val isEditingAnywhere = _isUrlEditing || leftBookmarksView.isEditing()
                 val bookmarksY = if (isEditingAnywhere) {
                     40  // Below URL edit field area / top of screen
                 } else {
@@ -2249,7 +2269,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
 
             // Handle edit fields for both URL and bookmark editing
-            if (isUrlEditing || isBookmarkEditing) {
+            if (_isUrlEditing || isBookmarkEditing) {
                 val editFieldHeight = maxOf(urlFieldMinHeight, urlEditText.measuredHeight)
                 val editFieldLeft = keyboardContainer.left.takeIf { it > 0 } ?: toggleBarWidth
                 val editFieldRight = keyboardContainer.right.takeIf { it > editFieldLeft }
@@ -2453,7 +2473,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
 
     fun hideLinkEditing() {
-        isUrlEditing = false
+        _isUrlEditing = false
         isBookmarkEditing = false
 
         urlEditText.apply {
@@ -3202,6 +3222,13 @@ class DualWebViewGroup @JvmOverloads constructor(
             R.id.btnModeToggle -> {
                 button?.let { showButtonClickFeedback(it) }
                 isDesktopMode = !isDesktopMode
+                
+                // Save preference
+                context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("isDesktopMode", isDesktopMode)
+                    .apply()
+                
                 updateBrowsingMode(isDesktopMode)
             }
 
@@ -3217,26 +3244,12 @@ class DualWebViewGroup @JvmOverloads constructor(
 
             R.id.btnZoomOut -> {
                 button?.let { showButtonClickFeedback(it) }
-                webView.evaluateJavascript(
-                    """
-                        (function() {
-                            document.body.style.zoom = (parseFloat(document.body.style.zoom || 1) * 0.9).toString();
-                        })();
-                    """,
-                    null
-                )
+                handleZoomButtonClick("out")
             }
 
             R.id.btnZoomIn -> {
                 button?.let { showButtonClickFeedback(it) }
-                webView.evaluateJavascript(
-                    """
-                        (function() {
-                            document.body.style.zoom = (parseFloat(document.body.style.zoom || 1) * 1.1).toString();
-                        })();
-                    """,
-                    null
-                )
+                handleZoomButtonClick("in")
             }
 
 
@@ -3400,12 +3413,21 @@ class DualWebViewGroup @JvmOverloads constructor(
             horizontalScrollBar.getLocationOnScreen(location)
             if (screenX >= location[0] && screenX <= location[0] + horizontalScrollBar.width &&
                 screenY >= location[1] && screenY <= location[1] + horizontalScrollBar.height) {
-                 // Check children for hover effects
+                 
+                 // Check children (arrows and track)
                  for (i in 0 until horizontalScrollBar.childCount) {
                      val child = horizontalScrollBar.getChildAt(i)
                      if (isOver(child)) {
                          child.isHovered = true
-                         // Log.d("HoverDebug", "Hovering over horizontal scrollbar element: $i")
+                         child.isActivated = true
+                         
+                         // If we are over the track container, check the thumb specifically
+                         if (child == horizontalScrollBar.getChildAt(1)) {
+                             if (isOver(hScrollThumb)) {
+                                 hScrollThumb.isHovered = true
+                                 hScrollThumb.isActivated = true
+                             }
+                         }
                      }
                  }
                  customKeyboard?.updateHover(-1f, -1f)
@@ -3418,12 +3440,21 @@ class DualWebViewGroup @JvmOverloads constructor(
             verticalScrollBar.getLocationOnScreen(location)
              if (screenX >= location[0] && screenX <= location[0] + verticalScrollBar.width &&
                 screenY >= location[1] && screenY <= location[1] + verticalScrollBar.height) {
-                 // Check children for hover effects
+                 
+                 // Check children (arrows and track)
                  for (i in 0 until verticalScrollBar.childCount) {
                      val child = verticalScrollBar.getChildAt(i)
                      if (isOver(child)) {
                          child.isHovered = true
-                         // Log.d("HoverDebug", "Hovering over vertical scrollbar element: $i")
+                         child.isActivated = true
+                         
+                         // If we are over the track container, check the thumb specifically
+                         if (child == verticalScrollBar.getChildAt(1)) {
+                             if (isOver(vScrollThumb)) {
+                                 vScrollThumb.isHovered = true
+                                 vScrollThumb.isActivated = true
+                             }
+                         }
                      }
                  }
                  customKeyboard?.updateHover(-1f, -1f)
@@ -3521,6 +3552,24 @@ class DualWebViewGroup @JvmOverloads constructor(
         
         // Clear keyboard hover
         customKeyboard?.updateHoverScreen(-1f, -1f, 1f)
+
+        // Clear scroll bar hover states
+        if (horizontalScrollBar.visibility == View.VISIBLE) {
+            for (i in 0 until horizontalScrollBar.childCount) {
+                horizontalScrollBar.getChildAt(i).isHovered = false
+                horizontalScrollBar.getChildAt(i).isActivated = false
+            }
+            hScrollThumb.isHovered = false
+            hScrollThumb.isActivated = false
+        }
+        if (verticalScrollBar.visibility == View.VISIBLE) {
+            for (i in 0 until verticalScrollBar.childCount) {
+                verticalScrollBar.getChildAt(i).isHovered = false
+                verticalScrollBar.getChildAt(i).isActivated = false
+            }
+            vScrollThumb.isHovered = false
+            vScrollThumb.isActivated = false
+        }
     }
 
     // Helper method to check if a point is within any visible scrollbar
@@ -3760,10 +3809,18 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     private fun handleZoomButtonClick(direction: String) {
-        val zoomFactor = if (direction == "in") 1.1 else 0.9
+        val zoomFactor = if (direction == "in") 1.1f else 0.9f
+        currentWebZoom *= zoomFactor
+        
+        // Save preference
+        context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+            .edit()
+            .putFloat("webZoomLevel", currentWebZoom)
+            .apply()
+
         webView.evaluateJavascript("""
         (function() {
-            document.body.style.zoom = (parseFloat(document.body.style.zoom || 1) * $zoomFactor).toString();
+            document.body.style.zoom = "$currentWebZoom";
         })();
     """, null)
     }
@@ -4613,7 +4670,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 }
 
                 // Check if click is on Reset Zoom button
-                val resetZoomButton = menu.findViewById<Button>(R.id.btnResetWebZoom)
+                val resetZoomButton = menu.findViewById<Button>(R.id.btnResetFontSize)
                 val resetZoomLocation = IntArray(2)
                 resetZoomButton?.getLocationOnScreen(resetZoomLocation)
                 
@@ -4639,6 +4696,38 @@ class DualWebViewGroup @JvmOverloads constructor(
                     resetZoomButton.isPressed = true
                     Handler(Looper.getMainLooper()).postDelayed({
                         resetZoomButton.isPressed = false
+                    }, 100)
+                    return
+                }
+
+                // Check if click is on Reset Webpage Zoom button
+                val resetWebpageZoomButton = menu.findViewById<Button>(R.id.btnResetWebpageZoom)
+                val resetWebpageZoomLocation = IntArray(2)
+                resetWebpageZoomButton?.getLocationOnScreen(resetWebpageZoomLocation)
+                
+                if (resetWebpageZoomButton != null &&
+                    x >= resetWebpageZoomLocation[0] - slop && x <= resetWebpageZoomLocation[0] + (resetWebpageZoomButton.width * uiScale) + slop &&
+                    y >= resetWebpageZoomLocation[1] - slop && y <= resetWebpageZoomLocation[1] + (resetWebpageZoomButton.height * uiScale) + slop) {
+
+                    // Reset webpage zoom to 1.0
+                    currentWebZoom = 1.0f
+                    
+                    // Save preference
+                    context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putFloat("webZoomLevel", currentWebZoom)
+                        .apply()
+                        
+                    webView.evaluateJavascript("""
+                        (function() {
+                            document.body.style.zoom = "$currentWebZoom";
+                        })();
+                    """, null)
+
+                    // Visual feedback
+                    resetWebpageZoomButton.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        resetWebpageZoomButton.isPressed = false
                     }, 100)
                     return
                 }
@@ -4832,6 +4921,16 @@ class DualWebViewGroup @JvmOverloads constructor(
         // 2. Update Settings Menu (Recursively find TextViews/Buttons)
         settingsMenu?.let { menu ->
             updateViewColorsRecursively(menu, color)
+        }
+
+        // 3. Update Navigation Bar
+        if (::leftNavigationBar.isInitialized) {
+            updateViewColorsRecursively(leftNavigationBar, color)
+        }
+
+        // 4. Update Toggle Bar
+        if (::leftToggleBar.isInitialized) {
+            updateViewColorsRecursively(leftToggleBar, color)
         }
     }
     

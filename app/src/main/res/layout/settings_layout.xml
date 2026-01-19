@@ -214,10 +214,23 @@
             android:progressBackgroundTint="#40FFFFFF"/>
 
         <Button
-            android:id="@+id/btnResetWebZoom"
+            android:id="@+id/btnResetFontSize"
             android:layout_width="match_parent"
             android:layout_height="28dp"
-            android:text="Reset Zoom"
+            android:text="Reset 100%"
+            android:textColor="#82B1FF"
+            android:textSize="10sp"
+            android:background="@drawable/settings_outlined_button_background"
+            android:textAllCaps="false"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginBottom="8dp"/>
+
+        <Button
+            android:id="@+id/btnResetWebpageZoom"
+            android:layout_width="match_parent"
+            android:layout_height="28dp"
+            android:text="Reset Webpage Zoom"
             android:textColor="#82B1FF"
             android:textSize="10sp"
             android:background="@drawable/settings_outlined_button_background"
