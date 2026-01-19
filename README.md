@@ -18,6 +18,7 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
   - **Triple Tap (Right Temple)**: Re-center the display.
 - **Screen Drift**: If you run into a screen drift issue, reboot the glasses.
 - **Brightness Limitation**: Due to a RayNeo limitation, we do not recommend running the glasses at max brightness while using TapLink X3.
+- **Location Services**: To use location features in web apps, ensure the **RayNeo AR companion app** on your phone has **Location permission** granted. The glasses stream GPS data from the connected phone.
 
 ## Documentation
 

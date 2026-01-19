@@ -136,14 +136,10 @@ class DualWebViewGroup @JvmOverloads constructor(
     @Volatile private var isRefreshing = false
     private val refreshLock = Any()
 
-    // Near the top of the class
     private var isDesktopMode = false
     private var isHoveringModeToggle = false
-    private var isHoveringScrollToggle = false
     private var isHoveringDashboardToggle = false
     private var isHoveringBookmarksMenu = false
-    private val desktopUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-    private var mobileUserAgent: String = "" // Set by MainActivity.setupWebView() with device-specific UA
 
     private lateinit var leftBookmarksView: BookmarksView
 
@@ -290,9 +286,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         isClickable = true
         isFocusable = true
     }
-    
-    // Track scroll mode state before fullscreen
-    private var wasInScrollModeBeforeFullscreen = false
     
     // UI scale factor (0.5 to 1.0) - controlled by screen size slider
     var uiScale = 1.0f
@@ -789,6 +782,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
         }
 
+
         // Configure SurfaceView for right eye mirroring
         rightEyeView.apply {
             isClickable = false
@@ -819,6 +813,8 @@ class DualWebViewGroup @JvmOverloads constructor(
                 }
             })
         }
+
+
 
 
 
@@ -1588,15 +1584,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
         
         // Log.d("MediaControls", "Touch on mask overlay but not on any button")
-    }
-
-
-    private fun clearNavigationButtonHoverStates() {
-        navButtons.values.forEach { navButton ->
-            navButton.isHovered = false
-            navButton.left.isHovered = false
-            navButton.right.isHovered = false
-        }
     }
 
 
@@ -2442,18 +2429,6 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         // Layout the UI container to cover just the left half
         leftEyeUIContainer.layout(0, 0, halfWidth, height)
-    }
-
-    private fun toggleScreenMask() {
-        isScreenMasked = !isScreenMasked
-        maskOverlay.visibility = if (isScreenMasked) View.VISIBLE else View.GONE
-
-        // Update the mask button icon
-        leftToggleBar.findViewById<FontIconView>(R.id.btnMask)?.let { button ->
-            button.text = context.getString(
-                if (isScreenMasked) R.string.fa_eye else R.string.fa_eye_slash
-            )
-        }
     }
 
     fun cleanupResources() {
@@ -3633,42 +3608,6 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
 
-    private fun scrollViewportByFraction(directionMultiplier: Int) {
-        val script = """
-            (function() {
-                const fallbackViewportHeight = window.innerHeight
-                    || (document.documentElement && document.documentElement.clientHeight)
-                    || (document.body && document.body.clientHeight)
-                    || 0;
-                const hud = document.querySelector('.hud');
-                const target = (hud && hud.scrollHeight > hud.clientHeight) ? hud : window;
-                const targetHeight = (target === hud && hud && hud.clientHeight) ? hud.clientHeight : fallbackViewportHeight;
-                const scrollAmount = targetHeight * $verticalScrollFraction;
-                const delta = scrollAmount * $directionMultiplier;
-
-                if (target === window) {
-                    window.scrollBy({ top: delta, behavior: 'smooth' });
-                    return delta;
-                }
-
-                const start = target.scrollTop;
-                if (typeof target.scrollBy === 'function') {
-                    target.scrollBy({ top: delta, behavior: 'smooth' });
-                } else {
-                    target.scrollTop += delta;
-                }
-                return target.scrollTop - start;
-            })();
-        """.trimIndent()
-
-        webView.evaluateJavascript(script) { result ->
-            // Log.d("ScrollDebug", "Viewport scroll result: $result")
-        }
-    }
-
-
-
-
     fun isNavBarVisible(): Boolean {
         // Check both visibility AND scroll mode - in scroll mode, bars are hidden even during fade animation
         return !isInScrollMode && leftNavigationBar.visibility == View.VISIBLE
@@ -4143,36 +4082,6 @@ class DualWebViewGroup @JvmOverloads constructor(
         settingsScrim?.visibility = View.GONE
         if (::leftBookmarksView.isInitialized) {
             leftBookmarksView.visibility = View.GONE
-        }
-    }
-
-    private fun initializeSettingsBars() {
-        settingsMenu?.let { menu ->
-            val volumeSeekBar = menu.findViewById<SeekBar>(R.id.volumeSeekBar)
-            val brightnessSeekBar = menu.findViewById<SeekBar>(R.id.brightnessSeekBar)
-
-            // Initialize Volume from AudioManager:
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-            val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-            volumeSeekBar?.max = maxVolume
-            volumeSeekBar?.progress = currentVolume
-            // Log.d("SettingsDebug", "Volume: $currentVolume of $maxVolume")
-
-            // Initialize Brightness from System Settings:
-            try {
-                // Read brightness from system settings (0–255)
-                val currentBrightness = android.provider.Settings.System.getInt(
-                    (context as Activity).contentResolver,
-                    android.provider.Settings.System.SCREEN_BRIGHTNESS
-                )
-                // Scale to a 0–100 range for your seek bar
-                brightnessSeekBar?.max = 100
-                brightnessSeekBar?.progress = ((currentBrightness / 255f) * 100).toInt()
-                // Log.d("SettingsDebug", "Brightness: $currentBrightness (scaled to ${brightnessSeekBar?.progress})")
-            } catch (e: Exception) {
-                Log.e("SettingsDebug", "Error retrieving screen brightness", e)
-            }
         }
     }
 
@@ -5509,6 +5418,75 @@ class DualWebViewGroup @JvmOverloads constructor(
     fun hideMediaControls() {
         post {
             maskMediaControlsContainer.visibility = View.GONE
+        }
+    }
+
+    fun injectLocation(latitude: Double, longitude: Double) {
+        val script = """
+            (function() {
+                // Store the position globally so it persists
+                window.__injectedPosition = {
+                    coords: {
+                        latitude: $latitude,
+                        longitude: $longitude,
+                        accuracy: 5.0,
+                        altitude: null,
+                        altitudeAccuracy: null,
+                        heading: null,
+                        speed: null
+                    },
+                    timestamp: new Date().getTime()
+                };
+                
+                // 1. Mock Permissions API to always return 'granted'
+                if (navigator.permissions) {
+                    var originalQuery = navigator.permissions.query.bind(navigator.permissions);
+                    navigator.permissions.query = function(parameters) {
+                        if (parameters.name === 'geolocation') {
+                            return Promise.resolve({ state: 'granted', onchange: null });
+                        }
+                        return originalQuery(parameters);
+                    };
+                }
+                
+                // 2. Override Geolocation API using defineProperty for robustness
+                var mockGeolocation = {
+                    getCurrentPosition: function(success, error, options) {
+                        setTimeout(function() {
+                            success(window.__injectedPosition);
+                        }, 10);
+                    },
+                    watchPosition: function(success, error, options) {
+                        var watchId = Math.floor(Math.random() * 10000);
+                        setTimeout(function() {
+                            success(window.__injectedPosition);
+                        }, 10);
+                        return watchId;
+                    },
+                    clearWatch: function(id) {
+                        // Do nothing
+                    }
+                };
+                
+                try {
+                    Object.defineProperty(navigator, 'geolocation', {
+                        value: mockGeolocation,
+                        writable: false,
+                        configurable: true
+                    });
+                } catch (e) {
+                    // Fallback if defineProperty fails
+                    navigator.geolocation.getCurrentPosition = mockGeolocation.getCurrentPosition;
+                    navigator.geolocation.watchPosition = mockGeolocation.watchPosition;
+                    navigator.geolocation.clearWatch = mockGeolocation.clearWatch;
+                }
+                
+                console.log("[TapLink] Location injected: " + $latitude + ", " + $longitude);
+            })();
+        """.trimIndent()
+        
+        post {
+            webView.evaluateJavascript(script, null)
         }
     }
 

@@ -164,7 +164,7 @@ class GroqAudioService(private val context: Context) {
                     if (responseBody != null) {
                         try {
                             val json = JSONObject(responseBody)
-                            val text = json.optString("text", "")
+                            val text = json.optString("text", "").trim()
                             if (text.isNotBlank()) {
                                 mainHandler.post { listener?.onTranscriptionResult(text) }
                             } else {
