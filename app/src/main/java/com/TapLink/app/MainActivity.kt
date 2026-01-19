@@ -3407,17 +3407,36 @@ class MainActivity : AppCompatActivity(),
 
         try {
             val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+            val savedState = prefs.getString(Constants.KEY_WEBVIEW_STATE, null)
             val lastUrl = prefs.getString(keyLastUrl, null)
             DebugLog.d("WebViewDebug", "Last saved URL: $lastUrl")
 
             val defaultDashboardUrl = "file:///android_asset/AR_Dashboard_Landscape_Sidebar.html"
+            var restored = false
 
-            if (lastUrl != null && !lastUrl.startsWith("about:blank")) {
-                DebugLog.d("WebViewDebug", "Loading saved URL: $lastUrl")
-                webView.loadUrl(lastUrl)
-            } else {
-                DebugLog.d("WebViewDebug", "No valid saved URL, loading default AR dashboard")
-                webView.loadUrl(defaultDashboardUrl)
+            if (!savedState.isNullOrBlank()) {
+                try {
+                    val data = Base64.decode(savedState, Base64.DEFAULT)
+                    val parcel = Parcel.obtain()
+                    parcel.unmarshall(data, 0, data.size)
+                    parcel.setDataPosition(0)
+                    val bundle = Bundle.CREATOR.createFromParcel(parcel)
+                    parcel.recycle()
+                    restored = webView.restoreState(bundle) != null
+                    DebugLog.d("WebViewDebug", "WebView state restored: $restored")
+                } catch (e: Exception) {
+                    DebugLog.e("WebViewDebug", "Error restoring WebView state", e)
+                }
+            }
+
+            if (!restored) {
+                if (lastUrl != null && !lastUrl.startsWith("about:blank")) {
+                    DebugLog.d("WebViewDebug", "Loading saved URL: $lastUrl")
+                    webView.loadUrl(lastUrl)
+                } else {
+                    DebugLog.d("WebViewDebug", "No valid saved URL, loading default AR dashboard")
+                    webView.loadUrl(defaultDashboardUrl)
+                }
             }
         } catch (e: Exception) {
             DebugLog.e("WebViewDebug", "Error restoring session", e)
@@ -4468,6 +4487,8 @@ class MainActivity : AppCompatActivity(),
     }
     override fun onDestroy() {
         super.onDestroy()
+        speechRecognizer?.destroy()
+        speechRecognizer = null
         cameraDevice?.close()
         imageReader?.close()
         cameraThread.quitSafely()
