@@ -678,42 +678,6 @@ class CustomKeyboardView @JvmOverloads constructor(
 
 
 
-    // Modify handleFlingEvent to only use X velocity
-    fun handleFlingEvent(velocityX: Float) {
-        if (isAnchoredMode) {
-            // Ignore fling events in anchored mode
-            return
-        }
-
-        val threshold = 1000 // Adjust this value based on your AR glasses' sensitivity
-        val horizontalThreshold = 500 // Minimum velocity to consider for horizontal movement
-
-        // Log the velocity for debugging
-        DebugLog.d("KeyboardDebug", "Fling detected with velocityX=$velocityX")
-
-        if (abs(velocityX) > threshold) {
-            if (velocityX > horizontalThreshold) {
-                // Strong positive X velocity - move horizontally to the right
-                DebugLog.d("KeyboardDebug", "Forward fling - Moving horizontally")
-                moveFocusRight()
-            } else if (velocityX < -horizontalThreshold) {
-                // Strong negative X velocity - move horizontally to the left
-                DebugLog.d("KeyboardDebug", "Backward fling - Moving horizontally (left)")
-                moveFocusDown()
-            } else {
-                // Small negative velocity (close to zero) - ignore or treat as no movement
-                DebugLog.d("KeyboardDebug", "Small velocity - Ignoring fling")
-            }
-        } else {
-            // Velocity below threshold - ignore the fling
-            DebugLog.d("KeyboardDebug", "Velocity below threshold - Ignoring fling")
-        }
-
-        // Force update of key focus
-        updateKeyFocus()
-    }
-
-
     private fun getKeyboardLayout(): LinearLayout? {
         return if (childCount > 0) getChildAt(0) as? LinearLayout else null
     }

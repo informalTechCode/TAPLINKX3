@@ -583,70 +583,6 @@ class BookmarksView @JvmOverloads constructor(
 
 
 
-    private fun addSpecialButton(text: String, position: Int) {
-        val isAddButton = text == "+"
-        val isCloseButton = text == "Close"
-
-        val buttonView = LinearLayout(context).apply {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(16, 12, 16, 12)
-
-            layoutParams = LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                52
-            ).apply {
-                setMargins(4, if (isAddButton) 8 else 4, 4, 4)
-            }
-
-            tag = if (isAddButton) {
-                ViewAction(ActionType.NEW)
-            } else {
-                ViewAction(ActionType.CLOSE)
-            }
-
-            background = GradientDrawable().apply {
-                when {
-                    isAddButton -> {
-                        setColor(Color.parseColor("#2069F0AE"))
-                        setStroke(1, colorAccentGreen)
-                    }
-                    isCloseButton -> {
-                        setColor(Color.parseColor("#20FFFFFF"))
-                    }
-                    else -> {
-                        setColor(colorItemDefault)
-                    }
-                }
-                cornerRadius = 12f
-            }
-
-            // Icon for the button
-            val iconView = TextView(context).apply {
-                this.text = if (isAddButton) "+" else ""
-                textSize = if (isAddButton) 20f else 0f
-                setTextColor(colorAccentGreen)
-                gravity = Gravity.CENTER
-                if (isAddButton) setPadding(0, 0, 8, 0)
-            }
-
-            // Label text
-            val labelView = TextView(context).apply {
-                this.text = if (isAddButton) "Add Bookmark" else "Close"
-                textSize = 14f
-                setTextColor(if (isAddButton) colorAccentGreen else colorTextSecondary)
-                gravity = Gravity.CENTER
-            }
-
-            if (isAddButton) addView(iconView)
-            addView(labelView)
-        }
-
-        bookmarksList.addView(buttonView)
-        bookmarkViews.add(buttonView)
-        DebugLog.d(TAG, "Added special button: $text at position $position")
-    }
-
     private fun updateSelectionBackground(view: View, isSelected: Boolean) {
         val paddingLeft = view.paddingLeft
         val paddingTop = view.paddingTop
@@ -992,9 +928,17 @@ class BookmarksView @JvmOverloads constructor(
     fun handleDoubleTap(): Boolean {
         DebugLog.d(TAG, "handleDoubleTap() called. Current selection: $currentSelection")
 
-        val bookmarks = bookmarkManager.getBookmarks()
-        if (currentSelection < bookmarks.size) {
-            val bookmark = bookmarks[currentSelection]
+        if (currentSelection !in bookmarkViews.indices) {
+            return false
+        }
+
+        val action = bookmarkViews[currentSelection].tag as? ViewAction
+        if (action?.type != ActionType.OPEN || action.id == null) {
+            return false
+        }
+
+        val bookmark = bookmarkManager.getBookmarks().find { it.id == action.id }
+        if (bookmark != null) {
             DebugLog.d(TAG, "handleDoubleTap(): About to edit bookmark ${bookmark.id} with URL: ${bookmark.url}")
 
             // Ensure keyboard listener exists and is called

@@ -1277,9 +1277,6 @@ class MainActivity : AppCompatActivity(),
 
 
     override fun onSendEnterInLink() {
-        isUrlEditing = false
-        dualWebViewGroup.toggleIsUrlEditing(false)
-        isKeyboardVisible = false
         if (dualWebViewGroup.isUrlEditing()) {
             val url = dualWebViewGroup.getCurrentLinkText()
             val formattedUrl = formatUrl(url)
@@ -1287,6 +1284,9 @@ class MainActivity : AppCompatActivity(),
             dualWebViewGroup.hideLinkEditing()
             hideCustomKeyboard()
         }
+        isUrlEditing = false
+        dualWebViewGroup.toggleIsUrlEditing(false)
+        isKeyboardVisible = false
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
