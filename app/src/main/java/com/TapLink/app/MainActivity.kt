@@ -3412,6 +3412,16 @@ class MainActivity : AppCompatActivity(),
                     })
                     return true
                 }
+
+                override fun onJsBeforeUnload(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
+                    // DebugLog.d("DialogDebug", "onJsBeforeUnload: $message")
+                    dualWebViewGroup.showConfirmDialog(message ?: "Are you sure you want to leave this page?", {
+                        result?.confirm()
+                    }, {
+                        result?.cancel()
+                    })
+                    return true
+                }
             }
 
             // Add more detailed logging to track input field interactions
@@ -4169,6 +4179,15 @@ class MainActivity : AppCompatActivity(),
         val visualX = 320f + (x - 320f) * scale + transX
         val visualY = 240f + (y - 240f) * scale + transY
 
+        // Logic to prevent "wrapping":
+        // 1. Left cursor should ONLY be visible if it is within the left screen bounds (< 640)
+        // 2. Right cursor (which is at visualX + 640) should ONLY be visible if visualX >= 0 (so final x >= 640)
+        // Note: We use a small buffer (e.g. -20 to 660) if we want to allow partial cursor visibility at edges,
+        // but strictly preventing wrapping means keeping it to the 640 boundary.
+        
+        val showLeft = isVisible && visualX < 640f
+        val showRight = isVisible && visualX >= 0f
+
         // Left screen cursor - pivot at top-left so scaling happens from cursor tip
         cursorLeftView.pivotX = 0f
         cursorLeftView.pivotY = 0f
@@ -4176,7 +4195,7 @@ class MainActivity : AppCompatActivity(),
         cursorLeftView.y = visualY
         cursorLeftView.scaleX = scale
         cursorLeftView.scaleY = scale
-        cursorLeftView.visibility = if (isVisible) View.VISIBLE else View.GONE
+        cursorLeftView.visibility = if (showLeft) View.VISIBLE else View.GONE
 
         // Right screen cursor, offset by 640 pixels to appear on the right screen
         cursorRightView.pivotX = 0f
@@ -4185,7 +4204,7 @@ class MainActivity : AppCompatActivity(),
         cursorRightView.y = visualY
         cursorRightView.scaleX = scale
         cursorRightView.scaleY = scale
-        cursorRightView.visibility = if (isVisible) View.VISIBLE else View.GONE
+        cursorRightView.visibility = if (showRight) View.VISIBLE else View.GONE
 
         // Force layout and redraw for both cursors to ensure visibility
         cursorLeftView.requestLayout()
