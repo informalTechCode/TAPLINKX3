@@ -953,6 +953,23 @@ class MainActivity : AppCompatActivity(),
                 
                 // Update scrollbar visibility based on new content
                 dualWebViewGroup.updateScrollBarsVisibility()
+
+                // Enforce desktop viewport if enabled (persists across reloads/SPA navigation)
+                if (dualWebViewGroup.isDesktopMode()) {
+                    webView.evaluateJavascript(
+                        """
+                        (function() {
+                            var viewport = document.querySelector('meta[name="viewport"]');
+                            if (!viewport) {
+                                viewport = document.createElement('meta');
+                                viewport.name = 'viewport';
+                                document.head.appendChild(viewport);
+                            }
+                            viewport.content = 'width=1280, initial-scale=0.8';
+                        })();
+                        """, null
+                    )
+                }
             }
 
             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
