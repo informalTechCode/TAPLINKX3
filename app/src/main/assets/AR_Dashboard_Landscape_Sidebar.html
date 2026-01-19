@@ -32,7 +32,6 @@
     body {
       display: flex;
       justify-content: center;
-      overflow: hidden;
     }
 
     /* Portrait lock */
@@ -82,11 +81,8 @@
       width: 100vw;
       max-width: 960px;
       margin: 0 auto;
-      height: 100vh;
-      max-height: 480px;
       display: flex;
       flex-direction: column;
-      overflow-y: auto;
       scroll-behavior: smooth;
       filter: brightness(var(--brightness));
       transform: scale(var(--scale));
@@ -604,63 +600,6 @@
     notesEl.addEventListener('input', () => { localStorage.setItem(notesKey, notesEl.value); autoresizeNotesBox(); });
     setTimeout(autoresizeNotesBox, 0);
 
-    /* The Android scroll buttons issue scrollBy() calls, but this layout keeps the body fixed
-       and scrolls the inner .hud container instead. Bridge those calls so scroll buttons work. */
-    (function bridgeScrollByToHud() {
-      const hud = document.querySelector('.hud');
-      if (!hud) { return; }
-
-      const originalScrollBy = window.scrollBy.bind(window);
-      const originalScrollTo = window.scrollTo.bind(window);
-
-      function normalizeScrollArgs(arg0, arg1) {
-        if (typeof arg0 === 'object' && arg0) {
-          return {
-            left: Number(arg0.left || 0),
-            top: Number(arg0.top || 0),
-            behavior: arg0.behavior
-          };
-        }
-        return {
-          left: Number(arg0 || 0),
-          top: Number(arg1 || 0)
-        };
-      }
-
-      function scrollHudBy(left, top, behavior) {
-        try {
-          if (typeof hud.scrollBy === 'function') {
-            hud.scrollBy({ left, top, behavior });
-            return;
-          }
-        } catch (e) { }
-        if (typeof left === 'number') { hud.scrollLeft += left; }
-        if (typeof top === 'number') { hud.scrollTop += top; }
-      }
-
-      function scrollHudTo(left, top, behavior) {
-        try {
-          if (typeof hud.scrollTo === 'function') {
-            hud.scrollTo({ left, top, behavior });
-            return;
-          }
-        } catch (e) { }
-        if (typeof left === 'number') { hud.scrollLeft = left; }
-        if (typeof top === 'number') { hud.scrollTop = top; }
-      }
-
-      window.scrollBy = function (arg0, arg1) {
-        const { left, top, behavior } = normalizeScrollArgs(arg0, arg1);
-        scrollHudBy(left, top, behavior);
-        return originalScrollBy(arg0, arg1);
-      };
-
-      window.scrollTo = function (arg0, arg1) {
-        const { left, top, behavior } = normalizeScrollArgs(arg0, arg1);
-        scrollHudTo(left, top, behavior);
-        return originalScrollTo(arg0, arg1);
-      };
-    })();
   </script>
 </body>
 
