@@ -44,7 +44,7 @@ import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
 import kotlin.math.roundToInt
-import com.TapLink.app.FontIconView
+
 
 @SuppressLint("ClickableViewAccessibility")
 class DualWebViewGroup @JvmOverloads constructor(
@@ -742,10 +742,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
             // Prevent white flash during load
-            evaluateJavascript("""
-                document.documentElement.style.backgroundColor = 'black';
-                document.body.style.backgroundColor = 'black';
-            """, null)
+
 
             //setBackgroundColor(Color.TRANSPARENT)  // Changed to TRANSPARENT to allow mirroring
             layoutParams = LayoutParams(640, LayoutParams.MATCH_PARENT)
@@ -3034,6 +3031,10 @@ class DualWebViewGroup @JvmOverloads constructor(
         kbView.handleAnchoredTap(finalX, finalY)
     }
 
+    fun isDesktopMode(): Boolean {
+        return isDesktopMode
+    }
+
     fun updateBrowsingMode(isDesktop: Boolean) {
         //Log.d("ModeToggle", "Updating browsing mode to: ${if (isDesktop) "desktop" else "mobile"}")
         isDesktopMode = isDesktop
@@ -3041,9 +3042,9 @@ class DualWebViewGroup @JvmOverloads constructor(
         // Step 1: Update WebView settings (user agent)
         webView.settings.apply {
             userAgentString = if (isDesktop) {
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
             } else {
-                "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
             }
             @Suppress("DEPRECATION")
             defaultZoom = WebSettings.ZoomDensity.MEDIUM
@@ -3052,6 +3053,8 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
         // Step 2: Update viewport using JavaScript without forcing a complete reload
+        val viewportContent = if (isDesktop) "width=1280, initial-scale=0.8" else "width=600, initial-scale=1.0, maximum-scale=1.0"
+        
         webView.post {
             webView.evaluateJavascript(
                 """
@@ -3062,7 +3065,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                     viewport.name = 'viewport';
                     document.head.appendChild(viewport);
                 }
-                viewport.content = 'width=600, initial-scale=1.0, maximum-scale=1.0';
+                viewport.content = '$viewportContent';
             })();
             """, null
             )
@@ -3883,7 +3886,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     fun handleAnchoredFling(velocity: Float) {
         if (isBookmarksExpanded()) {
-            leftBookmarksView.handleAnchoredFling(velocity)
+            // No-op for bookmarks in anchored mode (pagination used)
         } else {
             // Forward to general handleFling which handles WebView scroll
             handleFling(velocity)
@@ -4233,7 +4236,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 // Initialize color wheel with saved color
                 menu.findViewById<ColorWheelView>(R.id.colorWheelView)?.apply {
                     val savedTextColor = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-                        .getString("webTextColor", "#FFFFFF") ?: "#FFFFFF"
+                        .getString("webTextColor", null)
                     try {
                         setColor(Color.parseColor(savedTextColor))
                     } catch (e: Exception) {
@@ -4720,13 +4723,9 @@ class DualWebViewGroup @JvmOverloads constructor(
 
                     // Reset color to white
                     colorWheelView?.setColor(Color.WHITE)
-                    applyTextColor("#FFFFFF")
-                    
-                    // Save preference
-                    context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-                        .edit()
-                        .putString("webTextColor", "#FFFFFF")
-                        .apply()
+                    // Reset color to white visually
+                    colorWheelView?.setColor(Color.WHITE)
+                    applyTextColor(null)
 
                     // Visual feedback
                     resetTextColorButton.isPressed = true
@@ -4812,7 +4811,7 @@ class DualWebViewGroup @JvmOverloads constructor(
      * Apply text color to webpage and save preference.
      * @param colorHex Hex color string (e.g., "#FFFFFF")
      */
-    private fun applyTextColor(colorHex: String) {
+    private fun applyTextColor(colorHex: String?) {
         // Save preference
         context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
             .edit()
