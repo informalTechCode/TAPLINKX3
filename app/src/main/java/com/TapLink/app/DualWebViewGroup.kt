@@ -4002,12 +4002,12 @@ class DualWebViewGroup @JvmOverloads constructor(
     Toggle bar children: ${(leftToggleBar as? ViewGroup)?.childCount ?: "Not a ViewGroup"}
     UI Container children count: ${leftEyeUIContainer.childCount}
     UI Container children:
-    ${(0 until leftEyeUIContainer.childCount).joinToString("\n") { index ->
+    ${(0 until leftEyeUIContainer.childCount).joinToString("n") { index ->
             val child = leftEyeUIContainer.getChildAt(index)
             "Child $index: ${child.javaClass.simpleName} (${child.hashCode()})"+
-                    "\n    Location: (${child.x}, ${child.y})"+
-                    "\n    Size: ${child.width}x${child.height}"+
-                    "\n    Translation: (${child.translationX}, ${child.translationY})"
+                    "n    Location: (${child.x}, ${child.y})"+
+                    "n    Size: ${child.width}x${child.height}"+
+                    "n    Translation: (${child.translationX}, ${child.translationY})"
         }}
 """.trimIndent())
 
@@ -5061,12 +5061,10 @@ class DualWebViewGroup @JvmOverloads constructor(
                 """
                 TOUCH GESTURES:
                 • Single Tap: Click links, buttons, and focus fields.
-                • Double Tap: Swiftly go back to the previous page.
+                • Double Tap: Go back to the previous page.
                 
-                TRIPLE-TAP MENU:
-                • Quick Refresh
-                • Navigation (Forward/Home)
-                • Quick Bookmarks access
+                TRIPLE TAP (Anchored Mode):
+                • Re-centers the screen.
                 """.trimIndent(),
                 true, false
             )
@@ -5086,7 +5084,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             3 -> Quadruple(
                 "Features: Display & Tools",
                 """
-                SCROLL MODE (Eye Icon):
+                SCROLL MODE (Full Screen Icon):
                 • Hides UI for an immersive browsing experience.
                 • Restore UI: Tap the transparent "Show" button.
                 
@@ -5094,6 +5092,11 @@ class DualWebViewGroup @JvmOverloads constructor(
                 • Volume & Brightness Sliders.
                 • UI Scale: Adjust the global interface size.
                 • Web Zoom (+/-): Content zoom level.
+
+                VOICE / STT:
+                • Uses device speech-to-text when supported.
+                • Start STT, speak clearly, and text is inserted into the active field.
+                • Use scrcpy keyboard to paste your API key into the prompt field.
                 """.trimIndent(),
                 true, true
             )
@@ -5101,7 +5104,7 @@ class DualWebViewGroup @JvmOverloads constructor(
                 "Features: Blank Screen Mode",
                 """
                 BLANK SCREEN MODE (Eye Toggle):
-                • Blacks out display while media continues playing.
+                • Blacks out display while media continues playing but allows media controls.
                 • Perfect for listening to audio/podcasts.
                 • Note: Disables anchored mode while active.
                 
@@ -5651,3 +5654,6 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
 }
+
+
+
