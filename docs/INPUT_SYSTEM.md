@@ -1,9 +1,10 @@
 # Input Systems
 
-TapLink exposes two complementary keyboard modes:
+TapLink exposes three complementary input modes:
 
 - **Anchored mode**: The keyboard is fixed in the viewport and taps are redirected based on the cursor location. Drag and fling listeners are suppressed so only discrete taps are processed. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1592-L1774】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L173-L260】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L648-L716】
 - **Free (focus) mode**: The keyboard is navigated via horizontal drags and flings that move the focus highlight before triggering `performFocusedTap()`. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1650-L1664】【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1785-L1803】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L648-L716】
+- **Voice Control**: High-accuracy speech-to-text powered by the Groq API. Activate it by pressing the microphone key on the custom keyboard. An API key is required and can be entered via the settings menu. 【F:app/src/main/java/com/TapLink/app/GroqAudioService.kt】【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3740-L3845】
 
 ## Anchored tap pipeline
 
