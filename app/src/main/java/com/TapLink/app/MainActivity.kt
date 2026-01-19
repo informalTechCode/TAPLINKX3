@@ -184,6 +184,10 @@ class MainActivity : AppCompatActivity(),
     private var lastUrl: String? = null
     private var isUrlEditing = false
 
+    // User Agent management
+    private var defaultUserAgent: String? = null
+    private var customUserAgent: String? = null
+
     private var keyboardListener: DualWebViewGroup.KeyboardListener? = null
 
     private val PERMISSIONS_REQUEST_CODE = 123
@@ -3059,11 +3063,19 @@ class MainActivity : AppCompatActivity(),
 
                 val wvVersion = getWebViewVersion() ?: "114.0.0.0"
 
-                val newUserAgent = "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) " +
+                // Store default UA for sites that require it (like Netflix)
+                if (defaultUserAgent == null) {
+                    defaultUserAgent = WebSettings.getDefaultUserAgent(this@MainActivity)
+                }
+
+                customUserAgent = "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) " +
                         "AppleWebKit/537.36 (KHTML, like Gecko) " +
                         "Chrome/$wvVersion Mobile Safari/537.36"
 
-                webView.settings.userAgentString = newUserAgent
+                webView.settings.userAgentString = customUserAgent
+
+                // Pass the custom UA to DualWebViewGroup so it can use it for Mobile Mode
+                dualWebViewGroup.setMobileUserAgent(customUserAgent!!)
 
                 // Explicitly enable media
                 setMediaPlaybackRequiresUserGesture(false)
@@ -3083,6 +3095,29 @@ class MainActivity : AppCompatActivity(),
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     super.onPageStarted(view, url, favicon)
                     DebugLog.d("WebViewDebug", "Page started loading: $url")
+
+                    // Netflix Fix: Force default User Agent to ensure Widevine CDM works
+                    val isNetflix = url?.contains("netflix.com") == true
+                    if (isNetflix) {
+                        if (view?.settings?.userAgentString != defaultUserAgent) {
+                            view?.settings?.userAgentString = defaultUserAgent
+                            DebugLog.d("NetflixFix", "Switched to default User Agent for Netflix")
+                        }
+                    } else {
+                        // Restore correct UA for other sites based on browsing mode
+                        if (dualWebViewGroup.isDesktopMode()) {
+                            val desktopUA = dualWebViewGroup.getDesktopUserAgent()
+                            if (view?.settings?.userAgentString != desktopUA) {
+                                view?.settings?.userAgentString = desktopUA
+                                // DebugLog.d("UserAgent", "Restored Desktop User Agent")
+                            }
+                        } else {
+                            if (view?.settings?.userAgentString != customUserAgent && customUserAgent != null) {
+                                view?.settings?.userAgentString = customUserAgent
+                                // DebugLog.d("UserAgent", "Restored Mobile User Agent")
+                            }
+                        }
+                    }
 
                     // Show loading bar immediately
                     dualWebViewGroup.updateLoadingProgress(0)

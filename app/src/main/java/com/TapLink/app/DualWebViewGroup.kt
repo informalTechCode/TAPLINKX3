@@ -143,7 +143,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var isHoveringDashboardToggle = false
     private var isHoveringBookmarksMenu = false
     private val desktopUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-    private val mobileUserAgent = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
+    private var mobileUserAgent = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
 
     private lateinit var leftBookmarksView: BookmarksView
 
@@ -3035,21 +3035,35 @@ class DualWebViewGroup @JvmOverloads constructor(
         return isDesktopMode
     }
 
+    fun setMobileUserAgent(ua: String) {
+        mobileUserAgent = ua
+    }
+
+    fun getDesktopUserAgent(): String {
+        return desktopUserAgent
+    }
+
     fun updateBrowsingMode(isDesktop: Boolean) {
-        //Log.d("ModeToggle", "Updating browsing mode to: ${if (isDesktop) "desktop" else "mobile"}")
+        // Log.d("ModeToggle", "Updating browsing mode to: ${if (isDesktop) "desktop" else "mobile"}")
+
         isDesktopMode = isDesktop
 
         // Step 1: Update WebView settings (user agent)
-        webView.settings.apply {
-            userAgentString = if (isDesktop) {
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-            } else {
-                "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
+        // If on Netflix, we preserve the current UA (which should be the system default) to prevent DRM errors.
+        val isNetflix = webView.url?.contains("netflix.com") == true
+
+        if (!isNetflix) {
+            webView.settings.apply {
+                userAgentString = if (isDesktop) {
+                    desktopUserAgent
+                } else {
+                    mobileUserAgent
+                }
+                @Suppress("DEPRECATION")
+                defaultZoom = WebSettings.ZoomDensity.MEDIUM
+                loadWithOverviewMode = true
+                useWideViewPort = true
             }
-            @Suppress("DEPRECATION")
-            defaultZoom = WebSettings.ZoomDensity.MEDIUM
-            loadWithOverviewMode = true
-            useWideViewPort = true
         }
 
         // Step 2: Update viewport using JavaScript without forcing a complete reload
