@@ -148,6 +148,9 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var isBookmarkEditing = false
 
+    private var mobileUserAgent: String = webView.settings.userAgentString
+    private var desktopUserAgent: String = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+
     private val verticalScrollFraction = 0.25f // Scroll vertically by 25% of the viewport per tap
 
     private var isHoveringZoomIn = false
@@ -4609,6 +4612,37 @@ class DualWebViewGroup @JvmOverloads constructor(
                     return
                 }
 
+                // Check if click is on Reset Zoom button
+                val resetZoomButton = menu.findViewById<Button>(R.id.btnResetWebZoom)
+                val resetZoomLocation = IntArray(2)
+                resetZoomButton?.getLocationOnScreen(resetZoomLocation)
+                
+                if (resetZoomButton != null &&
+                    x >= resetZoomLocation[0] - slop && x <= resetZoomLocation[0] + (resetZoomButton.width * uiScale) + slop &&
+                    y >= resetZoomLocation[1] - slop && y <= resetZoomLocation[1] + (resetZoomButton.height * uiScale) + slop) {
+
+                    // Reset font size to 100% (progress 50)
+                    fontSizeSeekBar?.progress = 50
+                    
+                    // Save preference
+                    context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putInt("webFontSize", 50)
+                        .apply()
+                    
+                    // Apply to WebView
+                    val savedTextColor = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        .getString("webTextColor", null)
+                    applyWebFontSettings(50, savedTextColor)
+
+                    // Visual feedback
+                    resetZoomButton.isPressed = true
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        resetZoomButton.isPressed = false
+                    }, 100)
+                    return
+                }
+
                 // Check if click is on font size seekbar
                 if (fontSizeSeekBar != null &&
                     x >= fontSizeLocation[0] - slop && x <= fontSizeLocation[0] + (fontSizeSeekBar.width * uiScale) + slop &&
@@ -4759,7 +4793,7 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     /**
-     * Apply text color to webpage and save preference.
+     * Apply text color to webpage AND custom UI, then save preference.
      * @param colorHex Hex color string (e.g., "#FFFFFF")
      */
     private fun applyTextColor(colorHex: String?) {
@@ -4769,10 +4803,49 @@ class DualWebViewGroup @JvmOverloads constructor(
             .putString("webTextColor", colorHex)
             .apply()
         
-        // Get current font size and apply both settings
+        // Update Custom UI (Settings & Keyboard)
+        updateCustomUiColor(colorHex)
+        
+        // Get current font size and apply both settings to WebView
         val fontSizeProgress = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
             .getInt("webFontSize", 50)
         applyWebFontSettings(fontSizeProgress, colorHex)
+    }
+
+    /**
+     * Update the color of Custom UI elements (Settings Menu and Keyboard)
+     */
+    private fun updateCustomUiColor(colorHex: String?) {
+        val color = if (colorHex != null) {
+            try {
+                Color.parseColor(colorHex)
+            } catch (e: Exception) {
+                Color.WHITE
+            }
+        } else {
+            Color.WHITE
+        }
+
+        // 1. Update Keyboard
+        customKeyboard?.setCustomTextColor(color)
+
+        // 2. Update Settings Menu (Recursively find TextViews/Buttons)
+        settingsMenu?.let { menu ->
+            updateViewColorsRecursively(menu, color)
+        }
+    }
+    
+    private fun updateViewColorsRecursively(view: View, color: Int) {
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                updateViewColorsRecursively(view.getChildAt(i), color)
+            }
+        } else if (view is TextView) {
+            // Apply to TextViews and Buttons (Button is subclass of TextView)
+            // But verify it's not one of our special icon views if they shouldn't change
+            // (FontIconView IS a TextView, so it will get colored too, which is likely desired)
+            view.setTextColor(color)
+        }
     }
 
     /**
@@ -4782,7 +4855,11 @@ class DualWebViewGroup @JvmOverloads constructor(
         val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
         val fontSizeProgress = prefs.getInt("webFontSize", 50)
         val textColor = prefs.getString("webTextColor", null)
+        
         applyWebFontSettings(fontSizeProgress, textColor)
+        
+        // Also ensure UI is synced (though this is mostly for initial load)
+        updateCustomUiColor(textColor) 
     }
 
     override fun onAttachedToWindow() {

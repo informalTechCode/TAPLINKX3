@@ -32,6 +32,18 @@ class CustomKeyboardView @JvmOverloads constructor(
     // Add these properties to track the current position pre-commit
     private var tempRow = 0
     private var tempColumn = 0
+    
+    // Dynamic text color support
+    private var defaultTextColor: Int = Color.WHITE
+    
+    fun setCustomTextColor(color: Int) {
+        defaultTextColor = color
+        // Refresh all keys with new color
+        keys.forEach { it.setTextColor(color) }
+        updateKeyFocus()
+    }
+
+    fun getCustomTextColor(): Int = defaultTextColor
 
 
     private var isAnchoredMode = false
@@ -258,7 +270,7 @@ class CustomKeyboardView @JvmOverloads constructor(
                 // buttons are detached, and attempting to manipulate their background
                 // triggers a crash.
                 button.setBackgroundColor(Color.DKGRAY)
-                button.setTextColor(Color.WHITE)
+                button.setTextColor(defaultTextColor)
             }
 
             when (buttonId) {
@@ -447,7 +459,7 @@ class CustomKeyboardView @JvmOverloads constructor(
                                 it.isClickable = false
                                 it.isFocusable = false
                                 it.setBackgroundColor(Color.DKGRAY)
-                                it.setTextColor(Color.WHITE)
+                                it.setTextColor(defaultTextColor)
                             }
                         }
                     }
@@ -494,10 +506,9 @@ class CustomKeyboardView @JvmOverloads constructor(
                 button.setTextColor(Color.BLACK)
             } else if (button == hoveredKey) {
                 button.setBackgroundColor(Color.parseColor("#4488FF"))
-                button.setTextColor(Color.WHITE)
-            } else {
+                button.setTextColor(defaultTextColor)
                 button.setBackgroundColor(Color.DKGRAY)
-                button.setTextColor(Color.WHITE)
+                button.setTextColor(defaultTextColor)
             }
             button.invalidate()
         }

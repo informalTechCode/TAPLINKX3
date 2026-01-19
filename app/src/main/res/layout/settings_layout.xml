@@ -213,6 +213,19 @@
             android:thumbTint="#FFFFFF"
             android:progressBackgroundTint="#40FFFFFF"/>
 
+        <Button
+            android:id="@+id/btnResetWebZoom"
+            android:layout_width="match_parent"
+            android:layout_height="28dp"
+            android:text="Reset Zoom"
+            android:textColor="#82B1FF"
+            android:textSize="10sp"
+            android:background="@drawable/settings_outlined_button_background"
+            android:textAllCaps="false"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginBottom="8dp"/>
+
         <!-- Text Color -->
         <TextView
             android:layout_width="wrap_content"
