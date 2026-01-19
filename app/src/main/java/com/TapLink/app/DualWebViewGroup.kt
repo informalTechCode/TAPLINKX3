@@ -764,6 +764,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
         }
 
+
         // Configure SurfaceView for right eye mirroring
         rightEyeView.apply {
             isClickable = false
@@ -794,6 +795,8 @@ class DualWebViewGroup @JvmOverloads constructor(
                 }
             })
         }
+
+
 
 
 
@@ -5430,6 +5433,75 @@ class DualWebViewGroup @JvmOverloads constructor(
     fun hideMediaControls() {
         post {
             maskMediaControlsContainer.visibility = View.GONE
+        }
+    }
+
+    fun injectLocation(latitude: Double, longitude: Double) {
+        val script = """
+            (function() {
+                // Store the position globally so it persists
+                window.__injectedPosition = {
+                    coords: {
+                        latitude: $latitude,
+                        longitude: $longitude,
+                        accuracy: 5.0,
+                        altitude: null,
+                        altitudeAccuracy: null,
+                        heading: null,
+                        speed: null
+                    },
+                    timestamp: new Date().getTime()
+                };
+                
+                // 1. Mock Permissions API to always return 'granted'
+                if (navigator.permissions) {
+                    var originalQuery = navigator.permissions.query.bind(navigator.permissions);
+                    navigator.permissions.query = function(parameters) {
+                        if (parameters.name === 'geolocation') {
+                            return Promise.resolve({ state: 'granted', onchange: null });
+                        }
+                        return originalQuery(parameters);
+                    };
+                }
+                
+                // 2. Override Geolocation API using defineProperty for robustness
+                var mockGeolocation = {
+                    getCurrentPosition: function(success, error, options) {
+                        setTimeout(function() {
+                            success(window.__injectedPosition);
+                        }, 10);
+                    },
+                    watchPosition: function(success, error, options) {
+                        var watchId = Math.floor(Math.random() * 10000);
+                        setTimeout(function() {
+                            success(window.__injectedPosition);
+                        }, 10);
+                        return watchId;
+                    },
+                    clearWatch: function(id) {
+                        // Do nothing
+                    }
+                };
+                
+                try {
+                    Object.defineProperty(navigator, 'geolocation', {
+                        value: mockGeolocation,
+                        writable: false,
+                        configurable: true
+                    });
+                } catch (e) {
+                    // Fallback if defineProperty fails
+                    navigator.geolocation.getCurrentPosition = mockGeolocation.getCurrentPosition;
+                    navigator.geolocation.watchPosition = mockGeolocation.watchPosition;
+                    navigator.geolocation.clearWatch = mockGeolocation.clearWatch;
+                }
+                
+                console.log("[TapLink] Location injected: " + $latitude + ", " + $longitude);
+            })();
+        """.trimIndent()
+        
+        post {
+            webView.evaluateJavascript(script, null)
         }
     }
 

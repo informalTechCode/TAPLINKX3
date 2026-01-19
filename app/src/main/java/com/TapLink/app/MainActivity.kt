@@ -74,6 +74,7 @@ import kotlin.math.asin
 import kotlin.math.atan2
 import com.ffalconxr.mercury.ipc.Launcher
 import com.ffalconxr.mercury.ipc.helpers.RingIPCHelper
+import com.ffalconxr.mercury.ipc.helpers.GPSIPCHelper
 import com.ffalcon.mercury.android.sdk.util.DeviceUtil
 import androidx.core.content.edit
 
@@ -161,6 +162,9 @@ class MainActivity : AppCompatActivity(),
     private var lastKnownWebViewX = 0f
     private var lastKnownWebViewY = 0f
     private var cursorJustAppeared = false // Track if cursor just appeared
+
+    private var lastGpsLat: Double? = null
+    private var lastGpsLon: Double? = null
 
 
     private var currentVelocityX = 0f
@@ -343,13 +347,28 @@ class MainActivity : AppCompatActivity(),
                     }
 
                     else -> {
-                        // Log any non-quaternion events in detail
-                        DebugLog.d("RingData", """
-                        New Ring Event:
-                        Type: $datatype
-                        Raw data: ${response.data}
-                        Available keys: ${jo.keys().asSequence().toList()}
-                    """.trimIndent())
+                        // Check for GPS data
+                        if (jo.has("mLatitude") && jo.has("mLongitude") && jo.has("mAltitude")) {
+                            val mLatitude = jo.getDouble("mLatitude")
+                            val mLongitude = jo.getDouble("mLongitude")
+                            
+                            // Save for page reloads
+                            lastGpsLat = mLatitude
+                            lastGpsLon = mLongitude
+
+                            // Inject location into WebView on UI thread
+                            runOnUiThread {
+                                dualWebViewGroup.injectLocation(mLatitude, mLongitude)
+                            }
+                        } else {
+                            // Log any non-quaternion events in detail
+                            DebugLog.d("RingData", """
+                            New Ring Event:
+                            Type: $datatype
+                            Raw data: ${response.data}
+                            Available keys: ${jo.keys().asSequence().toList()}
+                        """.trimIndent())
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -416,6 +435,7 @@ class MainActivity : AppCompatActivity(),
         mainContainer = findViewById(R.id.mainContainer)
 
         initializeRing()
+        GPSIPCHelper.registerGPSInfo(this)
 
         onBackPressedDispatcher.addCallback(this, onBackPressedCallback)
 
@@ -3155,6 +3175,11 @@ class MainActivity : AppCompatActivity(),
                     if (url != null && !url.startsWith("about:blank")) {
                         lastValidUrl = url
                         view?.visibility = View.INVISIBLE
+                        
+                        // Inject location early so it's available before page JS runs
+                        if (lastGpsLat != null && lastGpsLon != null) {
+                            dualWebViewGroup.injectLocation(lastGpsLat!!, lastGpsLon!!)
+                        }
                     } else if (url?.startsWith("about:blank") == true && lastValidUrl != null) {
                         // Cancel about:blank load immediately
                         view?.stopLoading()
@@ -3175,6 +3200,11 @@ class MainActivity : AppCompatActivity(),
                         
                         // Re-apply saved font settings to new page
                         dualWebViewGroup.reapplyWebFontSettings()
+
+                        // Inject last known location if available
+                        if (lastGpsLat != null && lastGpsLon != null) {
+                            dualWebViewGroup.injectLocation(lastGpsLat!!, lastGpsLon!!)
+                        }
 
                         // Inject media listeners with enhanced YouTube support
                         view?.evaluateJavascript("""
@@ -3366,13 +3396,8 @@ class MainActivity : AppCompatActivity(),
                 }
 
                 override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
-                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                        callback.invoke(origin, true, false)
-                    } else {
-                        pendingGeolocationCallback = callback
-                        pendingGeolocationOrigin = origin
-                        requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), LOCATION_PERMISSION_REQUEST_CODE)
-                    }
+                    // Always grant permission for WebView content so our injected GPS logic takes over
+                    callback.invoke(origin, true, false)
                 }
 
                 // From second client
@@ -3836,15 +3861,7 @@ class MainActivity : AppCompatActivity(),
                     )
                 }
             }
-            LOCATION_PERMISSION_REQUEST_CODE -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    pendingGeolocationCallback?.invoke(pendingGeolocationOrigin, true, false)
-                } else {
-                    pendingGeolocationCallback?.invoke(pendingGeolocationOrigin, false, false)
-                }
-                pendingGeolocationCallback = null
-                pendingGeolocationOrigin = null
-            }
+
         }
     }
 
@@ -4564,6 +4581,7 @@ class MainActivity : AppCompatActivity(),
         sensorManager.unregisterListener(sensorEventListener)
         mLauncher.removeOnResponseListener(ringResponseListener)
         RingIPCHelper.unRegisterRingInfo(this)
+        GPSIPCHelper.unRegisterGPSInfo(this)
         mLauncher.disConnect()
     }
 

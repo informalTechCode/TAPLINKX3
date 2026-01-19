@@ -79,6 +79,7 @@ dependencies {
 
     // Local AARs
     implementation(files("libs/MercuryAndroidSDK-v0.2.2-20250717110238_48b655b3.aar"))
+    implementation(files("libs/RayNeoIPCSDK-For-Android-V0.1.0-20231128201840_9b41f025.aar"))
     implementation(fileTree("libs"))
 
     // OkHttp for API requests
