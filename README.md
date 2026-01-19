@@ -8,14 +8,19 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
 
 - **Dual-eye rendering** that mirrors a single `WebView` into a left-eye clip with a cursor and a right-eye `SurfaceView` preview.
 - **Custom keyboard** with anchored and focus-driven modes, supporting casing toggles, symbol layouts, and dynamic buttons.
+- **Voice Control** integrated with Groq API for high-accuracy speech-to-text input.
+- **UI Customization** allowing interface scaling, manual screen positioning, and custom font sizes/colors.
 - **Persistent bookmarks** managed through `BookmarksView` with storage handled by `BookmarkManager`.
 
 ## Useful Features
 
-- **Anchored Mode (3DoF)**: Clicking the anchor icon toggles anchored mode on and off. Anchored mode provides 3 degrees of freedom.
+- **Anchored Mode (3DoF)**: Clicking the anchor icon toggles anchored mode on and off. Anchored mode provides 3 degrees of freedom with adjustable smoothness.
 - **Temple Gestures (Anchored Mode)**:
   - **Double Tap (Right Temple)**: Go back.
   - **Triple Tap (Right Temple)**: Re-center the display.
+- **Media Mode (Blank Screen)**: Toggle the "Eye" icon to black out the screen for audio-only consumption while keeping media controls accessible.
+- **Scroll Mode**: Automatically hides UI elements for immersive reading; restore by tapping the transparent button in the bottom-right.
+- **Enhanced Settings**: Centralized control for volume, brightness, smoothness, screen size, and typography.
 - **Screen Drift**: If you run into a screen drift issue, reboot the glasses.
 - **Brightness Limitation**: Due to a RayNeo limitation, we do not recommend running the glasses at max brightness while using TapLink X3.
 - **Location Services**: To use location features in web apps, ensure the **RayNeo AR companion app** on your phone has **Location permission** granted. The glasses stream GPS data from the connected phone.
@@ -24,7 +29,7 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
 
 - [Setup and Build](docs/SETUP.md) - Instructions for environment setup, building, and installing.
 - [Architecture Overview](docs/ARCHITECTURE.md) - Details on the app structure, data flow, and bookmark management.
-- [Input Systems](docs/INPUT_SYSTEM.md) - Explanation of anchored and focus-driven keyboard modes.
+- [Input Systems](docs/INPUT_SYSTEM.md) - Explanation of anchored, focus-driven, and voice input modes.
 - [Project History](docs/HISTORY.md) - Release notes and credit history.
 
 ![TapLink X3 app icon](app/src/main/ic_launcher-playstore.png)

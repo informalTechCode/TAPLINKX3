@@ -6,13 +6,17 @@ The original TapLink builds and documentation were published through the release
 
 - **Source code**: Repository current
 - **New features**:
-  - Enhanced Input Handling: Improved text injection and cursor movement.
-  - Stability Improvements: Various bug fixes and performance enhancements.
+  - **Voice Control**: Integrated Groq API for high-accuracy speech-to-text (requires API key).
+  - **Enhanced Settings UI**: Redesigned settings menu with 3 columns for easier access.
+  - **UI Customization**: Added sliders for Interface Scale, Font Size, and Text Color customization.
+  - **Manual Screen Positioning**: New sliders to reposition the screen horizontally and vertically (available when UI Scale < 100% in non-anchored mode).
+  - **Anchor Smoothness**: Adjustable smoothing factor for anchored mode to balance responsiveness vs. stability.
+  - **Media Mode**: "Blank Screen" toggle to turn off the display for audio consumption while keeping media controls accessible.
+  - **Netflix Support**: Fixed Widevine DRM issues by enforcing default User Agent for Netflix.
 - **Maintenance**:
-  - Code Cleanup: Removed unused code and comments.
-  - Dependency Updates: Updated internal library references.
-  - Refactored codebase to use consistent package naming.
-  - Improved constant management.
+  - **Stability Improvements**: Various bug fixes and performance enhancements.
+  - **Code Cleanup**: Removed unused code, including `DeviceUtil` and legacy navigation logic.
+  - **Refactoring**: Standardized package naming to `com.TapLinkX3.app`.
 
 ### TapLink 1.2.1
 

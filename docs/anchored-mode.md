@@ -18,6 +18,15 @@ stateDiagram-v2
     Dispatch --> Idle
 ```
 
+## Smoothing Configuration
+
+Anchored mode tracking can be customized via the **Anchor Smoothness** slider in the Settings menu.
+
+- **Responsiveness**: Lower values (left) result in faster, raw cursor movement.
+- **Stability**: Higher values (right) apply stronger filtering to eliminate jitter, creating a fluid, "heavy" cursor feel.
+
+The smoothing logic uses spherical linear interpolation (SLERP) for rotation and double exponential smoothing for velocity to ensure stability without introducing perceived latency.
+
 ## Listener routing
 
 Once `handleAnchoredTap` is invoked, `CustomKeyboardView` resolves the button under the projected coordinates and emits an `OnKeyboardActionListener` callback. `MainActivity` implements this interface to distribute the action to the active surface (bookmark editor, URL bar, or WebView). 【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L173-L260】【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3848-L3940】
