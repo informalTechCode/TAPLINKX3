@@ -29,4 +29,12 @@
     <string name="fa_glasses">&#xf530;</string>          <!-- Glasses -->
     <string name="fa_hand">&#xf256;</string>             <!-- Hand/Scroll Mode -->
     <string name="fa_expand">&#xf065;</string>           <!-- Fullscreen/Expand -->
+    
+    <!-- Media Control Icons -->
+    <string name="fa_play">&#xf04b;</string>             <!-- Play -->
+    <string name="fa_pause">&#xf04c;</string>            <!-- Pause -->
+    <string name="fa_backward_step">&#xf048;</string>    <!-- Previous Track -->
+    <string name="fa_forward_step">&#xf051;</string>     <!-- Next Track -->
+    <string name="fa_backward">&#xf04a;</string>         <!-- 10s Back -->
+    <string name="fa_forward">&#xf04e;</string>          <!-- 10s Forward -->
 </resources>

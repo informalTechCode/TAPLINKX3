@@ -671,10 +671,12 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     // Mask mode UI elements
     private lateinit var maskMediaControlsContainer: LinearLayout
-    private lateinit var btnMaskPlay: ImageButton
-    private lateinit var btnMaskPause: ImageButton
-    private lateinit var btnMaskPrev: ImageButton
-    private lateinit var btnMaskNext: ImageButton
+    private lateinit var btnMaskPrevTrack: FontIconView  // Skip to previous song
+    private lateinit var btnMaskPrev: FontIconView        // 10s back
+    private lateinit var btnMaskPlay: FontIconView
+    private lateinit var btnMaskPause: FontIconView
+    private lateinit var btnMaskNext: FontIconView        // 10s forward
+    private lateinit var btnMaskNextTrack: FontIconView  // Skip to next song
     private lateinit var btnMaskUnmask: ImageButton
 
 
@@ -750,6 +752,32 @@ class DualWebViewGroup @JvmOverloads constructor(
                     updateScrollBarThumbs(0, 0)
                     // REMOVED: updateScrollBarsVisibility() - moved to onPageFinished manually
                     // updateScrollBarsVisibility() 
+                }
+            }
+
+            webChromeClient = object : android.webkit.WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    updateLoadingProgress(newProgress)
+                }
+
+                override fun onJsAlert(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
+                    showAlertDialog(message ?: "") { result?.confirm() }
+                    return true
+                }
+
+                override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
+                    showConfirmDialog(message ?: "", { result?.confirm() }, { result?.cancel() })
+                    return true
+                }
+
+                override fun onJsPrompt(view: WebView?, url: String?, message: String?, defaultValue: String?, result: android.webkit.JsPromptResult?): Boolean {
+                    showPromptDialog(message ?: "", defaultValue, { input -> result?.confirm(input) }, { result?.cancel() })
+                    return true
+                }
+
+                override fun onJsBeforeUnload(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
+                    showConfirmDialog(message ?: "Are you sure you want to leave this page?", { result?.confirm() }, { result?.cancel() })
+                    return true
                 }
             }
         }
@@ -1538,7 +1566,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             
             // Iterate through children (the media buttons)
             for (i in 0 until maskMediaControlsContainer.childCount) {
-                val button = maskMediaControlsContainer.getChildAt(i) as? ImageButton ?: continue
+                val button = maskMediaControlsContainer.getChildAt(i)
                 if (button.visibility != View.VISIBLE) continue
                 
                 val btnLocation = IntArray(2)
@@ -3010,21 +3038,35 @@ class DualWebViewGroup @JvmOverloads constructor(
         return isDesktopMode
     }
 
+    fun setMobileUserAgent(ua: String) {
+        mobileUserAgent = ua
+    }
+
+    fun getDesktopUserAgent(): String {
+        return desktopUserAgent
+    }
+
     fun updateBrowsingMode(isDesktop: Boolean) {
-        //Log.d("ModeToggle", "Updating browsing mode to: ${if (isDesktop) "desktop" else "mobile"}")
+        // Log.d("ModeToggle", "Updating browsing mode to: ${if (isDesktop) "desktop" else "mobile"}")
+
         isDesktopMode = isDesktop
 
         // Step 1: Update WebView settings (user agent)
-        webView.settings.apply {
-            userAgentString = if (isDesktop) {
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-            } else {
-                "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
+        // If on Netflix, we preserve the current UA (which should be the system default) to prevent DRM errors.
+        val isNetflix = webView.url?.contains("netflix.com") == true
+
+        if (!isNetflix) {
+            webView.settings.apply {
+                userAgentString = if (isDesktop) {
+                    desktopUserAgent
+                } else {
+                    mobileUserAgent
+                }
+                @Suppress("DEPRECATION")
+                defaultZoom = WebSettings.ZoomDensity.MEDIUM
+                loadWithOverviewMode = true
+                useWideViewPort = true
             }
-            @Suppress("DEPRECATION")
-            defaultZoom = WebSettings.ZoomDensity.MEDIUM
-            loadWithOverviewMode = true
-            useWideViewPort = true
         }
 
         // Step 2: Update viewport using JavaScript without forcing a complete reload
@@ -5273,44 +5315,82 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
         maskOverlay.addView(maskMediaControlsContainer, controlsParams)
 
-        // Controls
-        btnMaskPrev = createMediaButton(R.drawable.ic_media_skip_previous) {
+        // Controls - Order: Prev Track, 10s Back, Play, Pause, 10s Forward, Next Track
+        btnMaskPrevTrack = createMediaButton(R.string.fa_backward_step) {
+            // Try to click previous track button (works on YouTube, Spotify, etc.)
+            webView.evaluateJavascript("""
+                (function() {
+                    // Try common previous track selectors
+                    var prevBtn = document.querySelector('.ytp-prev-button') || 
+                                  document.querySelector('[aria-label*="previous" i]') ||
+                                  document.querySelector('[title*="previous" i]') ||
+                                  document.querySelector('button[data-testid="control-button-skip-back"]');
+                    if (prevBtn) { prevBtn.click(); return; }
+                    // Fallback: Skip to beginning
+                    var media = document.querySelector('video, audio');
+                    if (media) media.currentTime = 0;
+                })();
+            """.trimIndent(), null)
+        }
+        btnMaskPrev = createMediaButton(R.string.fa_backward) {
             webView.evaluateJavascript("document.querySelector('video, audio').currentTime -= 10;", null)
         }
-        btnMaskPlay = createMediaButton(R.drawable.ic_media_play) {
+        btnMaskPlay = createMediaButton(R.string.fa_play) {
             webView.evaluateJavascript("document.querySelector('video, audio').play();", null)
             // Immediately update button visibility for responsive UI
             btnMaskPlay.visibility = View.GONE
             btnMaskPause.visibility = View.VISIBLE
         }
-        btnMaskPause = createMediaButton(R.drawable.ic_media_pause) {
+        btnMaskPause = createMediaButton(R.string.fa_pause) {
             webView.evaluateJavascript("document.querySelector('video, audio').pause();", null)
             // Immediately update button visibility for responsive UI
             btnMaskPause.visibility = View.GONE
             btnMaskPlay.visibility = View.VISIBLE
         }
-        btnMaskNext = createMediaButton(R.drawable.ic_media_skip_next) {
+        btnMaskNext = createMediaButton(R.string.fa_forward) {
             webView.evaluateJavascript("document.querySelector('video, audio').currentTime += 10;", null)
+        }
+        btnMaskNextTrack = createMediaButton(R.string.fa_forward_step) {
+            // Try to click next track button (works on YouTube, Spotify, etc.)
+            webView.evaluateJavascript("""
+                (function() {
+                    // Try common next track selectors
+                    var nextBtn = document.querySelector('.ytp-next-button') || 
+                                  document.querySelector('[aria-label*="next" i]') ||
+                                  document.querySelector('[title*="next" i]') ||
+                                  document.querySelector('button[data-testid="control-button-skip-forward"]');
+                    if (nextBtn) { nextBtn.click(); return; }
+                    // Fallback: Skip to end (triggers autoplay to next)
+                    var media = document.querySelector('video, audio');
+                    if (media) media.currentTime = media.duration;
+                })();
+            """.trimIndent(), null)
         }
 
         btnMaskPause.visibility = View.GONE // Initially show Play
 
+        maskMediaControlsContainer.addView(btnMaskPrevTrack)
         maskMediaControlsContainer.addView(btnMaskPrev)
         maskMediaControlsContainer.addView(btnMaskPlay)
         maskMediaControlsContainer.addView(btnMaskPause)
         maskMediaControlsContainer.addView(btnMaskNext)
+        maskMediaControlsContainer.addView(btnMaskNextTrack)
     }
 
-    private fun createMediaButton(iconRes: Int, onClick: () -> Unit): ImageButton {
-        return ImageButton(context).apply {
-            setImageResource(iconRes)
+    private fun createMediaButton(iconRes: Int, onClick: () -> Unit): FontIconView {
+        return FontIconView(context).apply {
+            setText(iconRes)
             setBackgroundResource(R.drawable.nav_button_background)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            gravity = Gravity.CENTER
             setPadding(8, 8, 8, 8)
             layoutParams = LinearLayout.LayoutParams(40, 40).apply {
                 leftMargin = 4
                 rightMargin = 4
             }
+            isClickable = true
+            isFocusable = true
             setOnClickListener { onClick() }
         }
     }
