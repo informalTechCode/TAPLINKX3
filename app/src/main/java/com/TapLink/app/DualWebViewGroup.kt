@@ -63,7 +63,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         fun getVerticalScrollOffset() = super.computeVerticalScrollOffset()
     }
 
-    data class BrowserWindow(
+    private data class BrowserWindow(
         val id: String = java.util.UUID.randomUUID().toString(),
         val webView: InternalWebView,
         var thumbnail: Bitmap? = null,
@@ -170,8 +170,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var isBookmarkEditing = false
 
-    private var mobileUserAgent: String = webView.settings.userAgentString
-    private var desktopUserAgent: String = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+    private lateinit var mobileUserAgent: String
+    private val desktopUserAgent: String = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
 
     private val verticalScrollFraction = 0.25f // Scroll vertically by 25% of the viewport per tap
 
@@ -999,6 +999,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         val initialWebView = InternalWebView(context)
         webView = initialWebView
         configureWebView(webView) // Local basic config
+        mobileUserAgent = webView.settings.userAgentString
 
         // We can't call windowCallback here as it's not set yet.
         // We assume the initial WebView gets configured by MainActivity in onCreate via getWebView().
