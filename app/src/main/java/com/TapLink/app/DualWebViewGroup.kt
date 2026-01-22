@@ -63,7 +63,24 @@ class DualWebViewGroup @JvmOverloads constructor(
         fun getVerticalScrollOffset() = super.computeVerticalScrollOffset()
     }
 
-    private val webView = InternalWebView(context)
+    data class BrowserWindow(
+        val id: String = java.util.UUID.randomUUID().toString(),
+        val webView: InternalWebView,
+        var thumbnail: Bitmap? = null,
+        var title: String = "New Window"
+    )
+
+    private val windows = mutableListOf<BrowserWindow>()
+    private var activeWindowId: String? = null
+
+    interface WindowCallback {
+        fun onWindowCreated(webView: WebView)
+        fun onWindowSwitched(webView: WebView)
+    }
+
+    var windowCallback: WindowCallback? = null
+
+    private var webView: InternalWebView
     private val rightEyeView: SurfaceView = SurfaceView(context)
     val keyboardContainer: FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.TRANSPARENT)
@@ -703,9 +720,292 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var hScrollThumb: View
     private var vScrollThumb: View
 
+    private var windowsOverviewContainer: android.widget.ScrollView? = null
+
+    fun showWindowsOverview() {
+        if (windowsOverviewContainer == null) {
+            createWindowsOverviewUI()
+        }
+
+        // Populate container with current windows
+        val container = windowsOverviewContainer?.getChildAt(0) as? LinearLayout ?: return
+        container.removeAllViews()
+
+        // Add "Add Window" button at the top
+        val addButton = FrameLayout(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 80
+            ).apply {
+                bottomMargin = 16
+            }
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#303030"))
+                cornerRadius = 16f
+            }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { createNewWindow() }
+        }
+
+        val addIcon = FontIconView(context).apply {
+            setText(R.string.fa_plus)
+            textSize = 24f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        }
+        addButton.addView(addIcon)
+        container.addView(addButton)
+
+        // Add window items
+        windows.forEach { win ->
+            val item = FrameLayout(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, 200 // Fixed height for thumbnail
+                ).apply {
+                    bottomMargin = 16
+                }
+                background = GradientDrawable().apply {
+                    setColor(if (win.id == activeWindowId) Color.parseColor("#444444") else Color.parseColor("#202020"))
+                    setStroke(2, if (win.id == activeWindowId) Color.parseColor("#4488FF") else Color.parseColor("#404040"))
+                    cornerRadius = 16f
+                }
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { switchToWindow(win.id) }
+            }
+
+            // Thumbnail (Placeholder or actual bitmap)
+            val thumbView = ImageView(context).apply {
+                if (win.thumbnail != null) {
+                    setImageBitmap(win.thumbnail)
+                } else {
+                    setBackgroundColor(Color.BLACK)
+                }
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT).apply {
+                    setMargins(4, 4, 4, 4)
+                }
+                alpha = 0.5f
+            }
+            item.addView(thumbView)
+
+            // Title
+            val titleView = TextView(context).apply {
+                text = win.title
+                textSize = 16f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.BOTTOM or Gravity.START
+                layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+                    leftMargin = 16
+                    bottomMargin = 16
+                }
+                setShadowLayer(4f, 0f, 0f, Color.BLACK)
+            }
+            item.addView(titleView)
+
+            // Delete button
+            val deleteBtn = FontIconView(context).apply {
+                setText(R.string.fa_trash)
+                textSize = 16f
+                setTextColor(Color.parseColor("#FF4444"))
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#CC000000"))
+                    shape = GradientDrawable.OVAL
+                }
+                layoutParams = FrameLayout.LayoutParams(48, 48).apply {
+                    gravity = Gravity.TOP or Gravity.END
+                    topMargin = 8
+                    rightMargin = 8
+                }
+                setOnClickListener {
+                    closeWindow(win.id)
+                }
+            }
+            item.addView(deleteBtn)
+
+            container.addView(item)
+        }
+
+        windowsOverviewContainer?.visibility = View.VISIBLE
+        windowsOverviewContainer?.bringToFront()
+        webView.visibility = View.GONE
+
+        requestLayout()
+        invalidate()
+    }
+
+    fun hideWindowsOverview() {
+        windowsOverviewContainer?.visibility = View.GONE
+        webView.visibility = View.VISIBLE
+        requestLayout()
+        invalidate()
+    }
+
+    private fun createWindowsOverviewUI() {
+        windowsOverviewContainer = android.widget.ScrollView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(640 - toggleBarWidthPx, LayoutParams.MATCH_PARENT).apply {
+                leftMargin = toggleBarWidthPx
+                bottomMargin = navBarHeightPx
+            }
+            setBackgroundColor(Color.parseColor("#101010"))
+            visibility = View.GONE
+            elevation = 1500f
+        }
+
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+            setPadding(16, 16, 16, 16)
+        }
+
+        windowsOverviewContainer?.addView(content)
+        leftEyeUIContainer.addView(windowsOverviewContainer)
+    }
+
+    fun toggleWindowMode() {
+        if (windowsOverviewContainer?.visibility == View.VISIBLE) {
+            hideWindowsOverview()
+        } else {
+            // Capture thumbnail of current window before showing overview
+            val currentWin = windows.find { it.id == activeWindowId }
+            if (currentWin != null) {
+                try {
+                    // Simple capture of the webview drawing cache or similar
+                    // Using drawing cache is deprecated but works for simple needs, or PixelCopy/draw
+                    // Here we'll use a simple draw to canvas if possible
+                    val w = webView.width
+                    val h = webView.height
+                    if (w > 0 && h > 0) {
+                        val bmp = Bitmap.createBitmap(w / 4, h / 4, Bitmap.Config.RGB_565)
+                        val c = Canvas(bmp)
+                        c.scale(0.25f, 0.25f)
+                        webView.draw(c)
+                        currentWin.thumbnail = bmp
+                    }
+                } catch (e: Exception) {
+                    Log.e("Windows", "Failed to capture thumbnail", e)
+                }
+                currentWin.title = webView.title ?: "Window"
+            }
+            showWindowsOverview()
+        }
+    }
+
+    fun createNewWindow() {
+        val newWebView = InternalWebView(context)
+        configureWebView(newWebView)
+        val newWindow = BrowserWindow(webView = newWebView, title = "New Window")
+
+        // Notify MainActivity to configure the new WebView (clients, settings, etc.)
+        windowCallback?.onWindowCreated(newWebView)
+
+        windows.add(newWindow)
+        switchToWindow(newWindow.id)
+    }
+
+    fun switchToWindow(id: String) {
+        val targetWindow = windows.find { it.id == id } ?: return
+
+        if (activeWindowId == id) {
+            // Already active, just hide overview if visible
+            hideWindowsOverview()
+            return
+        }
+
+        // Remove old webview from layout
+        leftEyeUIContainer.removeView(webView)
+
+        // Switch active window
+        activeWindowId = id
+        webView = targetWindow.webView
+
+        // Add new webview to layout at index 0 (bottom)
+        // Wait, index 0 might be wrong if there are other views.
+        // We want it to be at the bottom, but above background.
+        // In init block we added: webView, leftToggleBar, leftNavigationBar...
+        // So webView was first.
+        leftEyeUIContainer.addView(webView, 0, FrameLayout.LayoutParams(640 - toggleBarWidthPx, LayoutParams.MATCH_PARENT).apply {
+            leftMargin = toggleBarWidthPx
+            bottomMargin = navBarHeightPx
+        })
+
+        // Ensure settings are applied (zoom, font size, etc.) which might be instance specific if not global
+        // MainActivity's setup should handle most, but we might need to re-apply UI specific things
+        updateScrollBarsVisibility()
+
+        // Notify callback
+        windowCallback?.onWindowSwitched(webView)
+
+        hideWindowsOverview()
+    }
+
+    fun closeWindow(id: String) {
+        val windowToRemove = windows.find { it.id == id } ?: return
+
+        // Don't close the last window, or create a new one if we do
+        val wasActive = activeWindowId == id
+
+        windows.remove(windowToRemove)
+        windowToRemove.webView.destroy()
+        windowToRemove.thumbnail?.recycle()
+
+        if (windows.isEmpty()) {
+            createNewWindow()
+        } else if (wasActive) {
+            // Switch to the last window in the list
+            switchToWindow(windows.last().id)
+            // If overview was open, refresh it
+            if (windowsOverviewContainer?.visibility == View.VISIBLE) {
+                showWindowsOverview()
+            }
+        } else {
+            // If overview was open, refresh it
+            if (windowsOverviewContainer?.visibility == View.VISIBLE) {
+                showWindowsOverview()
+            }
+        }
+    }
+
+    private fun configureWebView(webView: WebView) {
+        webView.apply {
+            setBackgroundColor(Color.BLACK)
+            isClickable = false
+            isFocusable = false
+            isFocusableInTouchMode = false
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            layoutParams = LayoutParams(640, LayoutParams.MATCH_PARENT)
+            setOnTouchListener { _, _ ->
+                keyboardContainer.visibility == View.VISIBLE
+            }
+            setOnLongClickListener { true }
+
+            setOnScrollChangeListener { _, _, _, _, _ ->
+                if (isWebViewScrollEnabled()) {
+                    updateScrollBarThumbs(0, 0)
+                    val now = System.currentTimeMillis()
+                    if (now - lastScrollBarCheckTime > scrollBarVisibilityThrottleMs) {
+                        updateScrollBarsVisibility()
+                        lastScrollBarCheckTime = now
+                    }
+                }
+            }
+        }
+    }
 
     init {
+        // Initialize the first WebView
+        val initialWebView = InternalWebView(context)
+        webView = initialWebView
+        configureWebView(webView) // Local basic config
 
+        // We can't call windowCallback here as it's not set yet.
+        // We assume the initial WebView gets configured by MainActivity in onCreate via getWebView().
+
+        val initialWindow = BrowserWindow(webView = initialWebView, title = "Home")
+        windows.add(initialWindow)
+        activeWindowId = initialWindow.id
 
 
         val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
@@ -731,87 +1031,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
         }
 
-        // Configure WebView for left eye
-        webView.apply {
-            setBackgroundColor(Color.BLACK)
-            isClickable = false
-            isFocusable = false
-            isFocusableInTouchMode = false
-
-            setLayerType(View.LAYER_TYPE_HARDWARE, null)
-
-            // Prevent white flash during load
-
-
-            //setBackgroundColor(Color.TRANSPARENT)  // Changed to TRANSPARENT to allow mirroring
-            layoutParams = LayoutParams(640, LayoutParams.MATCH_PARENT)
-            setOnTouchListener { _, _ ->
-                keyboardContainer.visibility == View.VISIBLE
-            }
-            setOnLongClickListener { true }
-
-            // Add scroll listener to update thumbs
-            setOnScrollChangeListener { _, _, _, _, _ ->
-                if (isWebViewScrollEnabled()) {
-                    updateScrollBarThumbs(0, 0)
-                    val now = System.currentTimeMillis()
-                    if (now - lastScrollBarCheckTime > scrollBarVisibilityThrottleMs) {
-                        updateScrollBarsVisibility()
-                        lastScrollBarCheckTime = now
-                    }
-                }
-            }
-
-            webChromeClient = object : android.webkit.WebChromeClient() {
-                override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    updateLoadingProgress(newProgress)
-                }
-
-                override fun onJsAlert(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
-                    showAlertDialog(message ?: "") { result?.confirm() }
-                    return true
-                }
-
-                override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
-                    showConfirmDialog(message ?: "", { result?.confirm() }, { result?.cancel() })
-                    return true
-                }
-
-                override fun onJsPrompt(view: WebView?, url: String?, message: String?, defaultValue: String?, result: android.webkit.JsPromptResult?): Boolean {
-                    showPromptDialog(message ?: "", defaultValue, { input -> result?.confirm(input) }, { result?.cancel() })
-                    return true
-                }
-
-                override fun onJsBeforeUnload(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
-                    showConfirmDialog(message ?: "Are you sure you want to leave this page?", { result?.confirm() }, { result?.cancel() })
-                    return true
-                }
-            }
-
-            webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    super.onPageFinished(view, url)
-                    
-                    // Re-apply font settings
-                    val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-                    val savedFontSize = prefs.getInt("webFontSize", 50)
-                    val savedTextColor = prefs.getString("webTextColor", null)
-                    applyWebFontSettings(savedFontSize, savedTextColor)
-                    
-                    // Re-apply zoom
-                     webView.evaluateJavascript("""
-                        (function() {
-                            document.body.style.zoom = "$currentWebZoom";
-                        })();
-                    """, null)
-                    
-                    this@DualWebViewGroup.postDelayed({
-                        updateScrollBarsVisibility()
-                        lastScrollBarCheckTime = System.currentTimeMillis()
-                    }, 100)
-                }
-            }
-        }
+        // Initial WebView configuration moved to configureWebView() and MainActivity
 
 
         // Configure SurfaceView for right eye mirroring
@@ -4020,6 +4240,28 @@ class DualWebViewGroup @JvmOverloads constructor(
         val leftMaskButton         = leftToggleBar.findViewById<FontIconView>(R.id.btnMask)
         val leftAnchorButton       = leftToggleBar.findViewById<FontIconView>(R.id.btnAnchor)
 
+        // Create Windows button programmatically since it's not in XML
+        val leftWindowsButton = FontIconView(context).apply {
+            id = View.generateViewId() // Generate an ID for the view
+            tag = "btnWindows" // Tag for identification
+            configureToggleButton(R.string.fa_window_restore)
+        }
+
+        // Insert it into toggle bar - we need to add it to the layout
+        if (leftToggleBar is ViewGroup) {
+            // Find where to insert - maybe after dashboard button?
+            // Actually, toggle_bar.xml is a LinearLayout (based on usage).
+            // We can just addView. But we need to insert it in the correct order visually.
+            // XML has: Mode, YouTube, Bookmarks, ZoomOut, ZoomIn, Mask, Anchor.
+            // Let's put Windows button after Bookmarks.
+            val index = (leftToggleBar as ViewGroup).indexOfChild(leftBookmarksButton) + 1
+            if (index > 0) {
+                (leftToggleBar as ViewGroup).addView(leftWindowsButton, index)
+            } else {
+                (leftToggleBar as ViewGroup).addView(leftWindowsButton)
+            }
+        }
+
 
         // Calculate positioning constants
         val iconPadding = 4.dp()
@@ -4027,6 +4269,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftModeToggleButton,
             leftDashboardButton,
             leftBookmarksButton,
+            leftWindowsButton,
             leftZoomOutButton,
             leftZoomInButton,
             leftMaskButton,
@@ -4085,6 +4328,11 @@ class DualWebViewGroup @JvmOverloads constructor(
             leftAnchorButton to R.id.btnAnchor
         ).forEach { (button, id) ->
             button?.setOnClickListener { handleLeftMenuAction(id) }
+        }
+
+        leftWindowsButton.setOnClickListener {
+            showButtonClickFeedback(leftWindowsButton)
+            toggleWindowMode()
         }
 
 

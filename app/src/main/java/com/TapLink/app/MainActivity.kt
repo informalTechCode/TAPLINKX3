@@ -106,7 +106,8 @@ class MainActivity : AppCompatActivity(),
     BookmarkKeyboardListener,
     LinkEditingListener,
     DualWebViewGroup.MaskToggleListener,
-    DualWebViewGroup.AnchorToggleListener
+    DualWebViewGroup.AnchorToggleListener,
+    DualWebViewGroup.WindowCallback
 {
 
     private val H2V_GAIN = 1.0f   // how strongly horizontal motion affects vertical scroll
@@ -414,6 +415,7 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.listener = this
         dualWebViewGroup.navigationListener = this
         dualWebViewGroup.maskToggleListener = this
+        dualWebViewGroup.windowCallback = this
         
         // Load saved anchored mode state
         isAnchored = getSharedPreferences(prefsName, MODE_PRIVATE)
@@ -2716,12 +2718,64 @@ class MainActivity : AppCompatActivity(),
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
+        configureWebView(webView)
+    }
+
+    override fun onWindowCreated(webView: WebView) {
+        configureWebView(webView)
+        // Load default URL for new window
+        webView.loadUrl("file:///android_asset/AR_Dashboard_Landscape_Sidebar.html")
+    }
+
+    override fun onWindowSwitched(webView: WebView) {
+        this.webView = webView
+
+        // Re-attach touch listener to new WebView
+        this.webView.setOnTouchListener { _, event ->
+            // Replicated touch listener logic
+            if (event.action == MotionEvent.ACTION_DOWN ||
+                event.action == MotionEvent.ACTION_UP ||
+                event.action == MotionEvent.ACTION_CANCEL) {
+                pendingTouchRunnable?.let { pendingTouchHandler?.removeCallbacks(it) }
+                pendingTouchRunnable = null
+            }
+
+            if (isAnchored && isKeyboardVisible) {
+                return@setOnTouchListener false
+            }
+
+            if (isSimulatingTouchEvent) {
+                return@setOnTouchListener false
+            }
+
+            if (isKeyboardVisible) {
+                return@setOnTouchListener true
+            }
+
+            val handled = isGestureHandled
+
+            if (dualWebViewGroup.isSettingsVisible()) {
+                return@setOnTouchListener isCursorVisible
+            }
+
+            if (dualWebViewGroup.isInScrollMode() && isAnchored) {
+                return@setOnTouchListener false
+            }
+
+            if (isCursorVisible) {
+                return@setOnTouchListener true
+            }
+
+            handled
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun configureWebView(webView: WebView) {
         // First check if speech recognition is available
         val speechRecognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
         val speechRecognitionAvailable = packageManager.resolveActivity(speechRecognizerIntent, 0) != null
         DebugLog.d("WebView", "Speech recognition available: $speechRecognitionAvailable")
-
-
 
         // Section 1: Basic WebView Configuration
         WebView.setWebContentsDebuggingEnabled(true)
@@ -2735,12 +2789,8 @@ class MainActivity : AppCompatActivity(),
             visibility = View.INVISIBLE
             overScrollMode = View.OVER_SCROLL_NEVER
 
-            // Ensure WebView can receive input methods
-
             // Section 2: WebView Settings Configuration
             settings.apply {
-
-
                 // JavaScript and Content Settings
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -2749,7 +2799,6 @@ class MainActivity : AppCompatActivity(),
                 javaScriptCanOpenWindowsAutomatically = false
                 mediaPlaybackRequiresUserGesture = false
 
-                // Security and Access Settings
                 // Security and Access Settings
                 allowFileAccess = true
                 allowContentAccess = true
@@ -2796,7 +2845,7 @@ class MainActivity : AppCompatActivity(),
                         "AppleWebKit/537.36 (KHTML, like Gecko) " +
                         "Chrome/$wvVersion Mobile Safari/537.36"
 
-                webView.settings.userAgentString = customUserAgent
+                settings.userAgentString = customUserAgent
 
                 // Pass the custom UA to DualWebViewGroup so it can use it for Mobile Mode
                 dualWebViewGroup.setMobileUserAgent(customUserAgent!!)
@@ -2833,12 +2882,10 @@ class MainActivity : AppCompatActivity(),
                             val desktopUA = dualWebViewGroup.getDesktopUserAgent()
                             if (view?.settings?.userAgentString != desktopUA) {
                                 view?.settings?.userAgentString = desktopUA
-                                // DebugLog.d("UserAgent", "Restored Desktop User Agent")
                             }
                         } else {
                             if (view?.settings?.userAgentString != customUserAgent && customUserAgent != null) {
                                 view?.settings?.userAgentString = customUserAgent
-                                // DebugLog.d("UserAgent", "Restored Mobile User Agent")
                             }
                         }
                     }
@@ -3187,6 +3234,48 @@ class MainActivity : AppCompatActivity(),
         @Suppress("DEPRECATION")
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
+        // Only try restoration if this is the initial window
+        if (webView == dualWebViewGroup.getWebView()) {
+            tryRestoreSession()
+        }
+
+        // Initialize AudioManager
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        // Additional WebView settings for media support
+        webView.settings.apply {
+            mediaPlaybackRequiresUserGesture = false
+            domStorageEnabled = true
+            javaScriptEnabled = true
+            @Suppress("DEPRECATION")
+            databaseEnabled = true
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            setSupportMultipleWindows(true)
+        }
+
+        logPermissionState()  // Log initial permission state
+
+        webView.addJavascriptInterface(AndroidInterface(this), "AndroidInterface")
+        // Add JavaScript interface for custom media handling if needed
+        webView.addJavascriptInterface(object {
+            @JavascriptInterface
+            fun onMediaStart(type: String) {
+                when (type) {
+                    "audio" -> audioManager?.setParameters("audio_source_record=voiceassistant")
+                    "video" -> { /* Handle camera initialization if needed */ }
+                }
+            }
+
+            @JavascriptInterface
+            fun onMediaStop() {
+                audioManager?.setParameters("audio_source_record=off")
+            }
+        }, "AndroidMediaInterface")
+
+    }
+
+    private fun tryRestoreSession() {
         // Before loading the initial page, try to restore the previous session
         DebugLog.d("WebViewDebug", "Attempting to restore previous session")
 
@@ -3227,41 +3316,6 @@ class MainActivity : AppCompatActivity(),
             DebugLog.e("WebViewDebug", "Error restoring session", e)
             webView.loadUrl("file:///android_asset/AR_Dashboard_Landscape_Sidebar.html")
         }
-
-        // Initialize AudioManager
-        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
-        // Additional WebView settings for media support
-        webView.settings.apply {
-            mediaPlaybackRequiresUserGesture = false
-            domStorageEnabled = true
-            javaScriptEnabled = true
-            @Suppress("DEPRECATION")
-            databaseEnabled = true
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            setSupportMultipleWindows(true)
-        }
-
-        logPermissionState()  // Log initial permission state
-
-        webView.addJavascriptInterface(AndroidInterface(this), "AndroidInterface")
-        // Add JavaScript interface for custom media handling if needed
-        webView.addJavascriptInterface(object {
-            @JavascriptInterface
-            fun onMediaStart(type: String) {
-                when (type) {
-                    "audio" -> audioManager?.setParameters("audio_source_record=voiceassistant")
-                    "video" -> { /* Handle camera initialization if needed */ }
-                }
-            }
-
-            @JavascriptInterface
-            fun onMediaStop() {
-                audioManager?.setParameters("audio_source_record=off")
-            }
-        }, "AndroidMediaInterface")
-
     }
 
 
