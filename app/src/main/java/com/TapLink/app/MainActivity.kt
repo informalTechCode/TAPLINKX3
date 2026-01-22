@@ -1042,7 +1042,7 @@ class MainActivity : AppCompatActivity(),
 
         // Register notification receiver
         val filter = IntentFilter(NotificationService.ACTION_NOTIFICATION_POSTED)
-        registerReceiver(notificationReceiver, filter)
+        ContextCompat.registerReceiver(this, notificationReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
         // Restart mirroring to right eye
         dualWebViewGroup.startRefreshing()
