@@ -29,6 +29,9 @@
     <string name="fa_glasses">&#xf530;</string>          <!-- Glasses -->
     <string name="fa_hand">&#xf256;</string>             <!-- Hand/Scroll Mode -->
     <string name="fa_expand">&#xf065;</string>           <!-- Fullscreen/Expand -->
+    <string name="fa_window_restore">&#xf2d2;</string>   <!-- Windows -->
+    <string name="fa_plus">&#xf067;</string>             <!-- Add Window -->
+    <string name="fa_trash">&#xf1f8;</string>            <!-- Delete Window -->
     
     <!-- Media Control Icons -->
     <string name="fa_play">&#xf04b;</string>             <!-- Play -->
