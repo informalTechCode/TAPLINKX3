@@ -43,6 +43,9 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
+import android.os.Bundle
+import android.os.Parcel
+import android.util.Base64
 import kotlin.math.roundToInt
 
 
@@ -62,6 +65,9 @@ class DualWebViewGroup @JvmOverloads constructor(
         fun getVerticalScrollExtent() = super.computeVerticalScrollExtent()
         fun getVerticalScrollOffset() = super.computeVerticalScrollOffset()
     }
+
+    private val PREFS_NAME = "TapLinkPrefs"
+    private val KEY_WINDOWS_STATE = "saved_windows_state"
 
     private data class BrowserWindow(
         val id: String = java.util.UUID.randomUUID().toString(),
@@ -177,6 +183,8 @@ class DualWebViewGroup @JvmOverloads constructor(
 
     private var isHoveringZoomIn = false
     private var isHoveringZoomOut = false
+    private var isHoveringWindowsToggle = false
+    private var windowsButton: FontIconView? = null
 
     private var fullScreenTapDetector: GestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(e: MotionEvent): Boolean {
@@ -721,27 +729,52 @@ class DualWebViewGroup @JvmOverloads constructor(
     private var vScrollThumb: View
 
     private var windowsOverviewContainer: android.widget.ScrollView? = null
+    private var hoveredWindowsOverviewItem: View? = null
 
     fun showWindowsOverview() {
+        Log.d("WindowsOverview", "showWindowsOverview called, windowsOverviewContainer=${windowsOverviewContainer != null}")
         if (windowsOverviewContainer == null) {
             createWindowsOverviewUI()
+            Log.d("WindowsOverview", "Created windows overview UI")
         }
 
         // Populate container with current windows
-        val container = windowsOverviewContainer?.getChildAt(0) as? LinearLayout ?: return
+        val container = windowsOverviewContainer?.getChildAt(0) as? LinearLayout
+        if (container == null) {
+            Log.e("WindowsOverview", "Container is null! windowsOverviewContainer has ${windowsOverviewContainer?.childCount ?: 0} children")
+            return
+        }
+        Log.d("WindowsOverview", "Container found, clearing views. Windows count: ${windows.size}")
         container.removeAllViews()
 
-        // Add "Add Window" button at the top
-        val addButton = FrameLayout(context).apply {
+        // Add "Add Window" button at the top - shorter with label
+        val addButton = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 80
+                LinearLayout.LayoutParams.MATCH_PARENT, 50
             ).apply {
-                bottomMargin = 16
+                bottomMargin = 12
             }
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#303030"))
-                cornerRadius = 16f
+            // Create StateListDrawable for hover feedback
+            val normalBg = GradientDrawable().apply {
+                setColor(Color.parseColor("#2A5298"))
+                cornerRadius = 12f
             }
+            val hoveredBg = GradientDrawable().apply {
+                setColor(Color.parseColor("#3A72C8"))
+                cornerRadius = 12f
+                setStroke(2, Color.parseColor("#6BAAFF"))
+            }
+            val pressedBg = GradientDrawable().apply {
+                setColor(Color.parseColor("#4A82D8"))
+                cornerRadius = 12f
+            }
+            background = android.graphics.drawable.StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_pressed), pressedBg)
+                addState(intArrayOf(android.R.attr.state_hovered), hoveredBg)
+                addState(intArrayOf(), normalBg)
+            }
+            gravity = Gravity.CENTER
             isClickable = true
             isFocusable = true
             setOnClickListener { createNewWindow() }
@@ -749,26 +782,56 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         val addIcon = FontIconView(context).apply {
             setText(R.string.fa_plus)
-            textSize = 24f
+            textSize = 18f
             setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                rightMargin = 12
+            }
+        }
+        val addLabel = TextView(context).apply {
+            text = "Open New Window"
+            textSize = 14f
+            setTextColor(Color.WHITE)
         }
         addButton.addView(addIcon)
+        addButton.addView(addLabel)
         container.addView(addButton)
+        Log.d("WindowsOverview", "Added 'Add Window' button")
 
-        // Add window items
-        windows.forEach { win ->
+        // Calculate item size for 2-per-row grid
+        // Container width = 608 - 32 (padding) = 576, minus 12 gap = 564/2 = 282 each
+        // But we want square and 2 rows visible, so use smaller size
+        val itemSize = 140  // Square items
+        val itemMargin = 8
+
+        // Create rows for 2-column grid
+        var currentRow: LinearLayout? = null
+        windows.forEachIndexed { index, win ->
+            Log.d("WindowsOverview", "Adding window item: ${win.id}, title: ${win.title}")
+            
+            // Create new row every 2 items
+            if (index % 2 == 0) {
+                currentRow = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        bottomMargin = itemMargin
+                    }
+                    gravity = Gravity.CENTER_HORIZONTAL
+                }
+                container.addView(currentRow)
+            }
+
             val item = FrameLayout(context).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, 200 // Fixed height for thumbnail
-                ).apply {
-                    bottomMargin = 16
+                layoutParams = LinearLayout.LayoutParams(itemSize, itemSize).apply {
+                    marginStart = if (index % 2 == 0) 0 else itemMargin
+                    marginEnd = if (index % 2 == 0) itemMargin else 0
                 }
                 background = GradientDrawable().apply {
-                    setColor(if (win.id == activeWindowId) Color.parseColor("#444444") else Color.parseColor("#202020"))
+                    setColor(if (win.id == activeWindowId) Color.parseColor("#444444") else Color.parseColor("#252525"))
                     setStroke(2, if (win.id == activeWindowId) Color.parseColor("#4488FF") else Color.parseColor("#404040"))
-                    cornerRadius = 16f
+                    cornerRadius = 12f
                 }
                 isClickable = true
                 isFocusable = true
@@ -780,44 +843,44 @@ class DualWebViewGroup @JvmOverloads constructor(
                 if (win.thumbnail != null) {
                     setImageBitmap(win.thumbnail)
                 } else {
-                    setBackgroundColor(Color.BLACK)
+                    setBackgroundColor(Color.parseColor("#1A1A1A"))
                 }
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT).apply {
-                    setMargins(4, 4, 4, 4)
+                    setMargins(3, 3, 3, 3)
                 }
-                alpha = 0.5f
+                alpha = 0.6f
             }
             item.addView(thumbView)
 
-            // Title
+            // Title - smaller text, truncated
             val titleView = TextView(context).apply {
-                text = win.title
-                textSize = 16f
+                text = win.title.take(20) + if (win.title.length > 20) "..." else ""
+                textSize = 10f
                 setTextColor(Color.WHITE)
-                gravity = Gravity.BOTTOM or Gravity.START
-                layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
-                    leftMargin = 16
-                    bottomMargin = 16
+                maxLines = 2
+                layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+                    gravity = Gravity.BOTTOM
+                    setMargins(6, 0, 6, 6)
                 }
-                setShadowLayer(4f, 0f, 0f, Color.BLACK)
+                setShadowLayer(3f, 0f, 0f, Color.BLACK)
             }
             item.addView(titleView)
 
-            // Delete button
+            // Delete button - smaller
             val deleteBtn = FontIconView(context).apply {
-                setText(R.string.fa_trash)
-                textSize = 16f
-                setTextColor(Color.parseColor("#FF4444"))
+                setText(R.string.fa_xmark)
+                textSize = 12f
+                setTextColor(Color.WHITE)
                 gravity = Gravity.CENTER
                 background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#CC000000"))
+                    setColor(Color.parseColor("#CC333333"))
                     shape = GradientDrawable.OVAL
                 }
-                layoutParams = FrameLayout.LayoutParams(48, 48).apply {
+                layoutParams = FrameLayout.LayoutParams(28, 28).apply {
                     gravity = Gravity.TOP or Gravity.END
-                    topMargin = 8
-                    rightMargin = 8
+                    topMargin = 4
+                    rightMargin = 4
                 }
                 setOnClickListener {
                     closeWindow(win.id)
@@ -825,15 +888,34 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
             item.addView(deleteBtn)
 
-            container.addView(item)
+            currentRow?.addView(item)
         }
 
+        Log.d("WindowsOverview", "Setting container visible, total items: ${container.childCount}")
         windowsOverviewContainer?.visibility = View.VISIBLE
-        windowsOverviewContainer?.bringToFront()
         webView.visibility = View.GONE
 
+        // Force the container to the front by removing and re-adding at the end
+        // Preserve the layout params
+        val savedParams = windowsOverviewContainer?.layoutParams as? FrameLayout.LayoutParams
+            ?: FrameLayout.LayoutParams(640 - toggleBarWidthPx, 480 - navBarHeightPx).apply {
+                leftMargin = toggleBarWidthPx
+                bottomMargin = navBarHeightPx
+            }
+        
+        leftEyeUIContainer.removeView(windowsOverviewContainer)
+        leftEyeUIContainer.addView(windowsOverviewContainer, savedParams)
+        
         requestLayout()
         invalidate()
+        
+        // Log layout info after layout pass
+        windowsOverviewContainer?.post {
+            val woc = windowsOverviewContainer
+            Log.d("WindowsOverview", "Post-layout: width=${woc?.width}, height=${woc?.height}, " +
+                    "x=${woc?.x}, y=${woc?.y}, visibility=${woc?.visibility}, " +
+                    "layoutParams=${woc?.layoutParams?.width}x${woc?.layoutParams?.height}")
+        }
     }
 
     fun hideWindowsOverview() {
@@ -844,24 +926,34 @@ class DualWebViewGroup @JvmOverloads constructor(
     }
 
     private fun createWindowsOverviewUI() {
+        Log.d("WindowsOverview", "createWindowsOverviewUI called")
+        // Use explicit dimensions since MATCH_PARENT wasn't resolving
+        val containerWidth = 640 - toggleBarWidthPx  // 608
+        val containerHeight = 480 - navBarHeightPx   // 448
+        
         windowsOverviewContainer = android.widget.ScrollView(context).apply {
-            layoutParams = FrameLayout.LayoutParams(640 - toggleBarWidthPx, LayoutParams.MATCH_PARENT).apply {
+            layoutParams = FrameLayout.LayoutParams(containerWidth, containerHeight).apply {
                 leftMargin = toggleBarWidthPx
-                bottomMargin = navBarHeightPx
+                gravity = Gravity.TOP or Gravity.START
             }
             setBackgroundColor(Color.parseColor("#101010"))
             visibility = View.GONE
             elevation = 1500f
+            isFillViewport = true // Ensure content fills the viewport
         }
+        Log.d("WindowsOverview", "Container created: ${containerWidth}x${containerHeight}")
 
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+            // Use ViewGroup.LayoutParams for ScrollView children
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             setPadding(16, 16, 16, 16)
+            setBackgroundColor(Color.parseColor("#101010")) // Match parent background
         }
 
         windowsOverviewContainer?.addView(content)
         leftEyeUIContainer.addView(windowsOverviewContainer)
+        Log.d("WindowsOverview", "UI created: ScrollView has ${windowsOverviewContainer?.childCount} children, added to leftEyeUIContainer (${leftEyeUIContainer.childCount} children)")
     }
 
     fun toggleWindowMode() {
@@ -903,6 +995,7 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         windows.add(newWindow)
         switchToWindow(newWindow.id)
+        saveAllWindowsState()
     }
 
     fun switchToWindow(id: String) {
@@ -939,6 +1032,7 @@ class DualWebViewGroup @JvmOverloads constructor(
         windowCallback?.onWindowSwitched(webView)
 
         hideWindowsOverview()
+        saveAllWindowsState()
     }
 
     fun closeWindow(id: String) {
@@ -965,6 +1059,131 @@ class DualWebViewGroup @JvmOverloads constructor(
             if (windowsOverviewContainer?.visibility == View.VISIBLE) {
                 showWindowsOverview()
             }
+        }
+        saveAllWindowsState()
+    }
+
+    fun saveAllWindowsState() {
+        try {
+            val root = org.json.JSONObject()
+            root.put("activeId", activeWindowId)
+
+            val windowsArray = org.json.JSONArray()
+            windows.forEach { win ->
+                // Update title from WebView if available
+                if (!win.webView.title.isNullOrEmpty()) {
+                    win.title = win.webView.title!!
+                }
+                
+                val winObj = org.json.JSONObject()
+                winObj.put("id", win.id)
+                winObj.put("title", win.title)
+                winObj.put("url", win.webView.url ?: "")
+                
+                // Save full WebView state (history, etc)
+                val state = Bundle()
+                win.webView.saveState(state)
+                val parcel = Parcel.obtain()
+                state.writeToParcel(parcel, 0)
+                val bytes = parcel.marshall()
+                parcel.recycle()
+                val stateString = Base64.encodeToString(bytes, Base64.DEFAULT)
+                winObj.put("state", stateString)
+                
+                windowsArray.put(winObj)
+            }
+            root.put("windows", windowsArray)
+
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_WINDOWS_STATE, root.toString())
+                .apply()
+                
+            Log.d("Persistence", "Saved ${windows.size} windows with state")
+        } catch (e: Exception) {
+            Log.e("Persistence", "Error saving window state", e)
+        }
+    }
+
+    fun restoreState() {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val jsonString = prefs.getString(KEY_WINDOWS_STATE, null)
+            
+            if (jsonString.isNullOrEmpty()) return
+
+            val root = org.json.JSONObject(jsonString)
+            val savedActiveId = root.optString("activeId", null)
+            val windowsArray = root.optJSONArray("windows")
+
+            if (windowsArray != null && windowsArray.length() > 0) {
+                // Clear existing windows (default one)
+                windows.toList().forEach { 
+                    it.webView.destroy() 
+                    it.thumbnail?.recycle()
+                }
+                windows.clear()
+                
+                leftEyeUIContainer.removeView(webView)
+
+                for (i in 0 until windowsArray.length()) {
+                    val winObj = windowsArray.getJSONObject(i)
+                    val id = winObj.getString("id")
+                    val title = winObj.getString("title")
+                    val url = winObj.getString("url")
+                    val stateString = winObj.optString("state", "")
+
+                    val newWebView = InternalWebView(context)
+                    configureWebView(newWebView)
+                    // Important: notify MainActivity to attach its logic
+                    windowCallback?.onWindowCreated(newWebView)
+                    
+                    var restored = false
+                    if (stateString.isNotEmpty()) {
+                        try {
+                            val bytes = Base64.decode(stateString, Base64.DEFAULT)
+                            val parcel = Parcel.obtain()
+                            parcel.unmarshall(bytes, 0, bytes.size)
+                            parcel.setDataPosition(0)
+                            val state = Bundle()
+                            state.readFromParcel(parcel)
+                            parcel.recycle()
+                            // Restore state returns the WebBackForwardList but we don't need it explicitly
+                            newWebView.restoreState(state)
+                            restored = true
+                        } catch (e: Exception) {
+                            Log.e("Persistence", "Failed to restore webview bundle", e)
+                        }
+                    }
+                    
+                    if (!restored) {
+                        if (url.isNotEmpty()) {
+                            newWebView.loadUrl(url)
+                        } else {
+                            newWebView.loadUrl("https://www.google.com")
+                        }
+                    }
+                    
+                    val win = BrowserWindow(id = id, webView = newWebView, title = title)
+                    windows.add(win)
+                }
+
+                if (windows.isNotEmpty()) {
+                    val targetId = if (savedActiveId != null && windows.any { it.id == savedActiveId }) {
+                        savedActiveId
+                    } else {
+                        windows.last().id
+                    }
+                    switchToWindow(targetId)
+                } else {
+                    // Fallback if parsing failed
+                    createNewWindow()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("Persistence", "Error restoring window state", e)
+            // Restore default if failed
+            if (windows.isEmpty()) createNewWindow()
         }
     }
 
@@ -2876,6 +3095,11 @@ class DualWebViewGroup @JvmOverloads constructor(
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
         // Log.d("GestureDebug", "DualWebViewGroup onInterceptTouchEvent: ${ev.action}")
 
+        // Let windows overview handle its own touch events
+        if (windowsOverviewContainer?.visibility == View.VISIBLE) {
+            return false  // Don't intercept, let children handle touches
+        }
+
         if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
             // Allow interactions with menus that are on top
             if (::leftBookmarksView.isInitialized && isTouchOnView(leftBookmarksView, ev.x, ev.y)) {
@@ -3037,6 +3261,30 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         maskOverlay.measure(
             MeasureSpec.makeMeasureSpec(widthSize, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(heightSize, MeasureSpec.EXACTLY)
+        )
+
+        // Measure leftEyeUIContainer and its children
+        leftEyeUIContainer.measure(
+            MeasureSpec.makeMeasureSpec(640, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(heightSize, MeasureSpec.EXACTLY)
+        )
+
+        // Measure windowsOverviewContainer if visible
+        windowsOverviewContainer?.let { woc ->
+            if (woc.visibility == View.VISIBLE) {
+                val containerWidth = 640 - toggleBarWidthPx
+                val containerHeight = heightSize - navBarHeightPx
+                woc.measure(
+                    MeasureSpec.makeMeasureSpec(containerWidth, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(containerHeight, MeasureSpec.EXACTLY)
+                )
+            }
+        }
+
+        // Measure leftEyeClipParent
+        leftEyeClipParent.measure(
+            MeasureSpec.makeMeasureSpec(640, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(heightSize, MeasureSpec.EXACTLY)
         )
 
@@ -3577,6 +3825,17 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
         }
         
+        // Check Windows button separately (programmatically created, no resource ID)
+        windowsButton?.let { btn ->
+            if (isOver(btn)) {
+                btn.isHovered = true
+                isHoveringWindowsToggle = true
+                clearNavigationButtonStates()
+                customKeyboard?.updateHover(-1f, -1f)
+                return
+            }
+        }
+        
         // Check settings window elements if visible
         if (isSettingsVisible) {
             settingsMenu?.let { menu ->
@@ -3630,6 +3889,133 @@ class DualWebViewGroup @JvmOverloads constructor(
             }
         }
         
+        // Check windows overview if visible
+        if (windowsOverviewContainer?.visibility == View.VISIBLE) {
+            val woc = windowsOverviewContainer ?: return
+            
+            // Use anchored coordinates if needed
+            if (isAnchored) {
+                val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
+                
+                // Perform hit testing relative to leftEyeUIContainer
+                // woc is a child of leftEyeUIContainer
+                val wocLeft = woc.left + woc.translationX
+                val wocTop = woc.top + woc.translationY
+                
+                if (localX >= wocLeft && localX <= wocLeft + woc.width &&
+                    localY >= wocTop && localY <= wocTop + woc.height) {
+                    
+                    val container = woc.getChildAt(0) as? LinearLayout ?: return
+                    // Container is inside ScrollView woc
+                    // local in woc
+                    val xInWoc = localX - wocLeft + woc.scrollX
+                    val yInWoc = localY - wocTop + woc.scrollY
+                    
+                    val containerLeft = container.left + container.translationX
+                    val containerTop = container.top + container.translationY
+                    
+                    val xInContainer = xInWoc - containerLeft
+                    val yInContainer = yInWoc - containerTop
+                    
+                    // Helper for checking children
+                    for (i in 0 until container.childCount) {
+                        val child = container.getChildAt(i)
+                        if (xInContainer >= child.left && xInContainer <= child.right &&
+                            yInContainer >= child.top && yInContainer <= child.bottom) {
+                            
+                            if (i == 0) { // Add Button
+                                child.isHovered = true
+                                hoveredWindowsOverviewItem = child
+                                customKeyboard?.updateHover(-1f, -1f)
+                                return
+                            }
+                            
+                            // Rows
+                            if (child is ViewGroup) {
+                                val xInChild = xInContainer - child.left
+                                val yInChild = yInContainer - child.top
+                                
+                                for (j in 0 until child.childCount) {
+                                    val item = child.getChildAt(j)
+                                    if (xInChild >= item.left && xInChild <= item.right &&
+                                        yInChild >= item.top && yInChild <= item.bottom) {
+                                        
+                                        // Check for delete button first (FontIconView child)
+                                        if (item is ViewGroup) {
+                                            val xInItem = xInChild - item.left
+                                            val yInItem = yInChild - item.top
+                                            for (k in 0 until item.childCount) {
+                                                val itemChild = item.getChildAt(k)
+                                                if (itemChild is FontIconView &&
+                                                    xInItem >= itemChild.left && xInItem <= itemChild.right &&
+                                                    yInItem >= itemChild.top && yInItem <= itemChild.bottom) {
+                                                    itemChild.isHovered = true
+                                                    hoveredWindowsOverviewItem = itemChild
+                                                    customKeyboard?.updateHover(-1f, -1f)
+                                                    return
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Set hover on the whole item
+                                        item.isHovered = true
+                                        hoveredWindowsOverviewItem = item
+                                        customKeyboard?.updateHover(-1f, -1f)
+                                        return
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Non-anchored mode: Use the isOver function with getGlobalVisibleRect
+                val container = woc.getChildAt(0) as? LinearLayout ?: return
+                
+                // Check all children (add button + rows of window items)
+                for (i in 0 until container.childCount) {
+                    val child = container.getChildAt(i)
+                    
+                    // First child (i == 0) is the Add Button
+                    if (i == 0 && isOver(child)) {
+                        child.isHovered = true
+                        hoveredWindowsOverviewItem = child
+                        customKeyboard?.updateHover(-1f, -1f)
+                        return
+                    }
+                    
+                    // Other children are rows containing window items
+                    if (child is ViewGroup) {
+                        for (j in 0 until child.childCount) {
+                            val windowItem = child.getChildAt(j)
+                            
+                            // Check for delete button first (it's a FontIconView child of the window item)
+                            if (windowItem is ViewGroup) {
+                                for (k in 0 until windowItem.childCount) {
+                                    val itemChild = windowItem.getChildAt(k)
+                                    // Delete button is a FontIconView with the X icon
+                                    if (itemChild is FontIconView && isOver(itemChild)) {
+                                        itemChild.isHovered = true
+                                        hoveredWindowsOverviewItem = itemChild
+                                        customKeyboard?.updateHover(-1f, -1f)
+                                        return
+                                    }
+                                }
+                            }
+                            
+                            // Then check the whole window item
+                            if (isOver(windowItem)) {
+                                windowItem.isHovered = true
+                                hoveredWindowsOverviewItem = windowItem
+                                customKeyboard?.updateHover(-1f, -1f)
+                                return
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Check bookmarks view if visible
         if (isBookmarksExpanded()) {
             val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
@@ -3728,6 +4114,11 @@ class DualWebViewGroup @JvmOverloads constructor(
 
         isHoveringMaskToggle    = false
         isHoveringAnchorToggle  = false
+        isHoveringWindowsToggle = false
+
+        // Clear windows overview hover
+        hoveredWindowsOverviewItem?.isHovered = false
+        hoveredWindowsOverviewItem = null
 
         // Clear visual hover states
         listOf(
@@ -3743,6 +4134,9 @@ class DualWebViewGroup @JvmOverloads constructor(
         ).forEach { id ->
             leftToggleBar.findViewById<View>(id)?.isHovered = false
         }
+        
+        // Clear Windows button hover state (programmatically created)
+        windowsButton?.isHovered = false
         
         // Clear settings hover states
         if (isSettingsVisible) {
@@ -3916,6 +4310,28 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
     }
 
+    fun isWindowsOverviewVisible(): Boolean {
+        return windowsOverviewContainer?.visibility == View.VISIBLE
+    }
+
+    fun isPointInWindowsOverview(x: Float, y: Float): Boolean {
+        val woc = windowsOverviewContainer ?: return false
+        if (woc.visibility != View.VISIBLE) return false
+        
+        val loc = IntArray(2)
+        woc.getLocationOnScreen(loc)
+        return x >= loc[0] && x <= loc[0] + woc.width &&
+               y >= loc[1] && y <= loc[1] + woc.height
+    }
+
+    fun performWindowsOverviewClick() {
+        val item = hoveredWindowsOverviewItem ?: return
+        if (item.isHovered) {
+            showButtonClickFeedback(item)
+            item.performClick()
+        }
+    }
+
     fun handleNavigationClick(x: Float, y: Float) {
         // Ensure nav bar is visible and not in scroll mode before handling click
         if (isInScrollMode || leftNavigationBar.visibility != View.VISIBLE) return
@@ -3955,6 +4371,16 @@ class DualWebViewGroup @JvmOverloads constructor(
         }
 
 
+        // Check if we clicked on a hovered windows overview item
+        if (windowsOverviewContainer?.visibility == View.VISIBLE && hoveredWindowsOverviewItem != null) {
+            val item = hoveredWindowsOverviewItem
+            if (item != null && item.isHovered) {
+                showButtonClickFeedback(item)
+                item.performClick()
+                return
+            }
+        }
+
         // Handle toggle bar clicks
         // Handle toggle bar clicks using hover state
         val toggleBarButtons = listOf(
@@ -3971,6 +4397,15 @@ class DualWebViewGroup @JvmOverloads constructor(
             val button = leftToggleBar.findViewById<View>(buttonId)
             if (button != null && button.isHovered) {
                 handleLeftMenuAction(buttonId)
+                return
+            }
+        }
+
+        // Handle Windows button click separately (programmatically created, no resource ID)
+        windowsButton?.let { btn ->
+            if (btn.isHovered) {
+                showButtonClickFeedback(btn)
+                toggleWindowMode()
                 return
             }
         }
@@ -4247,6 +4682,7 @@ class DualWebViewGroup @JvmOverloads constructor(
             tag = "btnWindows" // Tag for identification
             configureToggleButton(R.string.fa_window_restore)
         }
+        windowsButton = leftWindowsButton  // Store reference for hover/click handling
 
         // Insert it into toggle bar - we need to add it to the layout
         if (leftToggleBar is ViewGroup) {

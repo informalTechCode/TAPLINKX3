@@ -416,6 +416,7 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.navigationListener = this
         dualWebViewGroup.maskToggleListener = this
         dualWebViewGroup.windowCallback = this
+        dualWebViewGroup.restoreState()
         
         // Load saved anchored mode state
         isAnchored = getSharedPreferences(prefsName, MODE_PRIVATE)
@@ -849,6 +850,11 @@ class MainActivity : AppCompatActivity(),
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+                
+                // Save state on every page load to ensure persistence in case of crash
+                if (::dualWebViewGroup.isInitialized) {
+                    dualWebViewGroup.saveAllWindowsState()
+                }
 
                 // Force enable input on all potential input fields
                 webView.evaluateJavascript("""
@@ -1044,7 +1050,7 @@ class MainActivity : AppCompatActivity(),
 
         // Register notification receiver
         val filter = IntentFilter(NotificationService.ACTION_NOTIFICATION_POSTED)
-        registerReceiver(notificationReceiver, filter)
+        ContextCompat.registerReceiver(this, notificationReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
         // Restart mirroring to right eye
         dualWebViewGroup.startRefreshing()
@@ -2284,6 +2290,14 @@ class MainActivity : AppCompatActivity(),
             }
         }
 
+        // Check for windows overview interaction
+        if (dualWebViewGroup.isWindowsOverviewVisible()) {
+            if (dualWebViewGroup.isPointInWindowsOverview(interactionX, interactionY)) {
+                dualWebViewGroup.performWindowsOverviewClick()
+                return
+            }
+        }
+
         // Handle navigation bar and toggle bar clicks only if visible - PRIORITIZE OVER SCROLLBARS
         if (dualWebViewGroup.isNavBarVisible()) {
             val UILocation = IntArray(2)
@@ -3210,27 +3224,12 @@ class MainActivity : AppCompatActivity(),
                     return true
                 }
             }
-
-            // Add more detailed logging to track input field interactions
-            webView.evaluateJavascript("""
-        (function() {
-            document.addEventListener('focus', function(e) {
-                console.log('Focus event:', {
-                    target: e.target.tagName,
-                    type: e.target.type,
-                    isInput: e.target instanceof HTMLInputElement,
-                    isTextArea: e.target instanceof HTMLTextAreaElement,
-                    isContentEditable: e.target.isContentEditable
-                });
-            }, true);
-        })();
-    """, null)
-
         }
 
 
         // Section 5: Input Handling Configuration
-        disableDefaultKeyboard()
+        // Section 5: Input Handling Configuration
+        disableDefaultKeyboard(webView)
         @Suppress("DEPRECATION")
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
@@ -3569,13 +3568,13 @@ class MainActivity : AppCompatActivity(),
     """.trimIndent())
     }
 
-    private fun disableDefaultKeyboard() {
+    private fun disableDefaultKeyboard(targetWebView: WebView) {
         try {
             val method = WebView::class.java.getMethod("setShowSoftInputOnFocus", Boolean::class.java)
-            method.invoke(webView, false)
+            method.invoke(targetWebView, false)
         } catch (e: Exception) {
             // Fallback for older Android versions
-            webView.evaluateJavascript("""
+            targetWebView.evaluateJavascript("""
             document.addEventListener('focus', function(e) {
                 if (e.target.tagName === 'INPUT' || 
                     e.target.tagName === 'TEXTAREA' || 
@@ -4170,6 +4169,11 @@ class MainActivity : AppCompatActivity(),
 
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // Ignore touches from cyttsp6_mt device
+        if (ev.device?.name == "cyttsp6_mt") {
+            return true
+        }
+
         // Track state at start of touch to prevent double-dispatch issues
         if (ev.action == MotionEvent.ACTION_DOWN) {
             wasTouchOnBookmarks = false
@@ -4349,6 +4353,11 @@ class MainActivity : AppCompatActivity(),
         // Get the current URL from the WebView
         val currentUrl = webView.url
         DebugLog.d("WebViewDebug", "Saving current URL: $currentUrl")
+        
+        // Save all windows state
+        if (::dualWebViewGroup.isInitialized) {
+            dualWebViewGroup.saveAllWindowsState()
+        }
 
         if (currentUrl != null && !currentUrl.startsWith("about:blank")) {
             // Save the URL to SharedPreferences

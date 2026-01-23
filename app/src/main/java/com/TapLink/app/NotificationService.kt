@@ -25,6 +25,7 @@ class NotificationService : NotificationListenerService() {
             DebugLog.d(TAG, "Notification received: $packageName - $title: $text")
 
             val intent = Intent(ACTION_NOTIFICATION_POSTED).apply {
+                setPackage(this@NotificationService.packageName)
                 putExtra(EXTRA_PACKAGE, packageName)
                 putExtra(EXTRA_TITLE, title)
                 putExtra(EXTRA_TEXT, text)
