@@ -33,7 +33,6 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
-import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.Button
 import android.widget.EditText
@@ -1186,7 +1185,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             if (jsonString.isNullOrEmpty()) return
 
             val root = org.json.JSONObject(jsonString)
-            val savedActiveId = root.optString("activeId", null)
+            val savedActiveId = if (root.has("activeId")) root.getString("activeId") else null
             val windowsArray = root.optJSONArray("windows")
 
             if (windowsArray != null && windowsArray.length() > 0) {
@@ -2346,7 +2345,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 domStorageEnabled = true
                 allowContentAccess = true
                 allowFileAccess = true
-                @Suppress("DEPRECATION") databaseEnabled = true
             }
         }
     }
@@ -3714,7 +3712,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         } else {
                             mobileUserAgent
                         }
-                @Suppress("DEPRECATION") defaultZoom = WebSettings.ZoomDensity.MEDIUM
                 loadWithOverviewMode = true
                 useWideViewPort = true
             }
