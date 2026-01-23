@@ -2793,7 +2793,7 @@ class MainActivity : AppCompatActivity(),
 
         // Section 1: Basic WebView Configuration
         WebView.setWebContentsDebuggingEnabled(true)
-        webView.addJavascriptInterface(WebAppInterface(this), "Android")
+        webView.addJavascriptInterface(WebAppInterface(this, webView), "Android")
 
         webView.apply {
             isFocusable = true
@@ -3318,7 +3318,7 @@ class MainActivity : AppCompatActivity(),
     }
 
 
-    private class WebAppInterface(private val activity: MainActivity) {
+    private class WebAppInterface(private val activity: MainActivity, private val webView: WebView) {
         @JavascriptInterface
         fun onInputFocus() {
             activity.runOnUiThread {
@@ -3332,14 +3332,19 @@ class MainActivity : AppCompatActivity(),
         @JavascriptInterface
         fun onMediaPlaying(isPlaying: Boolean) {
             activity.runOnUiThread {
-                activity.dualWebViewGroup.updateMediaState(isPlaying)
+                if (activity.dualWebViewGroup.isActiveWebView(webView)) {
+                    activity.dualWebViewGroup.updateMediaState(isPlaying)
+                    if (isPlaying) {
+                        activity.dualWebViewGroup.pauseBackgroundMedia()
+                    }
+                }
             }
         }
 
         @JavascriptInterface
         fun onMediaDetected(hasMedia: Boolean) {
             activity.runOnUiThread {
-                if (!hasMedia) {
+                if (!hasMedia && activity.dualWebViewGroup.isActiveWebView(webView)) {
                     activity.dualWebViewGroup.hideMediaControls()
                 }
             }

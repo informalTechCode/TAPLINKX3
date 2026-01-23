@@ -69,7 +69,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val id: String = java.util.UUID.randomUUID().toString(),
             val webView: InternalWebView,
             var thumbnail: Bitmap? = null,
-            var title: String = "New Window"
+            var title: String = "New Tab"
     )
 
     private val windows = mutableListOf<BrowserWindow>()
@@ -83,6 +83,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     var windowCallback: WindowCallback? = null
 
     private var webView: InternalWebView
+
+    val webViewsContainer: FrameLayout = FrameLayout(context).apply {
+        setBackgroundColor(Color.BLACK)
+    }
+
     private val rightEyeView: SurfaceView = SurfaceView(context)
     val keyboardContainer: FrameLayout =
             FrameLayout(context).apply { setBackgroundColor(Color.TRANSPARENT) }
@@ -312,6 +317,22 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 setBackgroundColor(Color.TRANSPARENT) // Make sure background is transparent
             }
 
+    fun isActiveWebView(webView: WebView): Boolean {
+        return this.webView == webView
+    }
+
+    fun pauseBackgroundMedia() {
+        windows.forEach { win ->
+            if (win.webView != webView) {
+                // Pause all media elements
+                win.webView.evaluateJavascript(
+                    "document.querySelectorAll('video, audio').forEach(function(e) { e.pause(); });",
+                    null
+                )
+            }
+        }
+    }
+
     private val fullScreenOverlayContainer =
             FrameLayout(context).apply {
                 clipChildren = true
@@ -327,7 +348,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private val fullScreenHiddenViews: List<View> by lazy {
         listOf(
-                webView,
+                webViewsContainer,
                 leftToggleBar,
                 leftNavigationBar,
                 keyboardContainer,
@@ -551,7 +572,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             horizontalScrollBar.visibility = View.GONE
             verticalScrollBar.visibility = View.GONE
 
-            (webView.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
+            (webViewsContainer.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
                 var targetWidth = 0
                 var targetHeight = 0
                 if (isScrollModeActive) {
@@ -575,9 +596,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     p.leftMargin = baseLeftMargin
                     p.rightMargin = 0
                     p.bottomMargin = baseBottomMargin
-                    webView.layoutParams = p
-                    webView.requestLayout()
-                    webView.invalidate()
+                    webViewsContainer.layoutParams = p
+                    webViewsContainer.requestLayout()
+                    webViewsContainer.invalidate()
                 }
             }
             return
@@ -591,7 +612,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         verticalScrollBar.visibility = if (showVert) View.VISIBLE else View.GONE
 
         // Apply layout adjustments
-        (webView.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
+        (webViewsContainer.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
             val rightMarginShift = if (showVert) 20 else 0
             val bottomMarginShift = if (showHorz) 20 else 0
 
@@ -639,9 +660,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 // Log.d("ScrollDebug", "Applying Layout: Mode=${if(isScrollModeActive)"Scroll" else
                 // "Normal"}, [${p.width} x ${p.height}], Margins: L=${p.leftMargin},
                 // R=${p.rightMargin}, B=${p.bottomMargin}")
-                webView.layoutParams = p
-                webView.requestLayout()
-                webView.invalidate()
+                webViewsContainer.layoutParams = p
+                webViewsContainer.requestLayout()
+                webViewsContainer.invalidate()
             }
         }
 
@@ -810,7 +831,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
         val addLabel =
                 TextView(context).apply {
-                    text = "Open New Window"
+                    text = "Open New Tab"
                     textSize = 14f
                     setTextColor(Color.WHITE)
                 }
@@ -1046,7 +1067,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 } catch (e: Exception) {
                     Log.e("Windows", "Failed to capture thumbnail", e)
                 }
-                currentWin.title = webView.title ?: "Window"
+                currentWin.title = webView.title ?: "Tab"
             }
             showWindowsOverview()
         }
@@ -1055,7 +1076,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun createNewWindow() {
         val newWebView = InternalWebView(context)
         configureWebView(newWebView)
-        val newWindow = BrowserWindow(webView = newWebView, title = "New Window")
+        val newWindow = BrowserWindow(webView = newWebView, title = "New Tab")
+
+        // Add to container but invisible
+        newWebView.visibility = View.INVISIBLE
+        webViewsContainer.addView(newWebView, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
 
         // Notify MainActivity to configure the new WebView (clients, settings, etc.)
         windowCallback?.onWindowCreated(newWebView)
@@ -1074,26 +1099,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             return
         }
 
-        // Remove old webview from layout
-        leftEyeUIContainer.removeView(webView)
+        // Hide current active webview
+        webView.visibility = View.INVISIBLE
 
         // Switch active window
         activeWindowId = id
         webView = targetWindow.webView
 
-        // Add new webview to layout at index 0 (bottom)
-        // Wait, index 0 might be wrong if there are other views.
-        // We want it to be at the bottom, but above background.
-        // In init block we added: webView, leftToggleBar, leftNavigationBar...
-        // So webView was first.
-        leftEyeUIContainer.addView(
-                webView,
-                0,
-                FrameLayout.LayoutParams(640 - toggleBarWidthPx, LayoutParams.MATCH_PARENT).apply {
-                    leftMargin = toggleBarWidthPx
-                    bottomMargin = navBarHeightPx
-                }
-        )
+        // Show new active webview and bring to front within container to ensure z-ordering
+        webView.visibility = View.VISIBLE
+        webView.bringToFront()
 
         // Ensure settings are applied (zoom, font size, etc.) which might be instance specific if
         // not global
@@ -1114,6 +1129,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val wasActive = activeWindowId == id
 
         windows.remove(windowToRemove)
+        webViewsContainer.removeView(windowToRemove.webView)
         windowToRemove.webView.destroy()
         windowToRemove.thumbnail?.recycle()
 
@@ -1196,7 +1212,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
                 windows.clear()
 
-                leftEyeUIContainer.removeView(webView)
+                webViewsContainer.removeAllViews()
 
                 for (i in 0 until windowsArray.length()) {
                     val winObj = windowsArray.getJSONObject(i)
@@ -1239,6 +1255,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                     val win = BrowserWindow(id = id, webView = newWebView, title = title)
                     windows.add(win)
+
+                    // Add to container
+                    newWebView.visibility = View.INVISIBLE
+                    webViewsContainer.addView(newWebView, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
                 }
 
                 if (windows.isNotEmpty()) {
@@ -1291,6 +1311,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         webView = initialWebView
         configureWebView(webView) // Local basic config
         mobileUserAgent = webView.settings.userAgentString
+
+        // Add to container
+        webViewsContainer.addView(initialWebView, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
 
         // We can't call windowCallback here as it's not set yet.
         // We assume the initial WebView gets configured by MainActivity in onCreate via
@@ -1590,9 +1613,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Add views to UI container
         leftEyeUIContainer.apply {
             // Add views in the correct z-order
-            // Add webView with correct position
+            // Add webViewsContainer with correct position
             addView(
-                    webView,
+                    webViewsContainer,
                     FrameLayout.LayoutParams(640 - toggleBarWidthPx, LayoutParams.MATCH_PARENT)
                             .apply {
                                 leftMargin = toggleBarWidthPx // Position after toggle bar
@@ -2680,12 +2703,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         480
                     }
             // Respect proper measurement which accounts for margins (scrollbars)
-            val measuredBottom = 0 + webView.measuredHeight
+            val measuredBottom = 0 + webViewsContainer.measuredHeight
 
-            webView.layout(
+            webViewsContainer.layout(
                     0, // No left margin in scroll mode
                     0,
-                    0 + webView.measuredWidth, // Full width minus margins
+                    0 + webViewsContainer.measuredWidth, // Full width minus margins
                     minOf(keyboardLimit, measuredBottom)
             )
         } else {
@@ -2698,12 +2721,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         navBarTop // Default bottom for 30px nav bar
                     }
             // Respect proper measurement which accounts for margins (scrollbars)
-            val measuredBottom = 0 + webView.measuredHeight
+            val measuredBottom = 0 + webViewsContainer.measuredHeight
 
-            webView.layout(
+            webViewsContainer.layout(
                     toggleBarWidth, // Account for toggle bar
                     0,
-                    toggleBarWidth + webView.measuredWidth, // Standard width + toggle bar offset
+                    toggleBarWidth + webViewsContainer.measuredWidth, // Standard width + toggle bar offset
                     minOf(keyboardLimit, measuredBottom)
             )
         }
@@ -3340,13 +3363,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Measure WebView with different dimensions based on scroll mode
         // FIX: Respect the LayoutParams set by updateScrollBarsVisibility
-        val lp = webView.layoutParams
+        val lp = webViewsContainer.layoutParams
 
         if (isInScrollMode) {
             val targetWidth = if (lp != null && lp.width > 0) lp.width else 640
             val targetHeight = if (lp != null && lp.height > 0) lp.height else 480
 
-            webView.measure(
+            webViewsContainer.measure(
                     MeasureSpec.makeMeasureSpec(targetWidth, MeasureSpec.EXACTLY),
                     MeasureSpec.makeMeasureSpec(targetHeight, MeasureSpec.EXACTLY)
             )
@@ -3363,7 +3386,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     if (lp != null && lp.height > 0) lp.height
                     else if (contentHeight > 0) contentHeight else 440
 
-            webView.measure(
+            webViewsContainer.measure(
                     MeasureSpec.makeMeasureSpec(targetWidth, MeasureSpec.EXACTLY),
                     MeasureSpec.makeMeasureSpec(targetHeight, MeasureSpec.EXACTLY)
             )
