@@ -175,8 +175,6 @@ class MainActivity :
     private var isKeyboardVisible = false
     private var wasKeyboardVisibleAtDown = false
 
-    private var originalWebViewHeight = 0
-
     private val prefsName = Constants.BROWSER_PREFS_NAME
     private val keyLastUrl = Constants.KEY_LAST_URL
     private var lastUrl: String? = null
@@ -1720,9 +1718,6 @@ class MainActivity :
         dualWebViewGroup.onKeyboardHidden()
 
         // Restore original webView state
-        val params = webView.layoutParams
-        params.height = originalWebViewHeight
-        webView.layoutParams = params
         webView.translationY = 0f
 
         // Clear any existing animations
