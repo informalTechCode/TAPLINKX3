@@ -3,7 +3,7 @@ package com.TapLinkX3.app
 object Constants {
     const val PREFS_NAME = "TapLinkPrefs"
     const val BROWSER_PREFS_NAME = "BrowserPrefs"
-    const val DEFAULT_URL = "https://www.google.com"
+    const val DEFAULT_URL = "file:///android_asset/AR_Dashboard_Landscape_Sidebar.html"
     const val KEY_LAST_URL = "last_url"
     const val KEY_IS_ANCHORED = "isAnchored"
     const val KEY_UI_SCALE_PROGRESS = "uiScaleProgress"

@@ -64,6 +64,20 @@
         android:focusable="true"/>
 
     <com.TapLinkX3.app.FontIconView
+        android:id="@+id/btnChat"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="@string/fa_comment"
+        android:background="@drawable/nav_button_background"
+        android:contentDescription="Chat"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:clickable="true"
+        android:focusable="true"/>
+
+    <com.TapLinkX3.app.FontIconView
         android:id="@+id/btnSettings"
         android:layout_width="0dp"
         android:layout_height="match_parent"

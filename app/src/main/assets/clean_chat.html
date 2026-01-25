@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>TapLink AI</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --bg: #0b0f1a;
+            --card: #121a2e;
+            --accent: #69f0ae;
+            --text: #e6f1ff;
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, Segoe UI, Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+        }
+
+        body {
+            padding: 12px;
+            box-sizing: border-box;
+        }
+
+        #chatHistory {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-bottom: 12px;
+            padding-right: 30px;
+            /* Ample space for the 24px scrollbar */
+        }
+
+        .msg {
+            padding: 10px 14px;
+            border-radius: 14px;
+            max-width: 85%;
+            font-size: 14px;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+
+        /* Markdown Styles */
+        .msg p {
+            margin: 0 0 8px 0;
+        }
+
+        .msg p:last-child {
+            margin-bottom: 0;
+        }
+
+        .msg code {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+
+        .msg pre {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+
+        .msg pre code {
+            background: transparent;
+            padding: 0;
+            display: block;
+        }
+
+        .msg ul,
+        .msg ol {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        .msg.user {
+            align-self: flex-end;
+            background: var(--accent);
+            color: #000;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg.ai {
+            align-self: flex-start;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text);
+            border-bottom-left-radius: 4px;
+        }
+
+        .msg.error {
+            align-self: center;
+            color: #ff5252;
+            font-size: 12px;
+            background: rgba(255, 82, 82, 0.1);
+        }
+
+        .msg.loading {
+            font-style: italic;
+            opacity: 0.7;
+        }
+
+        /* Input Area */
+        .chat-input-area {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px 10px;
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #chatInput {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            padding: 4px;
+        }
+
+        #sendBtn {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.1s;
+        }
+
+        #sendBtn:active {
+            transform: scale(0.95);
+        }
+
+        #summarizeBtn {
+            background: rgba(255, 255, 255, 0.12);
+            color: var(--text);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 6px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: transform 0.1s, background 0.2s, border-color 0.2s;
+        }
+
+        #summarizeBtn:active {
+            transform: scale(0.97);
+        }
+
+        #summarizeBtn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 24px;
+            /* Large target area for glasses cursor */
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            margin: 4px 0;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            border: 4px solid transparent;
+            background-clip: content-box;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+            background-clip: content-box;
+        }
+
+        ::-webkit-scrollbar-thumb:active {
+            background: var(--accent);
+            background-clip: content-box;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="chatHistory" data-taplink-scroll="true">
+        <!-- Messages will appear here -->
+        <div class="msg ai">Hello! I am TapLink AI, your personal assistant. How can I help you today?</div>
+    </div>
+
+    <div class="chat-input-area">
+        <input id="chatInput" type="text" placeholder="Ask anything..." autocomplete="off" />
+        <button id="summarizeBtn" type="button" aria-label="Summarize this webpage">Summarize</button>
+        <button id="sendBtn" type="button">➤</button>
+    </div>
+
+    <script>
+        const chatHistory = document.getElementById('chatHistory');
+        const chatInput = document.getElementById('chatInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const summarizeBtn = document.getElementById('summarizeBtn');
+
+        let messages = [];
+
+        // Auto-scroll to bottom on load
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+
+        function appendMessage(role, text) {
+            // Map 'assistant' to 'ai' for CSS styling
+            const displayRole = (role === 'assistant') ? 'ai' : role;
+
+            const msg = document.createElement('div');
+            msg.className = `msg ${displayRole}`;
+
+            // Use marked for AI/Assistant and User messages
+            if (role === 'ai' || role === 'assistant' || role === 'user') {
+                msg.innerHTML = marked.parse(text);
+            } else {
+                msg.textContent = text;
+            }
+
+            chatHistory.append(msg);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+
+            if (role !== 'error' && role !== 'loading') {
+                // Ensure we store 'assistant' for API calls
+                const apiRole = (role === 'ai') ? 'assistant' : role;
+                messages.push({ role: apiRole, content: text });
+            }
+        }
+
+        window.receiveGroqResponse = function (text) {
+            const loading = chatHistory.querySelector('.msg.loading');
+            if (loading) loading.remove();
+
+            if (text.startsWith("Error:")) {
+                appendMessage('error', text);
+            } else {
+                appendMessage('assistant', text);
+            }
+        };
+
+        function showLoading() {
+            // Add loading indicator
+            const loading = document.createElement('div');
+            loading.className = 'msg ai loading';
+            loading.textContent = 'Thinking...';
+            chatHistory.append(loading);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        function sendMessage(text) {
+            appendMessage('user', text);
+            // Call Native Bridge
+            showLoading();
+            if (window.GroqBridge && window.GroqBridge.chatWithGroq) {
+                window.GroqBridge.chatWithGroq(text, JSON.stringify(messages.slice(0, -1)));
+            } else {
+                console.warn("GroqBridge not found");
+                setTimeout(() => {
+                    const loading = chatHistory.querySelector('.msg.loading');
+                    if (loading) loading.remove();
+                    appendMessage('error', 'Error: AI bridge not connected.');
+                }, 1000);
+            }
+        }
+
+        function sendChat() {
+            const text = (chatInput.value || '').trim();
+            if (!text) return;
+            chatInput.value = '';
+            sendMessage(text);
+        }
+
+        function getActivePageUrl() {
+            try {
+                if (window.GroqBridge && window.GroqBridge.getActivePageUrl) {
+                    return (window.GroqBridge.getActivePageUrl() || '').trim();
+                }
+            } catch (err) {
+                console.warn('getActivePageUrl failed', err);
+            }
+            return '';
+        }
+
+        function sendSummary() {
+            const url = getActivePageUrl();
+            if (!url) {
+                appendMessage('error', 'Error: No active webpage to summarize.');
+                return;
+            }
+            const text = `Summarize this webpage's contents:\n${url}`;
+            sendMessage(text);
+        }
+
+        sendBtn.addEventListener('click', sendChat);
+        summarizeBtn.addEventListener('click', sendSummary);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendChat();
+        });
+
+        // Prevent context menu
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+    </script>
+</body>
+
+</html>
