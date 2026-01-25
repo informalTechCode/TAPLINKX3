@@ -3,8 +3,10 @@ package com.TapLinkX3.app
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -30,7 +32,6 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Base64
-import android.util.Log
 import android.view.Choreographer
 import android.view.GestureDetector
 import android.view.GestureDetector.SimpleOnGestureListener
@@ -59,24 +60,17 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import org.json.JSONObject
+import androidx.core.content.edit
+import com.ffalconxr.mercury.ipc.Launcher
+import com.ffalconxr.mercury.ipc.helpers.GPSIPCHelper
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
-import android.content.BroadcastReceiver
-import android.content.IntentFilter
-import android.provider.Settings
-import android.widget.Toast
-import androidx.core.app.NotificationManagerCompat
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.asin
 import kotlin.math.atan2
-import com.ffalconxr.mercury.ipc.Launcher
-import com.ffalconxr.mercury.ipc.helpers.GPSIPCHelper
-import com.ffalcon.mercury.android.sdk.util.DeviceUtil
-import androidx.core.content.edit
-
+import org.json.JSONObject
 
 interface NavigationListener {
     fun onNavigationBackPressed()
@@ -98,21 +92,21 @@ interface LinkEditingListener {
     fun isLinkEditing(): Boolean
 }
 
-class MainActivity : AppCompatActivity(),
-    DualWebViewGroup.DualWebViewGroupListener,
-    NavigationListener,
-    CustomKeyboardView.OnKeyboardActionListener,
-    BookmarkListener,
-    BookmarkKeyboardListener,
-    LinkEditingListener,
-    DualWebViewGroup.MaskToggleListener,
-    DualWebViewGroup.AnchorToggleListener,
-    DualWebViewGroup.WindowCallback
-{
+class MainActivity :
+        AppCompatActivity(),
+        DualWebViewGroup.DualWebViewGroupListener,
+        NavigationListener,
+        CustomKeyboardView.OnKeyboardActionListener,
+        BookmarkListener,
+        BookmarkKeyboardListener,
+        LinkEditingListener,
+        DualWebViewGroup.MaskToggleListener,
+        DualWebViewGroup.AnchorToggleListener,
+        DualWebViewGroup.WindowCallback {
 
-    private val H2V_GAIN = 1.0f   // how strongly horizontal motion affects vertical scroll
-    private val X_INVERT = -1.0f   // 1 = left -> up (what you want). Use -1 to flip.
-    private val Y_INVERT = -1.0f   // 1 = drag up -> up. Use -1 to flip if needed.
+    private val H2V_GAIN = 1.0f // how strongly horizontal motion affects vertical scroll
+    private val X_INVERT = -1.0f // 1 = left -> up (what you want). Use -1 to flip.
+    private val Y_INVERT = -1.0f // 1 = drag up -> up. Use -1 to flip if needed.
     lateinit var dualWebViewGroup: DualWebViewGroup
     private lateinit var webView: WebView
     private lateinit var mainContainer: FrameLayout
@@ -149,17 +143,16 @@ class MainActivity : AppCompatActivity(),
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var pendingGeolocationCallback: GeolocationPermissions.Callback? = null
     private var pendingGeolocationOrigin: String? = null
-    private val FILE_CHOOSER_REQUEST_CODE = 999  // Any unique code
+    private val FILE_CHOOSER_REQUEST_CODE = 999 // Any unique code
     private var cameraImageUri: Uri? = null
-    private var isCapturing = false  // Add this flag to prevent multiple captures
+    private var isCapturing = false // Add this flag to prevent multiple captures
 
     private var lastClickTime = 0L
-    private val MIN_CLICK_INTERVAL = 500L  // Minimum time between clicks
-
+    private val MIN_CLICK_INTERVAL = 500L // Minimum time between clicks
 
     // In MainActivity, add these properties to track cursor state and position
-    private var lastKnownCursorX = 320f  // Default center position
-    private var lastKnownCursorY = 240f  // Default center position
+    private var lastKnownCursorX = 320f // Default center position
+    private var lastKnownCursorY = 240f // Default center position
     private var lastKnownWebViewX = 0f
     private var lastKnownWebViewY = 0f
     private var cursorJustAppeared = false // Track if cursor just appeared
@@ -167,13 +160,11 @@ class MainActivity : AppCompatActivity(),
     private var lastGpsLat: Double? = null
     private var lastGpsLon: Double? = null
 
-
     private var currentVelocityX = 0f
     private var currentVelocityY = 0f
-    private val movementDecay = 0.9f       // Decay factor to slow down gradually
-    private val updateInterval = 16L       // Update interval in ms for smooth motion
+    private val movementDecay = 0.9f // Decay factor to slow down gradually
+    private val updateInterval = 16L // Update interval in ms for smooth motion
     private val handler = Handler(Looper.getMainLooper())
-
 
     private val longPressTimeout = 200L // Milliseconds threshold for tap vs long press
 
@@ -185,8 +176,6 @@ class MainActivity : AppCompatActivity(),
     private var wasKeyboardVisibleAtDown = false
 
     private var originalWebViewHeight = 0
-
-
 
     private val prefsName = Constants.BROWSER_PREFS_NAME
     private val keyLastUrl = Constants.KEY_LAST_URL
@@ -222,39 +211,36 @@ class MainActivity : AppCompatActivity(),
     private val uiHandler = Handler(Looper.getMainLooper())
     private var pendingCursorUpdate = false
 
-    private val onBackPressedCallback = object : OnBackPressedCallback(true) {
-        override fun handleOnBackPressed() {
-            // DebugLog.d("MainActivity", "Back key pressed")
-            when {
-                fullScreenCustomView != null -> {
-                    hideFullScreenCustomView()
-                }
-                isKeyboardVisible || dualWebViewGroup.isUrlEditing() -> {
-                    // Hide keyboard and exit URL editing
-                    hideCustomKeyboard()
-                }
-                isCursorVisible -> {
-                    // Hide cursor
-                    toggleCursorVisibility(forceHide = true)
-                }
-                else -> {
-                    // Remove the callback and let the system handle back
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
-                    // Re-enable for next time
-                    isEnabled = true
+    private val onBackPressedCallback =
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    // DebugLog.d("MainActivity", "Back key pressed")
+                    when {
+                        fullScreenCustomView != null -> {
+                            hideFullScreenCustomView()
+                        }
+                        isKeyboardVisible || dualWebViewGroup.isUrlEditing() -> {
+                            // Hide keyboard and exit URL editing
+                            hideCustomKeyboard()
+                        }
+                        isCursorVisible -> {
+                            // Hide cursor
+                            toggleCursorVisibility(forceHide = true)
+                        }
+                        else -> {
+                            // Remove the callback and let the system handle back
+                            isEnabled = false
+                            onBackPressedDispatcher.onBackPressed()
+                            // Re-enable for next time
+                            isEnabled = true
+                        }
+                    }
                 }
             }
-        }
-    }
-
-
-
-
 
     private lateinit var sensorManager: SensorManager
     private var rotationSensor: Sensor? = null
-    private var isAnchored = false  // Will be loaded from preferences in onCreate
+    private var isAnchored = false // Will be loaded from preferences in onCreate
         set(value) {
             field = value
             if (::dualWebViewGroup.isInitialized) {
@@ -263,19 +249,20 @@ class MainActivity : AppCompatActivity(),
         }
 
     // Smoothing and performance parameters for anchored mode
-    private val TRANSLATION_SCALE = 2000f // Adjusted for better visual stability (approx 36 deg FOV)
-    
+    private val TRANSLATION_SCALE =
+            2000f // Adjusted for better visual stability (approx 36 deg FOV)
+
     // Dynamic smoothing factors (controlled by user preference)
     // Range: 0 (fastest/least smooth) to 100 (slowest/most smooth)
     private var smoothnessLevel = 40 // Default: fairly smooth
     private var anchorSmoothingFactor = 0.08f // Calculated from smoothnessLevel
     private var velocitySmoothing = 0.15f // Calculated from smoothnessLevel
-    
+
     // Velocity tracking for double exponential smoothing
     private var smoothedDeltaX = 0f
     private var smoothedDeltaY = 0f
     private var smoothedRollDeg = 0f
-    
+
     // Frame timing for vsync
     private var lastFrameTime = 0L
     private val MIN_FRAME_INTERVAL_MS = 8L // ~120 FPS max (displays may be 90-120Hz)
@@ -306,33 +293,32 @@ class MainActivity : AppCompatActivity(),
     private var lastTapTime = 0L
     private var firstTapTime = 0L
     private var tapCount = 0
-    private val TRIPLE_TAP_TIMEOUT = 500L  // Total window for triple-tap sequence
+    private val TRIPLE_TAP_TIMEOUT = 500L // Total window for triple-tap sequence
     private var isTripleTapInProgress = false
 
     private var settingsMenu: View? = null
 
-    private val gpsResponseListener = Launcher.OnResponseListener { response ->
-        if (response?.data == null) return@OnResponseListener
+    private val gpsResponseListener =
+            Launcher.OnResponseListener { response ->
+                if (response?.data == null) return@OnResponseListener
 
-        try {
-            val jo = JSONObject(response.data)
-            if (jo.has("mLatitude") && jo.has("mLongitude")) {
-                val mLatitude = jo.getDouble("mLatitude")
-                val mLongitude = jo.getDouble("mLongitude")
+                try {
+                    val jo = JSONObject(response.data)
+                    if (jo.has("mLatitude") && jo.has("mLongitude")) {
+                        val mLatitude = jo.getDouble("mLatitude")
+                        val mLongitude = jo.getDouble("mLongitude")
 
-                // Save for page reloads
-                lastGpsLat = mLatitude
-                lastGpsLon = mLongitude
+                        // Save for page reloads
+                        lastGpsLat = mLatitude
+                        lastGpsLon = mLongitude
 
-                // Inject location into WebView on UI thread
-                runOnUiThread {
-                    dualWebViewGroup.injectLocation(mLatitude, mLongitude)
+                        // Inject location into WebView on UI thread
+                        runOnUiThread { dualWebViewGroup.injectLocation(mLatitude, mLongitude) }
+                    }
+                } catch (e: Exception) {
+                    DebugLog.e("GpsData", "Error processing GPS data: ${e.message}")
                 }
             }
-        } catch (e: Exception) {
-            DebugLog.e("GpsData", "Error processing GPS data: ${e.message}")
-        }
-    }
 
     private val cursorToggleLock = Any()
     private var potentialTapEvent: MotionEvent? = null
@@ -340,27 +326,28 @@ class MainActivity : AppCompatActivity(),
     private var pendingTouchHandler: Handler? = null
     private var pendingTouchRunnable: Runnable? = null
 
-    private val notificationReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == NotificationService.ACTION_NOTIFICATION_POSTED) {
-                val packageName = intent.getStringExtra(NotificationService.EXTRA_PACKAGE)
-                val title = intent.getStringExtra(NotificationService.EXTRA_TITLE)
-                val text = intent.getStringExtra(NotificationService.EXTRA_TEXT)
+    private val notificationReceiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.action == NotificationService.ACTION_NOTIFICATION_POSTED) {
+                        val packageName = intent.getStringExtra(NotificationService.EXTRA_PACKAGE)
+                        val title = intent.getStringExtra(NotificationService.EXTRA_TITLE)
+                        val text = intent.getStringExtra(NotificationService.EXTRA_TEXT)
 
-                DebugLog.d("MainActivity", "Received notification from $packageName: $title - $text")
-                
-                // Show a custom toast with the notification
-                dualWebViewGroup.showToast("Notification: $title - $text", 3000L)
+                        DebugLog.d(
+                                "MainActivity",
+                                "Received notification from $packageName: $title - $text"
+                        )
+
+                        // Show a custom toast with the notification
+                        dualWebViewGroup.showToast("Notification: $title - $text", 3000L)
+                    }
+                }
             }
-        }
-    }
-
 
     init {
         DebugLog.d("LinkEditing", "MainActivity initialized, isUrlEditing=$isUrlEditing")
     }
-
-
 
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility", "DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -370,19 +357,17 @@ class MainActivity : AppCompatActivity(),
 
         // Force hardware acceleration but with black background
         window.setFlags(
-            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
         )
 
         // Prevent any drawing until we're ready
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            @Suppress("DEPRECATION")
-            window.setDecorFitsSystemWindows(false)
+            @Suppress("DEPRECATION") window.setDecorFitsSystemWindows(false)
         }
 
         // Set content view with black background
         setContentView(R.layout.activity_main)
-
 
         findViewById<View>(android.R.id.content).setBackgroundColor(Color.BLACK)
 
@@ -392,23 +377,24 @@ class MainActivity : AppCompatActivity(),
 
         // Add this to disable default keyboard
         window.setFlags(
-            WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
-            WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+                WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
+                WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
         )
 
         // After basic window setup but before using any settings
 
         supportActionBar?.hide()
 
-        keyboardListener = object : DualWebViewGroup.KeyboardListener {
-            override fun onShowKeyboard() {
-                showCustomKeyboard()
-            }
+        keyboardListener =
+                object : DualWebViewGroup.KeyboardListener {
+                    override fun onShowKeyboard() {
+                        showCustomKeyboard()
+                    }
 
-            override fun onHideKeyboard() {
-                hideCustomKeyboard()
-            }
-        }
+                    override fun onHideKeyboard() {
+                        hideCustomKeyboard()
+                    }
+                }
 
         // Initialize DualWebViewGroup first
         dualWebViewGroup = findViewById(R.id.dualWebViewGroup)
@@ -417,13 +403,14 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.maskToggleListener = this
         dualWebViewGroup.windowCallback = this
         dualWebViewGroup.restoreState()
-        
+
         // Load saved anchored mode state
-        isAnchored = getSharedPreferences(prefsName, MODE_PRIVATE)
-            .getBoolean("isAnchored", false) // Default to false on first run
-            
+        isAnchored =
+                getSharedPreferences(prefsName, MODE_PRIVATE)
+                        .getBoolean("isAnchored", false) // Default to false on first run
+
         dualWebViewGroup.isAnchored = isAnchored
-        
+
         if (isAnchored) {
             dualWebViewGroup.startAnchoring()
         } else {
@@ -431,14 +418,18 @@ class MainActivity : AppCompatActivity(),
         }
 
         // Initialize GestureDetector
-        gestureDetector = GestureDetector(this, object : SimpleOnGestureListener() {
-            private var isProcessingTap = false
-            private var totalScrollDistance = 0f
+        gestureDetector =
+                GestureDetector(
+                        this,
+                        object : SimpleOnGestureListener() {
+                            private var isProcessingTap = false
+                            private var totalScrollDistance = 0f
 
-
-            override fun onDown(e: MotionEvent): Boolean {
-                totalScrollDistance = 0f
-                DebugLog.d("GestureInput", """
+                            override fun onDown(e: MotionEvent): Boolean {
+                                totalScrollDistance = 0f
+                                DebugLog.d(
+                                        "GestureInput",
+                                        """
             Gesture Down:
             Source: ${e.source}
             Device: ${e.device?.name}
@@ -448,279 +439,341 @@ class MainActivity : AppCompatActivity(),
             EventTime: ${e.eventTime}
             DownTime: ${e.downTime}
             Duration: ${e.eventTime - e.downTime}ms
-        """.trimIndent())
+        """.trimIndent()
+                                )
 
-                // Store the down event for potential tap
-                potentialTapEvent = MotionEvent.obtain(e)
+                                // Store the down event for potential tap
+                                potentialTapEvent = MotionEvent.obtain(e)
 
-                // Triple tap detection for screen re-centering in anchored mode
-                val currentTime = System.currentTimeMillis()
-                if (currentTime - lastTapTime > TRIPLE_TAP_TIMEOUT) {
-                    DebugLog.d("TripleTapDebug", "Starting new tap sequence")
-                    tapCount = 1
-                    firstTapTime = currentTime
-                    isTripleTapInProgress = false
-                } else {
-                    tapCount++
-                    DebugLog.d("TripleTapDebug", "Tap count increased to: $tapCount")
-                }
-                lastTapTime = currentTime
+                                // Triple tap detection for screen re-centering in anchored mode
+                                val currentTime = System.currentTimeMillis()
+                                if (currentTime - lastTapTime > TRIPLE_TAP_TIMEOUT) {
+                                    DebugLog.d("TripleTapDebug", "Starting new tap sequence")
+                                    tapCount = 1
+                                    firstTapTime = currentTime
+                                    isTripleTapInProgress = false
+                                } else {
+                                    tapCount++
+                                    DebugLog.d(
+                                            "TripleTapDebug",
+                                            "Tap count increased to: $tapCount"
+                                    )
+                                }
+                                lastTapTime = currentTime
 
-                // Check for triple tap (only works in anchored mode)
-                if (isAnchored && tapCount == 3 && (currentTime - firstTapTime) <= TRIPLE_TAP_TIMEOUT) {
-                    DebugLog.d("TripleTapDebug", "Triple tap detected! Time from first tap: ${currentTime - firstTapTime}ms")
-                    handler.removeCallbacksAndMessages(null)
-                    synchronized(doubleTapLock) {
-                        pendingDoubleTapAction = false
-                    }
-                    isTripleTapInProgress = true
+                                // Check for triple tap (only works in anchored mode)
+                                if (isAnchored &&
+                                                tapCount == 3 &&
+                                                (currentTime - firstTapTime) <= TRIPLE_TAP_TIMEOUT
+                                ) {
+                                    DebugLog.d(
+                                            "TripleTapDebug",
+                                            "Triple tap detected! Time from first tap: ${currentTime - firstTapTime}ms"
+                                    )
+                                    handler.removeCallbacksAndMessages(null)
+                                    synchronized(doubleTapLock) { pendingDoubleTapAction = false }
+                                    isTripleTapInProgress = true
 
-                    // Reset translations to center the view
-                    shouldResetInitialQuaternion = true
-                    dualWebViewGroup.updateLeftEyePosition(0f, 0f, 0f)  // Reset translations and rotation
-                    dualWebViewGroup.showToast("Screen Re-centered")
-                    
-                    tapCount = 0
-                    return true
-                }
+                                    // Reset translations to center the view
+                                    shouldResetInitialQuaternion = true
+                                    dualWebViewGroup.updateLeftEyePosition(
+                                            0f,
+                                            0f,
+                                            0f
+                                    ) // Reset translations and rotation
+                                    dualWebViewGroup.showToast("Screen Re-centered")
 
-                return true
-            }
+                                    tapCount = 0
+                                    return true
+                                }
 
-            override fun onLongPress(e: MotionEvent) {
-                tapCount = 0
-                DebugLog.d("RingInput", """
+                                return true
+                            }
+
+                            override fun onLongPress(e: MotionEvent) {
+                                tapCount = 0
+                                DebugLog.d(
+                                        "RingInput",
+                                        """
             Long Press:
             Source: ${e.source}
             Device: ${e.device?.name}
             ButtonState: ${e.buttonState}
             Pressure: ${e.pressure}
             Duration: ${e.eventTime - e.downTime}ms
-        """.trimIndent())
-            }
+        """.trimIndent()
+                                )
+                            }
 
-            override fun onScroll(
-                e1: MotionEvent?,
-                e2: MotionEvent,
-                distanceX: Float,
-                distanceY: Float
-            ): Boolean {
-                tapCount = 0 // Reset tap count on scroll to prevent accidental triple-tap detection
-                totalScrollDistance += kotlin.math.sqrt(distanceX * distanceX + distanceY * distanceY)
+                            override fun onScroll(
+                                    e1: MotionEvent?,
+                                    e2: MotionEvent,
+                                    distanceX: Float,
+                                    distanceY: Float
+                            ): Boolean {
+                                tapCount = 0 // Reset tap count on scroll to prevent accidental
+                                // triple-tap detection
+                                totalScrollDistance +=
+                                        kotlin.math.sqrt(
+                                                distanceX * distanceX + distanceY * distanceY
+                                        )
 
-                // When ANCHORED: both X and Y move the page vertically
-                if (isAnchored && !isKeyboardVisible && !dualWebViewGroup.isScreenMasked()) {
-                    // Map horizontal to vertical: LEFT -> UP, RIGHT -> DOWN
-                    // GestureDetector gives incremental deltas since last callback
-                    val horizontalAsVertical = (-distanceX) * X_INVERT * H2V_GAIN
-                    val verticalFromDrag = distanceY * Y_INVERT
+                                // When ANCHORED: both X and Y move the page vertically
+                                if (isAnchored &&
+                                                !isKeyboardVisible &&
+                                                !dualWebViewGroup.isScreenMasked()
+                                ) {
+                                    // Map horizontal to vertical: LEFT -> UP, RIGHT -> DOWN
+                                    // GestureDetector gives incremental deltas since last callback
+                                    val horizontalAsVertical = (-distanceX) * X_INVERT * H2V_GAIN
+                                    val verticalFromDrag = distanceY * Y_INVERT
 
-                    val scale = dualWebViewGroup.uiScale
-                    val verticalDelta = (horizontalAsVertical + verticalFromDrag) / scale
+                                    val scale = dualWebViewGroup.uiScale
+                                    val verticalDelta =
+                                            (horizontalAsVertical + verticalFromDrag) / scale
 
-                    if (kotlin.math.abs(verticalDelta) >= 1f) {
-                        val pointerCoords = MotionEvent.PointerCoords()
-                        pointerCoords.x = 320f
-                        pointerCoords.y = 240f
-                        pointerCoords.setAxisValue(MotionEvent.AXIS_VSCROLL, verticalDelta / 30f)
+                                    if (kotlin.math.abs(verticalDelta) >= 1f) {
+                                        val pointerCoords = MotionEvent.PointerCoords()
+                                        pointerCoords.x = 320f
+                                        pointerCoords.y = 240f
+                                        pointerCoords.setAxisValue(
+                                                MotionEvent.AXIS_VSCROLL,
+                                                verticalDelta / 30f
+                                        )
 
-                        val pointerProperties = MotionEvent.PointerProperties()
-                        pointerProperties.id = 0
-                        pointerProperties.toolType = MotionEvent.TOOL_TYPE_MOUSE
+                                        val pointerProperties = MotionEvent.PointerProperties()
+                                        pointerProperties.id = 0
+                                        pointerProperties.toolType = MotionEvent.TOOL_TYPE_MOUSE
 
-                        val event = MotionEvent.obtain(
-                            SystemClock.uptimeMillis(),
-                            SystemClock.uptimeMillis(),
-                            MotionEvent.ACTION_SCROLL,
-                            1,
-                            arrayOf(pointerProperties),
-                            arrayOf(pointerCoords),
-                            0,
-                            0,
-                            1.0f,
-                            1.0f,
-                            0,
-                            0,
-                            InputDevice.SOURCE_MOUSE,
-                            0
-                        )
-                        
-                        webView.dispatchGenericMotionEvent(event)
-                        event.recycle()
-                    }
-                    return true
-                }
+                                        val event =
+                                                MotionEvent.obtain(
+                                                        SystemClock.uptimeMillis(),
+                                                        SystemClock.uptimeMillis(),
+                                                        MotionEvent.ACTION_SCROLL,
+                                                        1,
+                                                        arrayOf(pointerProperties),
+                                                        arrayOf(pointerCoords),
+                                                        0,
+                                                        0,
+                                                        1.0f,
+                                                        1.0f,
+                                                        0,
+                                                        0,
+                                                        InputDevice.SOURCE_MOUSE,
+                                                        0
+                                                )
 
-                // Not anchored: keep your existing cursor-follow logic
-                val cursorGain = 0.45f
-                val dx = -distanceX * cursorGain
-                val dy = -distanceY * cursorGain
-                if (!isAnchored) {
-                    // Clamp to single eye dimensions (640x480), not full dual display width
-                    val maxW = 640f
-                    val maxH = 480f
-                    lastCursorX = (lastCursorX + dx).coerceIn(0f, maxW)
-                    lastCursorY = (lastCursorY + dy).coerceIn(0f, maxH)
-
-                    val loc = IntArray(2)
-                    webView.getLocationOnScreen(loc)
-                    lastKnownWebViewX = lastCursorX - loc[0]
-                    lastKnownWebViewY = lastCursorY - loc[1]
-                    refreshCursor(true)
-                    DebugLog.d("GestureInput", "Trapped!")
-                    return true
-                }
-
-                return false
-            }
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                DebugLog.d("RingInput", "Single Tap from device: ${e.device?.name}")
-
-                if (totalScrollDistance > 10f) {
-                    DebugLog.d("GestureInput", "Tap ignored due to swipe distance: $totalScrollDistance")
-                    return false
-                }
-
-                handleUserInteraction()
-
-    // If the touch interaction started on the bookmarks view, consume the tap here
-    // to prevent it from propagating to the WebView (even if bookmarks closed in the meantime)
-    if (wasTouchOnBookmarks) {
-        return true
-    }
-
-    // Don't handle single taps that are part of a triple tap sequence
-    if (isTripleTapInProgress) {
-                    isTripleTapInProgress = false
-                    return true
-                }
-
-                // When masked, don't consume the tap - let it reach the unmask button and media controls
-                // The mask overlay itself will block touches to web content
-
-                if (isProcessingTap) return true
-
-                isProcessingTap = true
-                Handler(Looper.getMainLooper()).postDelayed({ isProcessingTap = false }, 300)
-
-
-                // Bookmark taps are now handled exclusively by DualWebViewGroup.onTouchEvent
-                // to prevent double-dispatch issues with actions like "Set Home"
-
-                when {
-                    isToggling && cursorJustAppeared -> {
-                        DebugLog.d("TouchDebug", "Ignoring tap during cursor appearance")
-                        return true
-                    }
-
-                    isCursorVisible -> {
-                        // Check if this is a long press
-                        if (e.eventTime - e.downTime > longPressTimeout) {
-                            //DebugLog.d("TouchDebug", "Long press detected, ignoring input interaction")
-                            return true
-                        }
-
-                        // Handle regular clicks when cursor is visible
-                        if (!cursorJustAppeared && !isSimulatingTouchEvent) {
-                            val UILocation = IntArray(2)
-                            dualWebViewGroup.leftEyeUIContainer.getLocationOnScreen(UILocation)
-
-                            // Dispatch the touch event at the current cursor position
-                            dispatchTouchEventAtCursor()
-                        }
-                    }
-
-                    else -> {
-                        // In scroll mode (cursor hidden), let taps pass through to the WebView
-                        // User can exit scroll mode via the dedicated unhide button
-                        if (dualWebViewGroup.isInScrollMode()) {
-                            return false  // Don't consume - let tap go to WebView
-                        }
-                        isSimulatingTouchEvent = true
-                        toggleCursorVisibility()
-                    }
-                }
-                return true
-            }
-
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                // Prevent double tap back navigation if keyboard is visible
-                if (isKeyboardVisible) {
-                    DebugLog.d("DoubleTapDebug", "Double tap ignored because keyboard is visible")
-                    return true // Consume the event so it doesn't propagate
-                }
-                
-                val isInScrollMode = dualWebViewGroup.isInScrollMode()
-                DebugLog.d(
-                    "DoubleTapDebug",
-                    """onDoubleTap called. isProcessingDoubleTap: $isProcessingDoubleTap, isInScrollMode: $isInScrollMode"""
-                )
-
-                synchronized(doubleTapLock) {
-                    // Safety check: Reset if flag has been stuck for too long (>500ms)
-                    val currentTime = System.currentTimeMillis()
-                    if (isProcessingDoubleTap && lastDoubleTapStartTime > 0 && 
-                        currentTime - lastDoubleTapStartTime > 500) {
-                        DebugLog.d("DoubleTapDebug", "Resetting stuck isProcessingDoubleTap flag")
-                        isProcessingDoubleTap = false
-                    }
-                    
-                    if (isProcessingDoubleTap) {
-                        DebugLog.d("DoubleTapDebug", "Skipping - already processing double tap")
-                        return true
-                    }
-                    isProcessingDoubleTap = true
-                    lastDoubleTapStartTime = currentTime
-                    pendingDoubleTapAction = true
-
-                    handler.postDelayed({
-                        synchronized(doubleTapLock) {
-                            try {
-                                if (pendingDoubleTapAction) {
-                                    DebugLog.d("DoubleTapDebug", "Executing pending double tap action")
-                                    performDoubleTapBackNavigation()
+                                        webView.dispatchGenericMotionEvent(event)
+                                        event.recycle()
+                                    }
+                                    return true
                                 }
-                            } finally {
-                                tapCount = 0
-                                lastTapTime = 0L
-                                pendingDoubleTapAction = false
-                                isProcessingDoubleTap = false
-                                lastDoubleTapStartTime = 0L
+
+                                // Not anchored: keep your existing cursor-follow logic
+                                val cursorGain = 0.45f
+                                val dx = -distanceX * cursorGain
+                                val dy = -distanceY * cursorGain
+                                if (!isAnchored) {
+                                    // Clamp to single eye dimensions (640x480), not full dual
+                                    // display width
+                                    val maxW = 640f
+                                    val maxH = 480f
+                                    lastCursorX = (lastCursorX + dx).coerceIn(0f, maxW)
+                                    lastCursorY = (lastCursorY + dy).coerceIn(0f, maxH)
+
+                                    val loc = IntArray(2)
+                                    webView.getLocationOnScreen(loc)
+                                    lastKnownWebViewX = lastCursorX - loc[0]
+                                    lastKnownWebViewY = lastCursorY - loc[1]
+                                    refreshCursor(true)
+                                    DebugLog.d("GestureInput", "Trapped!")
+                                    return true
+                                }
+
+                                return false
+                            }
+                            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                                DebugLog.d("RingInput", "Single Tap from device: ${e.device?.name}")
+
+                                if (totalScrollDistance > 10f) {
+                                    DebugLog.d(
+                                            "GestureInput",
+                                            "Tap ignored due to swipe distance: $totalScrollDistance"
+                                    )
+                                    return false
+                                }
+
+                                handleUserInteraction()
+
+                                // If the touch interaction started on the bookmarks view, consume
+                                // the tap here
+                                // to prevent it from propagating to the WebView (even if bookmarks
+                                // closed in the meantime)
+                                if (wasTouchOnBookmarks) {
+                                    return true
+                                }
+
+                                // Don't handle single taps that are part of a triple tap sequence
+                                if (isTripleTapInProgress) {
+                                    isTripleTapInProgress = false
+                                    return true
+                                }
+
+                                // When masked, don't consume the tap - let it reach the unmask
+                                // button and media controls
+                                // The mask overlay itself will block touches to web content
+
+                                if (isProcessingTap) return true
+
+                                isProcessingTap = true
+                                Handler(Looper.getMainLooper())
+                                        .postDelayed({ isProcessingTap = false }, 300)
+
+                                // Bookmark taps are now handled exclusively by
+                                // DualWebViewGroup.onTouchEvent
+                                // to prevent double-dispatch issues with actions like "Set Home"
+
+                                when {
+                                    isToggling && cursorJustAppeared -> {
+                                        DebugLog.d(
+                                                "TouchDebug",
+                                                "Ignoring tap during cursor appearance"
+                                        )
+                                        return true
+                                    }
+                                    isCursorVisible -> {
+                                        // Check if this is a long press
+                                        if (e.eventTime - e.downTime > longPressTimeout) {
+                                            // DebugLog.d("TouchDebug", "Long press detected,
+                                            // ignoring input interaction")
+                                            return true
+                                        }
+
+                                        // Handle regular clicks when cursor is visible
+                                        if (!cursorJustAppeared && !isSimulatingTouchEvent) {
+                                            val UILocation = IntArray(2)
+                                            dualWebViewGroup.leftEyeUIContainer.getLocationOnScreen(
+                                                    UILocation
+                                            )
+
+                                            // Dispatch the touch event at the current cursor
+                                            // position
+                                            dispatchTouchEventAtCursor()
+                                        }
+                                    }
+                                    else -> {
+                                        // In scroll mode (cursor hidden), let taps pass through to
+                                        // the WebView
+                                        // User can exit scroll mode via the dedicated unhide button
+                                        if (dualWebViewGroup.isInScrollMode()) {
+                                            return false // Don't consume - let tap go to WebView
+                                        }
+                                        isSimulatingTouchEvent = true
+                                        toggleCursorVisibility()
+                                    }
+                                }
+                                return true
+                            }
+
+                            override fun onDoubleTap(e: MotionEvent): Boolean {
+                                // Prevent double tap back navigation if keyboard is visible
+                                if (isKeyboardVisible) {
+                                    DebugLog.d(
+                                            "DoubleTapDebug",
+                                            "Double tap ignored because keyboard is visible"
+                                    )
+                                    return true // Consume the event so it doesn't propagate
+                                }
+
+                                val isInScrollMode = dualWebViewGroup.isInScrollMode()
+                                DebugLog.d(
+                                        "DoubleTapDebug",
+                                        """onDoubleTap called. isProcessingDoubleTap: $isProcessingDoubleTap, isInScrollMode: $isInScrollMode"""
+                                )
+
+                                synchronized(doubleTapLock) {
+                                    // Safety check: Reset if flag has been stuck for too long
+                                    // (>500ms)
+                                    val currentTime = System.currentTimeMillis()
+                                    if (isProcessingDoubleTap &&
+                                                    lastDoubleTapStartTime > 0 &&
+                                                    currentTime - lastDoubleTapStartTime > 500
+                                    ) {
+                                        DebugLog.d(
+                                                "DoubleTapDebug",
+                                                "Resetting stuck isProcessingDoubleTap flag"
+                                        )
+                                        isProcessingDoubleTap = false
+                                    }
+
+                                    if (isProcessingDoubleTap) {
+                                        DebugLog.d(
+                                                "DoubleTapDebug",
+                                                "Skipping - already processing double tap"
+                                        )
+                                        return true
+                                    }
+                                    isProcessingDoubleTap = true
+                                    lastDoubleTapStartTime = currentTime
+                                    pendingDoubleTapAction = true
+
+                                    handler.postDelayed(
+                                            {
+                                                synchronized(doubleTapLock) {
+                                                    try {
+                                                        if (pendingDoubleTapAction) {
+                                                            DebugLog.d(
+                                                                    "DoubleTapDebug",
+                                                                    "Executing pending double tap action"
+                                                            )
+                                                            performDoubleTapBackNavigation()
+                                                        }
+                                                    } finally {
+                                                        tapCount = 0
+                                                        lastTapTime = 0L
+                                                        pendingDoubleTapAction = false
+                                                        isProcessingDoubleTap = false
+                                                        lastDoubleTapStartTime = 0L
+                                                    }
+                                                }
+                                            },
+                                            DOUBLE_TAP_CONFIRMATION_DELAY
+                                    )
+                                }
+
+                                return true
+                            }
+
+                            private fun performDoubleTapBackNavigation() {
+                                val isScreenMasked = dualWebViewGroup.isScreenMasked()
+                                val hasHistory = webView.canGoBack()
+
+                                DebugLog.d(
+                                        "DoubleTapDebug",
+                                        """Double tap confirmed. isScreenMasked=$isScreenMasked, isKeyboardVisible=$isKeyboardVisible, canGoBack=$hasHistory"""
+                                )
+
+                                if (!hasHistory) {
+                                    DebugLog.d(
+                                            "DoubleTapDebug",
+                                            "No history entry available for goBack()"
+                                    )
+                                    return
+                                }
+
+                                onNavigationBackPressed()
                             }
                         }
-                    }, DOUBLE_TAP_CONFIRMATION_DELAY)
-                }
-
-                return true
-            }
-
-
-            private fun performDoubleTapBackNavigation() {
-                val isScreenMasked = dualWebViewGroup.isScreenMasked()
-                val hasHistory = webView.canGoBack()
-
-                DebugLog.d(
-                    "DoubleTapDebug",
-                    """Double tap confirmed. isScreenMasked=$isScreenMasked, isKeyboardVisible=$isKeyboardVisible, canGoBack=$hasHistory"""
                 )
 
-                if (!hasHistory) {
-                    DebugLog.d("DoubleTapDebug", "No history entry available for goBack()")
-                    return
-                }
-
-                onNavigationBackPressed()
-            }
-        })
-
-
-
-
         // Create and set up bookmarks view
-        val bookmarksView = BookmarksView(this).apply {
-            setKeyboardListener(this@MainActivity)  // Set keyboard listener directly
-            setBookmarkListener(this@MainActivity)  // Add this line to set the bookmark listener
-        }
+        val bookmarksView =
+                BookmarksView(this).apply {
+                    setKeyboardListener(this@MainActivity) // Set keyboard listener directly
+                    setBookmarkListener(
+                            this@MainActivity
+                    ) // Add this line to set the bookmark listener
+                }
 
         // Set up bookmarks view in DualWebViewGroup
         dualWebViewGroup.setBookmarksView(bookmarksView)
@@ -729,48 +782,49 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.resetUiState()
 
         bookmarksView.setKeyboardListener(this)
-        DebugLog.d("BookmarksDebug","BookmarksView set in onCreate")
+        DebugLog.d("BookmarksDebug", "BookmarksView set in onCreate")
 
         // Set up the keyboard listener
-        dualWebViewGroup.keyboardListener = object : DualWebViewGroup.KeyboardListener {
-            override fun onShowKeyboard() {
-                showCustomKeyboard()
-            }
+        dualWebViewGroup.keyboardListener =
+                object : DualWebViewGroup.KeyboardListener {
+                    override fun onShowKeyboard() {
+                        showCustomKeyboard()
+                    }
 
-            override fun onHideKeyboard() {
-                hideCustomKeyboard()
-            }
-        }
-
-
-
+                    override fun onHideKeyboard() {
+                        hideCustomKeyboard()
+                    }
+                }
 
         // Set up the cursor views directly in the main container
-        cursorLeftView = ImageView(this).apply {
-            layoutParams = ViewGroup.LayoutParams(24, 24) // Adjust size as needed
-            setImageResource(R.drawable.cursor_arrow_image)
-            scaleType = ImageView.ScaleType.FIT_START // Anchor to top-left for accurate click alignment
-            x = 320f
-            y = 240f
-            visibility = View.GONE
-        }
-        cursorRightView = ImageView(this).apply {
-            layoutParams = ViewGroup.LayoutParams(24, 24)
-            setImageResource(R.drawable.cursor_arrow_image)
-            scaleType = ImageView.ScaleType.FIT_START // Anchor to top-left for accurate click alignment
-            x = 960f
-            y = 240f
-            visibility = View.GONE
-        }
+        cursorLeftView =
+                ImageView(this).apply {
+                    layoutParams = ViewGroup.LayoutParams(24, 24) // Adjust size as needed
+                    setImageResource(R.drawable.cursor_arrow_image)
+                    scaleType =
+                            ImageView.ScaleType
+                                    .FIT_START // Anchor to top-left for accurate click alignment
+                    x = 320f
+                    y = 240f
+                    visibility = View.GONE
+                }
+        cursorRightView =
+                ImageView(this).apply {
+                    layoutParams = ViewGroup.LayoutParams(24, 24)
+                    setImageResource(R.drawable.cursor_arrow_image)
+                    scaleType =
+                            ImageView.ScaleType
+                                    .FIT_START // Anchor to top-left for accurate click alignment
+                    x = 960f
+                    y = 240f
+                    visibility = View.GONE
+                }
 
         // Add cursor views to the main container
         mainContainer.apply {
             addView(cursorLeftView)
             addView(cursorRightView)
         }
-
-
-
 
         webView = dualWebViewGroup.getWebView()
         // DebugLog.d("WebViewDebug", "Initial WebView state - URL: ${webView.url}")
@@ -780,12 +834,12 @@ class MainActivity : AppCompatActivity(),
             // Clear any pending touch events when a new touch starts
             // or when touch ends/cancels
             if (event.action == MotionEvent.ACTION_DOWN ||
-                event.action == MotionEvent.ACTION_UP ||
-                event.action == MotionEvent.ACTION_CANCEL) {
+                            event.action == MotionEvent.ACTION_UP ||
+                            event.action == MotionEvent.ACTION_CANCEL
+            ) {
                 pendingTouchRunnable?.let { pendingTouchHandler?.removeCallbacks(it) }
                 pendingTouchRunnable = null
             }
-
 
             if (isAnchored && isKeyboardVisible) {
                 return@setOnTouchListener false
@@ -799,13 +853,15 @@ class MainActivity : AppCompatActivity(),
                 return@setOnTouchListener true
             }
 
-            // Use the cached result from dispatchTouchEvent instead of calling gestureDetector again
+            // Use the cached result from dispatchTouchEvent instead of calling gestureDetector
+            // again
             // This prevents double-processing which can corrupt gesture state
             val handled = isGestureHandled
 
             // Add check for settings menu visibility
             if (dualWebViewGroup.isSettingsVisible()) {
-                return@setOnTouchListener isCursorVisible  // Let the event propagate to the settings menu
+                return@setOnTouchListener isCursorVisible // Let the event propagate to the settings
+                // menu
             }
 
             // In scroll mode, let taps pass through to WebView
@@ -823,41 +879,36 @@ class MainActivity : AppCompatActivity(),
                 return@setOnTouchListener true
             }
 
-
-            if (event.action == MotionEvent.ACTION_UP && !handled) {
-            }
+            if (event.action == MotionEvent.ACTION_UP && !handled) {}
 
             handled
         }
 
-
         // Disable the default keyboard
         webView.settings.javaScriptEnabled = true
 
-        webView.webViewClient = object : WebViewClient() {
-            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                super.onPageStarted(view, url, favicon)
-                // If cursor was visible, store its position
-                if (isCursorVisible) {
-                    lastKnownCursorX = lastCursorX
-                    lastKnownCursorY = lastCursorY
-                }
+        webView.webViewClient =
+                object : WebViewClient() {
+                    override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                        super.onPageStarted(view, url, favicon)
+                        // If cursor was visible, store its position
+                        if (isCursorVisible) {
+                            lastKnownCursorX = lastCursorX
+                            lastKnownCursorY = lastCursorY
+                        }
+                    }
 
+                    override fun onPageFinished(view: WebView?, url: String?) {
+                        super.onPageFinished(view, url)
 
-            }
+                        // Save state on every page load to ensure persistence in case of crash
+                        if (::dualWebViewGroup.isInitialized) {
+                            dualWebViewGroup.saveAllWindowsState()
+                        }
 
-
-
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                
-                // Save state on every page load to ensure persistence in case of crash
-                if (::dualWebViewGroup.isInitialized) {
-                    dualWebViewGroup.saveAllWindowsState()
-                }
-
-                // Force enable input on all potential input fields
-                webView.evaluateJavascript("""
+                        // Force enable input on all potential input fields
+                        webView.evaluateJavascript(
+                                """
                 (function() {
                     function enableInput(element) {
                         element.style.webkitUserSelect = 'text';
@@ -886,21 +937,24 @@ class MainActivity : AppCompatActivity(),
                         subtree: true
                     });
                 })();
-            """, null)
+            """,
+                                null
+                        )
 
-                wasKeyboardDismissedByEnter = false
+                        wasKeyboardDismissedByEnter = false
 
-                wasKeyboardDismissedByEnter = false
-                // Log focus state
-                // DebugLog.d("WebViewDebug", "WebView focus state: ${view?.isFocused}")
-                
-                // Update scrollbar visibility based on new content
-                dualWebViewGroup.updateScrollBarsVisibility()
+                        wasKeyboardDismissedByEnter = false
+                        // Log focus state
+                        // DebugLog.d("WebViewDebug", "WebView focus state: ${view?.isFocused}")
 
-                // Enforce desktop viewport if enabled (persists across reloads/SPA navigation)
-                if (dualWebViewGroup.isDesktopMode()) {
-                    webView.evaluateJavascript(
-                        """
+                        // Update scrollbar visibility based on new content
+                        dualWebViewGroup.updateScrollBarsVisibility()
+
+                        // Enforce desktop viewport if enabled (persists across reloads/SPA
+                        // navigation)
+                        if (dualWebViewGroup.isDesktopMode()) {
+                            webView.evaluateJavascript(
+                                    """
                         (function() {
                             var viewport = document.querySelector('meta[name="viewport"]');
                             if (!viewport) {
@@ -910,22 +964,22 @@ class MainActivity : AppCompatActivity(),
                             }
                             viewport.content = 'width=1280, initial-scale=0.8';
                         })();
-                        """, null
-                    )
+                        """,
+                                    null
+                            )
+                        }
+                    }
+
+                    override fun doUpdateVisitedHistory(
+                            view: WebView?,
+                            url: String?,
+                            isReload: Boolean
+                    ) {
+                        super.doUpdateVisitedHistory(view, url, isReload)
+                        // DebugLog.d("WebDebug", "History updated - url: $url, canGoBack:
+                        // ${view?.canGoBack()}")
+                    }
                 }
-            }
-
-            override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
-                super.doUpdateVisitedHistory(view, url, isReload)
-                // DebugLog.d("WebDebug", "History updated - url: $url, canGoBack: ${view?.canGoBack()}")
-            }
-
-
-
-
-
-
-        }
 
         cursorLeftView.apply {
             isClickable = false
@@ -942,8 +996,6 @@ class MainActivity : AppCompatActivity(),
         webView.setBackgroundColor(Color.BLACK)
         dualWebViewGroup.updateBrowsingMode(false)
 
-
-
         // Set up the listener
         dualWebViewGroup.linkEditingListener = this
         // DebugLog.d("LinkEditing", "Set MainActivity as linkEditingListener")
@@ -952,14 +1004,14 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.anchorToggleListener = this
 
         // Initialize sensor manager
-        sensorManager  = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
 
         // Load preferences (use TapLinkPrefs for settings that are saved there)
         val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
         smoothnessLevel = prefs.getInt(Constants.KEY_ANCHOR_SMOOTHNESS, 40)
         updateSmoothnessFactors(smoothnessLevel)
-        
+
         // Note: isAnchored is already loaded earlier from BrowserPrefs
         DebugLog.d("AnchorDebug", "Anchored state (loaded earlier): $isAnchored")
 
@@ -977,7 +1029,11 @@ class MainActivity : AppCompatActivity(),
         if (isAnchored) {
             rotationSensor?.let { sensor ->
                 sensorEventListener = createSensorEventListener()
-                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_GAME)
+                sensorManager.registerListener(
+                        sensorEventListener,
+                        sensor,
+                        SensorManager.SENSOR_DELAY_GAME
+                )
             }
             dualWebViewGroup.startAnchoring()
         } else {
@@ -985,9 +1041,8 @@ class MainActivity : AppCompatActivity(),
             dualWebViewGroup.stopAnchoring()
         }
 
-
         // Then try to restore the previous state
-        setupWebView()  // This will attempt to load the saved URL
+        setupWebView() // This will attempt to load the saved URL
 
         // Only clear cache/history if restoration failed
         if (webView.url == null || webView.url == "about:blank") {
@@ -996,14 +1051,15 @@ class MainActivity : AppCompatActivity(),
             webView.loadUrl(Constants.DEFAULT_URL)
         }
         // Initialize camera after WebView setup
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
-            == PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) ==
+                        PackageManager.PERMISSION_GRANTED
+        ) {
             cameraPermissionGranted = true
         } else {
             // Request camera permission if we don't have it
             requestPermissions(arrayOf(android.Manifest.permission.CAMERA), CAMERA_PERMISSION_CODE)
         }
-        initializeSpeechRecognition()  // Initialize speech recognition after WebView setup
+        initializeSpeechRecognition() // Initialize speech recognition after WebView setup
 
         // Call permission check during setup
         checkAndRequestPermissions()
@@ -1014,25 +1070,23 @@ class MainActivity : AppCompatActivity(),
         } else {
             DebugLog.d("Sensor", "Rotation vector sensor found")
         }
-
     }
 
     // Add method to handle hyperlink button press
     override fun onHyperlinkPressed() {
         DebugLog.d("LinkEditing", "onHyperlinkPressed called")
         dualWebViewGroup.showLinkEditing()
-
     }
 
     override fun onNavigationForwardPressed() {
-         if (webView.canGoForward()) {
-             webView.goForward()
-         }
+        if (webView.canGoForward()) {
+            webView.goForward()
+        }
     }
 
     override fun onPause() {
         super.onPause()
-        
+
         try {
             unregisterReceiver(notificationReceiver)
         } catch (e: IllegalArgumentException) {
@@ -1050,7 +1104,12 @@ class MainActivity : AppCompatActivity(),
 
         // Register notification receiver
         val filter = IntentFilter(NotificationService.ACTION_NOTIFICATION_POSTED)
-        ContextCompat.registerReceiver(this, notificationReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(
+                this,
+                notificationReceiver,
+                filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED
+        )
 
         // Restart mirroring to right eye
         dualWebViewGroup.startRefreshing()
@@ -1060,7 +1119,11 @@ class MainActivity : AppCompatActivity(),
         if (isAnchored) {
             // Re-register the sensor listener
             rotationSensor?.let { sensor ->
-                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_GAME)
+                sensorManager.registerListener(
+                        sensorEventListener,
+                        sensor,
+                        SensorManager.SENSOR_DELAY_GAME
+                )
             }
         }
     }
@@ -1086,27 +1149,31 @@ class MainActivity : AppCompatActivity(),
         gpsUpdatesRegistered = false
     }
 
-
     override fun getCurrentUrl(): String {
         return dualWebViewGroup.getWebView().url ?: Constants.DEFAULT_URL
     }
 
+    fun getActiveWebViewUrlOrNull(): String? {
+        if (!::dualWebViewGroup.isInitialized) return null
+        return dualWebViewGroup.getWebView().url
+    }
 
     override fun onBookmarkSelected(url: String) {
-        val formattedUrl = when {
-            url.startsWith("http://") || url.startsWith("https://") -> url
-            url.contains(".") -> "https://$url"
-            else -> "https://www.google.com/search?q=${Uri.encode(url)}"
-        }
+        val formattedUrl =
+                when {
+                    url.startsWith("http://") || url.startsWith("https://") -> url
+                    url.contains(".") -> "https://$url"
+                    else -> "https://www.google.com/search?q=${Uri.encode(url)}"
+                }
         webView.loadUrl(formattedUrl)
     }
 
     private fun handleMaskToggle() {
         // Close settings menu if open to prevent state desync
         dualWebViewGroup.hideSettings()
-        
-        //de-anchor when masking to avoid issues
-        if (isAnchored){
+
+        // de-anchor when masking to avoid issues
+        if (isAnchored) {
             toggleAnchor()
         }
 
@@ -1125,7 +1192,6 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.maskScreen()
     }
 
-
     private fun resetScrollModeTimer() {
         // Always clear any existing timer first
         scrollModeHandler.removeCallbacks(scrollModeRunnable)
@@ -1139,11 +1205,10 @@ class MainActivity : AppCompatActivity(),
     override fun onSendCharacterToLink(character: String) {
         if (dualWebViewGroup.isUrlEditing()) {
             val currentText = dualWebViewGroup.getCurrentLinkText()
-            val currentPosition = dualWebViewGroup.getCurrentUrlEditField()?.selectionStart ?: currentText.length
+            val currentPosition =
+                    dualWebViewGroup.getCurrentUrlEditField()?.selectionStart ?: currentText.length
 
-            val newText = StringBuilder(currentText)
-                .insert(currentPosition, character)
-                .toString()
+            val newText = StringBuilder(currentText).insert(currentPosition, character).toString()
 
             dualWebViewGroup.setLinkText(newText)
             dualWebViewGroup.getCurrentUrlEditField()?.setSelection(currentPosition + 1)
@@ -1153,13 +1218,13 @@ class MainActivity : AppCompatActivity(),
     override fun onSendBackspaceInLink() {
         if (dualWebViewGroup.isUrlEditing()) {
             val currentText = dualWebViewGroup.getCurrentLinkText()
-            val currentPosition = dualWebViewGroup.getCurrentUrlEditField()?.selectionStart ?: currentText.length
+            val currentPosition =
+                    dualWebViewGroup.getCurrentUrlEditField()?.selectionStart ?: currentText.length
 
             if (currentPosition > 0) {
                 // Delete character before cursor position
-                val newText = StringBuilder(currentText)
-                    .deleteCharAt(currentPosition - 1)
-                    .toString()
+                val newText =
+                        StringBuilder(currentText).deleteCharAt(currentPosition - 1).toString()
 
                 dualWebViewGroup.setLinkText(newText)
 
@@ -1172,7 +1237,6 @@ class MainActivity : AppCompatActivity(),
     override fun onMaskTogglePressed() {
         handleMaskToggle()
     }
-
 
     override fun onSendEnterInLink() {
         isUrlEditing = false
@@ -1196,40 +1260,54 @@ class MainActivity : AppCompatActivity(),
 
     // Helper function for quaternion multiplication
     fun quaternionMultiply(q1: FloatArray, q2: FloatArray): FloatArray {
-        val w = q1[0]*q2[0] - q1[1]*q2[1] - q1[2]*q2[2] - q1[3]*q2[3]
-        val x = q1[0]*q2[1] + q1[1]*q2[0] + q1[2]*q2[3] - q1[3]*q2[2]
-        val y = q1[0]*q2[2] - q1[1]*q2[3] + q1[2]*q2[0] + q1[3]*q2[1]
-        val z = q1[0]*q2[3] + q1[1]*q2[2] - q1[2]*q2[1] + q1[3]*q2[0]
+        val w = q1[0] * q2[0] - q1[1] * q2[1] - q1[2] * q2[2] - q1[3] * q2[3]
+        val x = q1[0] * q2[1] + q1[1] * q2[0] + q1[2] * q2[3] - q1[3] * q2[2]
+        val y = q1[0] * q2[2] - q1[1] * q2[3] + q1[2] * q2[0] + q1[3] * q2[1]
+        val z = q1[0] * q2[3] + q1[1] * q2[2] - q1[2] * q2[1] + q1[3] * q2[0]
         return floatArrayOf(w, x, y, z)
     }
 
     // Helper function for quaternion inversion
     fun quaternionInverse(q: FloatArray): FloatArray {
-        val magnitudeSquared = q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]
+        val magnitudeSquared = q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]
         if (magnitudeSquared == 0f) return floatArrayOf(0f, 0f, 0f, 0f)
         val invMagnitude = 1f / magnitudeSquared
-        return floatArrayOf(q[0]*invMagnitude, -q[1]*invMagnitude, -q[2]*invMagnitude, -q[3]*invMagnitude)
+        return floatArrayOf(
+                q[0] * invMagnitude,
+                -q[1] * invMagnitude,
+                -q[2] * invMagnitude,
+                -q[3] * invMagnitude
+        )
     }
 
     private fun normalizeQuaternion(q: FloatArray): FloatArray {
-        val len = kotlin.math.sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3])
+        val len = kotlin.math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3])
         if (len > 0) {
-            return floatArrayOf(q[0]/len, q[1]/len, q[2]/len, q[3]/len)
+            return floatArrayOf(q[0] / len, q[1] / len, q[2] / len, q[3] / len)
         }
         return q
     }
 
     private fun quaternionSlerp(qa: FloatArray, qb: FloatArray, t: Float): FloatArray {
         // q = [w, x, y, z]
-        val w1 = qa[0]; val x1 = qa[1]; val y1 = qa[2]; val z1 = qa[3]
-        var w2 = qb[0]; var x2 = qb[1]; var y2 = qb[2]; var z2 = qb[3]
+        val w1 = qa[0]
+        val x1 = qa[1]
+        val y1 = qa[2]
+        val z1 = qa[3]
+        var w2 = qb[0]
+        var x2 = qb[1]
+        var y2 = qb[2]
+        var z2 = qb[3]
 
-        var dot = w1*w2 + x1*x2 + y1*y2 + z1*z2
+        var dot = w1 * w2 + x1 * x2 + y1 * y2 + z1 * z2
 
         // If the dot product is negative, slerp won't take the shorter path.
         // So we negate one quaternion.
         if (dot < 0.0f) {
-            w2 = -w2; x2 = -x2; y2 = -y2; z2 = -z2
+            w2 = -w2
+            x2 = -x2
+            y2 = -y2
+            z2 = -z2
             dot = -dot
         }
 
@@ -1237,31 +1315,33 @@ class MainActivity : AppCompatActivity(),
         if (dot > DOT_THRESHOLD) {
             // If the inputs are too close for comfort, linearly interpolate
             // and normalize.
-            val result = floatArrayOf(
-                w1 + t * (w2 - w1),
-                x1 + t * (x2 - x1),
-                y1 + t * (y2 - y1),
-                z1 + t * (z2 - z1)
-            )
+            val result =
+                    floatArrayOf(
+                            w1 + t * (w2 - w1),
+                            x1 + t * (x2 - x1),
+                            y1 + t * (y2 - y1),
+                            z1 + t * (z2 - z1)
+                    )
             return normalizeQuaternion(result)
         }
 
-        val theta_0 = kotlin.math.acos(dot)        // theta_0 = angle between input vectors
-        val theta = theta_0 * t              // theta = angle between v0 and result
-        val sin_theta = kotlin.math.sin(theta)     // compute this value only once
+        val theta_0 = kotlin.math.acos(dot) // theta_0 = angle between input vectors
+        val theta = theta_0 * t // theta = angle between v0 and result
+        val sin_theta = kotlin.math.sin(theta) // compute this value only once
         val sin_theta_0 = kotlin.math.sin(theta_0) // compute this value only once
 
-        val s0 = kotlin.math.cos(theta) - dot * sin_theta / sin_theta_0  // == sin(theta_0 - theta) / sin(theta_0)
+        val s0 =
+                kotlin.math.cos(theta) -
+                        dot * sin_theta / sin_theta_0 // == sin(theta_0 - theta) / sin(theta_0)
         val s1 = sin_theta / sin_theta_0
 
         return floatArrayOf(
-            s0 * w1 + s1 * w2,
-            s0 * x1 + s1 * x2,
-            s0 * y1 + s1 * y2,
-            s0 * z1 + s1 * z2
+                s0 * w1 + s1 * w2,
+                s0 * x1 + s1 * x2,
+                s0 * y1 + s1 * y2,
+                s0 * z1 + s1 * z2
         )
     }
-
 
     private fun ensureCameraThread() {
         if (cameraThread != null) return
@@ -1275,24 +1355,29 @@ class MainActivity : AppCompatActivity(),
         ensureCameraThread()
         val handler = cameraHandler ?: Handler(Looper.getMainLooper())
 
-        try{
+        try {
             cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
 
             // Set up ImageReader for capturing photos
-            imageReader = ImageReader.newInstance(1920, 1080, android.graphics.ImageFormat.JPEG, 2).apply {
-                setOnImageAvailableListener({ reader ->
-                    // When an image is captured
-                    val image = reader.acquireLatestImage()
-                    try {
-                        // Convert image to base64 for web upload
-                        val buffer = image.planes[0].buffer
-                        val bytes = ByteArray(buffer.capacity())
-                        buffer.get(bytes)
-                        val base64Image = Base64.encodeToString(bytes, Base64.DEFAULT)
+            imageReader =
+                    ImageReader.newInstance(1920, 1080, android.graphics.ImageFormat.JPEG, 2)
+                            .apply {
+                                setOnImageAvailableListener(
+                                        { reader ->
+                                            // When an image is captured
+                                            val image = reader.acquireLatestImage()
+                                            try {
+                                                // Convert image to base64 for web upload
+                                                val buffer = image.planes[0].buffer
+                                                val bytes = ByteArray(buffer.capacity())
+                                                buffer.get(bytes)
+                                                val base64Image =
+                                                        Base64.encodeToString(bytes, Base64.DEFAULT)
 
-                        // Send image back to Google's image search
-                        runOnUiThread {
-                            webView.evaluateJavascript("""
+                                                // Send image back to Google's image search
+                                                runOnUiThread {
+                                                    webView.evaluateJavascript(
+                                                            """
                             (function() {
                                 // Create a File object from base64
                                 fetch('data:image/jpeg;base64,$base64Image')
@@ -1318,25 +1403,24 @@ class MainActivity : AppCompatActivity(),
                                         input.dispatchEvent(new Event('change', { bubbles: true }));
                                     });
                             })();
-                        """.trimIndent(), null)
-                        }
-                    } finally {
-                        image.close()
-                    }
-                }, handler)
-            }
+                        """.trimIndent(),
+                                                            null
+                                                    )
+                                                }
+                                            } finally {
+                                                image.close()
+                                            }
+                                        },
+                                        handler
+                                )
+                            }
         } catch (e: Exception) {
             DebugLog.e("Camera", "Failed to initialize camera system", e)
             runOnUiThread {
-                webView.evaluateJavascript(
-                    "alert('Failed to initialize camera system.');",
-                    null
-                )
+                webView.evaluateJavascript("alert('Failed to initialize camera system.');", null)
             }
         }
-
     }
-
 
     override fun onSendClearInLink() {
         if (dualWebViewGroup.isUrlEditing()) {
@@ -1345,7 +1429,6 @@ class MainActivity : AppCompatActivity(),
             dualWebViewGroup.getCurrentUrlEditField()?.setSelection(0)
         }
     }
-
 
     override fun onShowKeyboardForEdit(text: String) {
         DebugLog.d("MainActivity", "onShowKeyboardForEdit called with text: $text")
@@ -1365,12 +1448,10 @@ class MainActivity : AppCompatActivity(),
 
     override fun onShowLinkEditing() {
         DebugLog.d("LinkEditing", "onShowLinkEditing called")
-        isUrlEditing = true  // Make sure this state is set
+        isUrlEditing = true // Make sure this state is set
         dualWebViewGroup.toggleIsUrlEditing(isUrlEditing)
         showCustomKeyboard()
     }
-
-
 
     override fun onHideLinkEditing() {
         DebugLog.d("LinkEditing", "onHideLinkEditing called")
@@ -1384,11 +1465,10 @@ class MainActivity : AppCompatActivity(),
         DebugLog.d("LinkEditing", "sendCharacterToLinkEditText called with: $character")
         if (dualWebViewGroup.isUrlEditing()) {
             val currentText = dualWebViewGroup.getCurrentLinkText()
-            val cursorPosition = dualWebViewGroup.getCurrentUrlEditField()?.selectionStart ?: currentText.length
+            val cursorPosition =
+                    dualWebViewGroup.getCurrentUrlEditField()?.selectionStart ?: currentText.length
 
-            val newText = StringBuilder(currentText)
-                .insert(cursorPosition, character)
-                .toString()
+            val newText = StringBuilder(currentText).insert(cursorPosition, character).toString()
             dualWebViewGroup.setLinkText(newText)
             dualWebViewGroup.getCurrentUrlEditField()?.setSelection(cursorPosition + 1)
         }
@@ -1398,12 +1478,11 @@ class MainActivity : AppCompatActivity(),
         DebugLog.d("LinkEditing", "sendBackspaceInLinkEditText called")
         if (dualWebViewGroup.isUrlEditing()) {
             val currentText = dualWebViewGroup.getCurrentLinkText()
-            val cursorPosition = dualWebViewGroup.getCurrentUrlEditField()?.selectionStart ?: currentText.length
+            val cursorPosition =
+                    dualWebViewGroup.getCurrentUrlEditField()?.selectionStart ?: currentText.length
 
             if (cursorPosition > 0) {
-                val newText = StringBuilder(currentText)
-                    .deleteCharAt(cursorPosition - 1)
-                    .toString()
+                val newText = StringBuilder(currentText).deleteCharAt(cursorPosition - 1).toString()
                 dualWebViewGroup.setLinkText(newText)
                 dualWebViewGroup.getCurrentUrlEditField()?.setSelection(cursorPosition - 1)
             }
@@ -1420,9 +1499,6 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
-
-
-
     override fun isLinkEditing(): Boolean = isUrlEditing
 
     private fun formatUrl(url: String): String {
@@ -1433,102 +1509,158 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
-
-
-
     private fun initializeSpeechRecognition() {
         // Check if speech recognition is available
         val isAvailable = SpeechRecognizer.isRecognitionAvailable(this)
         DebugLog.d("SpeechRecognition", "Recognition available: $isAvailable")
-        
+
         if (!isAvailable) {
             DebugLog.w("SpeechRecognition", "Speech recognition not available on this device")
             return
         }
-        
+
         try {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
-                setRecognitionListener(object : RecognitionListener {
-                    override fun onResults(results: Bundle?) {
-                        isListeningForSpeech = false
-                        results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.let { matches ->
-                            if (matches.isNotEmpty()) {
-                                val text = matches[0]
-                                runOnUiThread {
-                                    onShowKeyboardForEdit(text)
-                                    // Handle inserting text based on what input is focused
-                                    val editFieldVisible = dualWebViewGroup.urlEditText.visibility == View.VISIBLE
+            speechRecognizer =
+                    SpeechRecognizer.createSpeechRecognizer(this).apply {
+                        setRecognitionListener(
+                                object : RecognitionListener {
+                                    override fun onResults(results: Bundle?) {
+                                        isListeningForSpeech = false
+                                        results?.getStringArrayList(
+                                                        SpeechRecognizer.RESULTS_RECOGNITION
+                                                )
+                                                ?.let { matches ->
+                                                    if (matches.isNotEmpty()) {
+                                                        val text = matches[0]
+                                                        runOnUiThread {
+                                                            onShowKeyboardForEdit(text)
+                                                            // Handle inserting text based on what
+                                                            // input is focused
+                                                            val editFieldVisible =
+                                                                    dualWebViewGroup
+                                                                            .urlEditText
+                                                                            .visibility ==
+                                                                            View.VISIBLE
 
-                                    when {
-                                        dualWebViewGroup.isBookmarksExpanded() && !editFieldVisible -> {
-                                            // Handle bookmark menu navigation - maybe search bookmarks?
-                                            // For now just toast or ignore
-                                        }
-                                        editFieldVisible -> {
-                                            // Handle any edit field input (URL or bookmark)
-                                            val currentText = dualWebViewGroup.getCurrentLinkText()
-                                            val cursorPosition = dualWebViewGroup.urlEditText.selectionStart
+                                                            when {
+                                                                dualWebViewGroup
+                                                                        .isBookmarksExpanded() &&
+                                                                        !editFieldVisible -> {
+                                                                    // Handle bookmark menu
+                                                                    // navigation - maybe search
+                                                                    // bookmarks?
+                                                                    // For now just toast or ignore
+                                                                }
+                                                                editFieldVisible -> {
+                                                                    // Handle any edit field input
+                                                                    // (URL or bookmark)
+                                                                    val currentText =
+                                                                            dualWebViewGroup
+                                                                                    .getCurrentLinkText()
+                                                                    val cursorPosition =
+                                                                            dualWebViewGroup
+                                                                                    .urlEditText
+                                                                                    .selectionStart
 
-                                            // Insert the text at cursor position
-                                            val newText = StringBuilder(currentText)
-                                                .insert(cursorPosition, text)
-                                                .toString()
+                                                                    // Insert the text at cursor
+                                                                    // position
+                                                                    val newText =
+                                                                            StringBuilder(
+                                                                                            currentText
+                                                                                    )
+                                                                                    .insert(
+                                                                                            cursorPosition,
+                                                                                            text
+                                                                                    )
+                                                                                    .toString()
 
-                                            // Set text and move cursor after inserted text
-                                            dualWebViewGroup.setLinkText(newText, cursorPosition + text.length)
-                                        }
-                                        dualWebViewGroup.getDialogInput() != null -> {
-                                            val input = dualWebViewGroup.getDialogInput()!!
-                                            val currentText = input.text.toString()
-                                            val cursorPosition = input.selectionStart
-                                            val newText = StringBuilder(currentText).insert(cursorPosition, text).toString()
-                                            input.setText(newText)
-                                            input.setSelection(cursorPosition + text.length)
-                                        }
-                                        else -> {
-                                            sendTextToWebView(text)
-                                        }
+                                                                    // Set text and move cursor
+                                                                    // after inserted text
+                                                                    dualWebViewGroup.setLinkText(
+                                                                            newText,
+                                                                            cursorPosition +
+                                                                                    text.length
+                                                                    )
+                                                                }
+                                                                dualWebViewGroup.getDialogInput() !=
+                                                                        null -> {
+                                                                    val input =
+                                                                            dualWebViewGroup
+                                                                                    .getDialogInput()!!
+                                                                    val currentText =
+                                                                            input.text.toString()
+                                                                    val cursorPosition =
+                                                                            input.selectionStart
+                                                                    val newText =
+                                                                            StringBuilder(
+                                                                                            currentText
+                                                                                    )
+                                                                                    .insert(
+                                                                                            cursorPosition,
+                                                                                            text
+                                                                                    )
+                                                                                    .toString()
+                                                                    input.setText(newText)
+                                                                    input.setSelection(
+                                                                            cursorPosition +
+                                                                                    text.length
+                                                                    )
+                                                                }
+                                                                else -> {
+                                                                    sendTextToWebView(text)
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                     }
-                                }
-                            }
-                        }
-                    }
 
-                    // Implement other RecognitionListener methods with empty bodies
-                    override fun onReadyForSpeech(params: Bundle?) {
-                        DebugLog.d("SpeechRecognition", "Ready for speech")
-                        dualWebViewGroup.showToast("Listening...")
+                                    // Implement other RecognitionListener methods with empty bodies
+                                    override fun onReadyForSpeech(params: Bundle?) {
+                                        DebugLog.d("SpeechRecognition", "Ready for speech")
+                                        dualWebViewGroup.showToast("Listening...")
+                                    }
+                                    override fun onBeginningOfSpeech() {
+                                        DebugLog.d("SpeechRecognition", "Speech started")
+                                    }
+                                    override fun onRmsChanged(rmsdB: Float) {}
+                                    override fun onBufferReceived(buffer: ByteArray?) {}
+                                    override fun onEndOfSpeech() {
+                                        DebugLog.d("SpeechRecognition", "Speech ended")
+                                        isListeningForSpeech = false
+                                    }
+                                    override fun onError(error: Int) {
+                                        isListeningForSpeech = false
+                                        val errorMsg =
+                                                when (error) {
+                                                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
+                                                            "Network timeout"
+                                                    SpeechRecognizer.ERROR_NETWORK ->
+                                                            "Network error"
+                                                    SpeechRecognizer.ERROR_AUDIO ->
+                                                            "Audio recording error"
+                                                    SpeechRecognizer.ERROR_SERVER -> "Server error"
+                                                    SpeechRecognizer.ERROR_CLIENT ->
+                                                            "Speech service unavailable"
+                                                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
+                                                            "No speech detected"
+                                                    SpeechRecognizer.ERROR_NO_MATCH ->
+                                                            "No match found"
+                                                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY ->
+                                                            "Recognizer busy"
+                                                    SpeechRecognizer
+                                                            .ERROR_INSUFFICIENT_PERMISSIONS ->
+                                                            "Permission denied"
+                                                    else -> "Error: $error"
+                                                }
+                                        DebugLog.e("SpeechRecognition", "Error: $error ($errorMsg)")
+                                        dualWebViewGroup.showToast(errorMsg)
+                                    }
+                                    override fun onPartialResults(partialResults: Bundle?) {}
+                                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                                }
+                        )
                     }
-                    override fun onBeginningOfSpeech() {
-                        DebugLog.d("SpeechRecognition", "Speech started")
-                    }
-                    override fun onRmsChanged(rmsdB: Float) {}
-                    override fun onBufferReceived(buffer: ByteArray?) {}
-                    override fun onEndOfSpeech() {
-                        DebugLog.d("SpeechRecognition", "Speech ended")
-                        isListeningForSpeech = false
-                    }
-                    override fun onError(error: Int) {
-                        isListeningForSpeech = false
-                        val errorMsg = when (error) {
-                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
-                            SpeechRecognizer.ERROR_NETWORK -> "Network error"
-                            SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
-                            SpeechRecognizer.ERROR_SERVER -> "Server error"
-                            SpeechRecognizer.ERROR_CLIENT -> "Speech service unavailable"
-                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected"
-                            SpeechRecognizer.ERROR_NO_MATCH -> "No match found"
-                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognizer busy"
-                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Permission denied"
-                            else -> "Error: $error"
-                        }
-                        DebugLog.e("SpeechRecognition", "Error: $error ($errorMsg)")
-                        dualWebViewGroup.showToast(errorMsg)
-                    }
-                    override fun onPartialResults(partialResults: Bundle?) {}
-                    override fun onEvent(eventType: Int, params: Bundle?) {}
-                })
-            }
             DebugLog.d("SpeechRecognition", "SpeechRecognizer created successfully")
         } catch (e: Exception) {
             DebugLog.e("SpeechRecognition", "Failed to create SpeechRecognizer", e)
@@ -1536,12 +1668,12 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
-
     fun hideCustomKeyboard() {
         DebugLog.d("KeyboardDebug", "Hiding keyboard")
 
-           // First blur any focused element
-           webView.evaluateJavascript("""
+        // First blur any focused element
+        webView.evaluateJavascript(
+                """
        (function() {
            const activeElement = document.activeElement;
            if (activeElement && activeElement !== document.body) {
@@ -1551,7 +1683,9 @@ class MainActivity : AppCompatActivity(),
                activeElement.dispatchEvent(event);
            }
        })();
-       """, null)
+       """,
+                null
+        )
 
         // First handle cleanup of keyboard state
         keyboardView?.visibility = View.GONE
@@ -1570,14 +1704,17 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.hideLinkEditing()
 
         // Clean up input state
-        webView.evaluateJavascript("""
+        webView.evaluateJavascript(
+                """
         (function() {
             var activeElement = document.activeElement;
             if (activeElement) {
                 activeElement.blur();
             }
         })();
-    """, null)
+    """,
+                null
+        )
 
         // Notify DualWebViewGroup about keyboard being hidden
         dualWebViewGroup.onKeyboardHidden()
@@ -1599,16 +1736,13 @@ class MainActivity : AppCompatActivity(),
 
         isUrlEditing = false
 
-
-
         dualWebViewGroup.cleanupResources()
     }
 
-
-
     override fun onClearPressed() {
         when {
-            dualWebViewGroup.isBookmarksExpanded() && dualWebViewGroup.urlEditText.visibility != View.VISIBLE -> {
+            dualWebViewGroup.isBookmarksExpanded() &&
+                    dualWebViewGroup.urlEditText.visibility != View.VISIBLE -> {
                 // Handle bookmark menu navigation
                 dualWebViewGroup.getBookmarksView().handleKeyboardInput("clear")
             }
@@ -1622,7 +1756,8 @@ class MainActivity : AppCompatActivity(),
             else -> {
                 // Preserve existing JavaScript functionality for web content
                 runOnUiThread {
-                    webView.evaluateJavascript("""
+                    webView.evaluateJavascript(
+                            """
     (function() {
         var el = document.activeElement;
         if (!el) {
@@ -1676,22 +1811,20 @@ class MainActivity : AppCompatActivity(),
         
         return JSON.stringify(simulateClearInput(el));
     })();
-    """, null)
+    """,
+                            null
+                    )
                 }
             }
         }
     }
 
     override fun onMoveCursorLeft() {
-        runOnUiThread {
-            moveCursor(-1)
-        }
+        runOnUiThread { moveCursor(-1) }
     }
 
     override fun onMoveCursorRight() {
-        runOnUiThread {
-            moveCursor(1)
-        }
+        runOnUiThread { moveCursor(1) }
     }
 
     private var isListeningForSpeech = false
@@ -1706,18 +1839,26 @@ class MainActivity : AppCompatActivity(),
         }
         lastMicPressTime = currentTime
 
-        DebugLog.d("SpeechRecognition", "onMicrophonePressed called, isListening: $isListeningForSpeech")
+        DebugLog.d(
+                "SpeechRecognition",
+                "onMicrophonePressed called, isListening: $isListeningForSpeech"
+        )
         runOnUiThread {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                 DebugLog.d("SpeechRecognition", "Requesting audio permission")
-                 requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSIONS_REQUEST_CODE)
-                 return@runOnUiThread
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+                            PackageManager.PERMISSION_GRANTED
+            ) {
+                DebugLog.d("SpeechRecognition", "Requesting audio permission")
+                requestPermissions(
+                        arrayOf(Manifest.permission.RECORD_AUDIO),
+                        PERMISSIONS_REQUEST_CODE
+                )
+                return@runOnUiThread
             }
 
             if (groqAudioService == null) {
                 initializeGroqService()
             }
-            
+
             if (!groqAudioService!!.hasApiKey()) {
                 showGroqKeyDialog()
                 return@runOnUiThread
@@ -1745,65 +1886,67 @@ class MainActivity : AppCompatActivity(),
         }
         val currentKey = groqAudioService?.getApiKey()
         dualWebViewGroup.showPromptDialog(
-            "Enter Groq API Key",
-            currentKey,
-            { key ->
-                groqAudioService?.setApiKey(key)
-                dualWebViewGroup.showToast("API Key Saved")
-                hideCustomKeyboard()
-            },
-            {
-                dualWebViewGroup.showToast("API Key Required for Voice")
-            }
+                "Enter Groq API Key",
+                currentKey,
+                { key ->
+                    groqAudioService?.setApiKey(key)
+                    dualWebViewGroup.showToast("API Key Saved")
+                    hideCustomKeyboard()
+                },
+                { dualWebViewGroup.showToast("API Key Required for Voice") }
         )
     }
 
     private fun initializeGroqService() {
-        groqAudioService = GroqAudioService(this).apply {
-            setListener(object : GroqAudioService.TranscriptionListener {
-                override fun onTranscriptionResult(text: String) {
-                    DebugLog.d("SpeechRecognition", "Groq result: $text")
-                    runOnUiThread {
-                        handleVoiceResult(text)
-                        dualWebViewGroup.showToast("Success")
-                        keyboardView?.setMicActive(false)
-                    }
-                }
+        groqAudioService =
+                GroqAudioService(this).apply {
+                    setListener(
+                            object : GroqAudioService.TranscriptionListener {
+                                override fun onTranscriptionResult(text: String) {
+                                    DebugLog.d("SpeechRecognition", "Groq result: $text")
+                                    runOnUiThread {
+                                        handleVoiceResult(text)
+                                        dualWebViewGroup.showToast("Success")
+                                        keyboardView?.setMicActive(false)
+                                    }
+                                }
 
-                override fun onError(message: String) {
-                    DebugLog.e("SpeechRecognition", "Groq error: $message")
-                    runOnUiThread {
-                        audioManager?.setParameters("audio_source_record=off")
-                        dualWebViewGroup.showToast("Voice Error: $message")
-                        keyboardView?.setMicActive(false)
-                        if (message.contains("No API Key")) {
-                            showGroqKeyDialog()
-                        }
-                    }
-                }
+                                override fun onError(message: String) {
+                                    DebugLog.e("SpeechRecognition", "Groq error: $message")
+                                    runOnUiThread {
+                                        audioManager?.setParameters("audio_source_record=off")
+                                        dualWebViewGroup.showToast("Voice Error: $message")
+                                        keyboardView?.setMicActive(false)
+                                        if (message.contains("No API Key")) {
+                                            showGroqKeyDialog()
+                                        }
+                                    }
+                                }
 
-                override fun onRecordingStart() {
-                    DebugLog.d("SpeechRecognition", "Groq recording started")
-                    runOnUiThread {
-                         isListeningForSpeech = true
-                         keyboardView?.setMicActive(true)
-                    }
-                }
+                                override fun onRecordingStart() {
+                                    DebugLog.d("SpeechRecognition", "Groq recording started")
+                                    runOnUiThread {
+                                        isListeningForSpeech = true
+                                        keyboardView?.setMicActive(true)
+                                    }
+                                }
 
-                override fun onRecordingStop() {
-                     DebugLog.d("SpeechRecognition", "Groq recording stopped")
-                     runOnUiThread {
-                         isListeningForSpeech = false
-                         // Don't turn off mic indicator yet, wait for processing result
-                     }
+                                override fun onRecordingStop() {
+                                    DebugLog.d("SpeechRecognition", "Groq recording stopped")
+                                    runOnUiThread {
+                                        isListeningForSpeech = false
+                                        // Don't turn off mic indicator yet, wait for processing
+                                        // result
+                                    }
+                                }
+                            }
+                    )
                 }
-            })
-        }
     }
-    
+
     private fun handleVoiceResult(text: String) {
         if (text.isBlank()) return
-        
+
         onShowKeyboardForEdit(text)
         val editFieldVisible = dualWebViewGroup.urlEditText.visibility == View.VISIBLE
 
@@ -1816,9 +1959,7 @@ class MainActivity : AppCompatActivity(),
                 // Handle URL/bookmark edit field input
                 val currentText = dualWebViewGroup.getCurrentLinkText()
                 val cursorPosition = dualWebViewGroup.urlEditText.selectionStart.coerceAtLeast(0)
-                val newText = StringBuilder(currentText)
-                    .insert(cursorPosition, text)
-                    .toString()
+                val newText = StringBuilder(currentText).insert(cursorPosition, text).toString()
                 dualWebViewGroup.setLinkText(newText, cursorPosition + text.length)
             }
             dualWebViewGroup.getDialogInput() != null -> {
@@ -1833,7 +1974,7 @@ class MainActivity : AppCompatActivity(),
                 sendTextToWebView(text)
             }
         }
-        
+
         isListeningForSpeech = false
     }
 
@@ -1842,7 +1983,8 @@ class MainActivity : AppCompatActivity(),
         if (focusedView != null) {
             val inputConnection = BaseInputConnection(focusedView, true)
             val now = SystemClock.uptimeMillis()
-            val keyCode = if (offset < 0) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
+            val keyCode =
+                    if (offset < 0) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
             val keyEventDown = KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0)
             val keyEventUp = KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0)
             inputConnection.sendKeyEvent(keyEventDown)
@@ -1853,7 +1995,8 @@ class MainActivity : AppCompatActivity(),
     }
 
     fun injectJavaScriptForInputFocus() {
-        webView.evaluateJavascript("""
+        webView.evaluateJavascript(
+                """
     (function() {
         // Store state about known popups to prevent re-triggering
         const knownPopups = new WeakSet();
@@ -1952,7 +2095,9 @@ class MainActivity : AppCompatActivity(),
             attributeFilter: ['role', 'aria-haspopup']
         });
     })();
-    """, null)
+    """,
+                null
+        )
     }
 
     private fun sendCharacterToWebView(character: String) {
@@ -1966,12 +2111,17 @@ class MainActivity : AppCompatActivity(),
             // But this method is generic.
             // If text is longer than 1 char, we should handle it.
             // The existing sendCharacterToLinkEditText handles single char.
-            // Let's iterate if it's multiple chars or just insert if we make a sendTextToLinkEditText
-            text.forEach { char ->
-                sendCharacterToLinkEditText(char.toString())
-            }
+            // Let's iterate if it's multiple chars or just insert if we make a
+            // sendTextToLinkEditText
+            text.forEach { char -> sendCharacterToLinkEditText(char.toString()) }
+            return
+        }
+        if (dualWebViewGroup.isChatVisible()) {
+            dualWebViewGroup.sendTextToChatInput(text)
+            return
         } else {
-            webView.evaluateJavascript("""
+            webView.evaluateJavascript(
+                    """
         (function() {
             var el = document.activeElement;
             if (!el) {
@@ -2044,18 +2194,22 @@ class MainActivity : AppCompatActivity(),
             
             return JSON.stringify(simulateNaturalInput(el, ${JSONObject.quote(text)}));
         })();
-        """) { result ->
-                DebugLog.d("InputDebug", "JavaScript result: $result")
-            }
+        """
+            ) { result -> DebugLog.d("InputDebug", "JavaScript result: $result") }
         }
     }
-
 
     private fun sendBackspaceToWebView() {
         if (dualWebViewGroup.isUrlEditing()) {
             sendBackspaceInLinkEditText()
+            return
+        }
+        if (dualWebViewGroup.isChatVisible()) {
+            dualWebViewGroup.sendBackspaceToChatInput()
+            return
         } else {
-            webView.evaluateJavascript("""
+            webView.evaluateJavascript(
+                    """
         (function() {
             var el = document.activeElement;
             if (!el) {
@@ -2164,25 +2318,23 @@ class MainActivity : AppCompatActivity(),
             
             return JSON.stringify(simulateNaturalBackspace(el));
         })();
-        """) { result ->
-                DebugLog.d("InputDebug", "Backspace JavaScript result: $result")
-            }
+        """
+            ) { result -> DebugLog.d("InputDebug", "Backspace JavaScript result: $result") }
         }
     }
-
 
     private fun dispatchTouchEventAtCursor() {
 
         if (isSimulatingTouchEvent || cursorJustAppeared || isToggling) {
             return
         }
-        
+
         // Don't let the enter key tap pass through to the webview when keyboard closes
         if (wasKeyboardDismissedByEnter) {
             wasKeyboardDismissedByEnter = false
             return
         }
-        
+
         val scale = dualWebViewGroup.uiScale
         val interactionX: Float
         val interactionY: Float
@@ -2194,13 +2346,14 @@ class MainActivity : AppCompatActivity(),
             interactionX = 320f + groupLocation[0]
             interactionY = 240f + groupLocation[1]
         } else {
-            // In non-anchored mode, interaction follows the visual cursor scaled around (320, 240) and translated
+            // In non-anchored mode, interaction follows the visual cursor scaled around (320, 240)
+            // and translated
             val transX = dualWebViewGroup.leftEyeUIContainer.translationX
             val transY = dualWebViewGroup.leftEyeUIContainer.translationY
-            
+
             val visualX = 320f + (lastCursorX - 320f) * scale + transX
             val visualY = 240f + (lastCursorY - 240f) * scale + transY
-            
+
             interactionX = visualX + groupLocation[0]
             interactionY = visualY + groupLocation[1]
         }
@@ -2213,38 +2366,40 @@ class MainActivity : AppCompatActivity(),
 
         // Intercept touches for dialogs
         if (dualWebViewGroup.isDialogAction(interactionX, interactionY)) {
-             val dialogContainer = dualWebViewGroup.dialogContainer
-             val location = IntArray(2)
-             dialogContainer.getLocationOnScreen(location)
-             
-             // Calculate local coordinates relative to dialog container
-             val localX = (interactionX - location[0]) / scale
-             val localY = (interactionY - location[1]) / scale
-             
-             // Dispatch DOWN
-             val downEvent = MotionEvent.obtain(
-                 SystemClock.uptimeMillis(),
-                 SystemClock.uptimeMillis(),
-                 MotionEvent.ACTION_DOWN,
-                 localX,
-                 localY,
-                 0
-             )
-             dialogContainer.dispatchTouchEvent(downEvent)
-             downEvent.recycle()
-             
-             // Dispatch UP
-             val upEvent = MotionEvent.obtain(
-                 SystemClock.uptimeMillis(),
-                 SystemClock.uptimeMillis(),
-                 MotionEvent.ACTION_UP,
-                 localX,
-                 localY,
-                 0
-             )
-             dialogContainer.dispatchTouchEvent(upEvent)
-             upEvent.recycle()
-             return
+            val dialogContainer = dualWebViewGroup.dialogContainer
+            val location = IntArray(2)
+            dialogContainer.getLocationOnScreen(location)
+
+            // Calculate local coordinates relative to dialog container
+            val localX = (interactionX - location[0]) / scale
+            val localY = (interactionY - location[1]) / scale
+
+            // Dispatch DOWN
+            val downEvent =
+                    MotionEvent.obtain(
+                            SystemClock.uptimeMillis(),
+                            SystemClock.uptimeMillis(),
+                            MotionEvent.ACTION_DOWN,
+                            localX,
+                            localY,
+                            0
+                    )
+            dialogContainer.dispatchTouchEvent(downEvent)
+            downEvent.recycle()
+
+            // Dispatch UP
+            val upEvent =
+                    MotionEvent.obtain(
+                            SystemClock.uptimeMillis(),
+                            SystemClock.uptimeMillis(),
+                            MotionEvent.ACTION_UP,
+                            localX,
+                            localY,
+                            0
+                    )
+            dialogContainer.dispatchTouchEvent(upEvent)
+            upEvent.recycle()
+            return
         }
 
         // Check if settings menu is visible first
@@ -2254,9 +2409,10 @@ class MainActivity : AppCompatActivity(),
             val settingsMenuSize = dualWebViewGroup.getSettingsMenuSize()
 
             if (interactionX >= settingsMenuLocation[0] &&
-                interactionX <= settingsMenuLocation[0] + settingsMenuSize.first &&
-                interactionY >= settingsMenuLocation[1] &&
-                interactionY <= settingsMenuLocation[1] + settingsMenuSize.second) {
+                            interactionX <= settingsMenuLocation[0] + settingsMenuSize.first &&
+                            interactionY >= settingsMenuLocation[1] &&
+                            interactionY <= settingsMenuLocation[1] + settingsMenuSize.second
+            ) {
 
                 // Dispatch touch event to settings menu using screen coordinates
                 dualWebViewGroup.dispatchSettingsTouchEvent(interactionX, interactionY)
@@ -2268,6 +2424,13 @@ class MainActivity : AppCompatActivity(),
         if (dualWebViewGroup.isPointInRestoreButton(interactionX, interactionY)) {
             dualWebViewGroup.performRestoreButtonClick()
             return
+        }
+
+        if (dualWebViewGroup.isChatVisible()) {
+            if (dualWebViewGroup.isPointInChat(interactionX, interactionY)) {
+                dualWebViewGroup.dispatchChatTouchEvent(interactionX, interactionY)
+                return
+            }
         }
 
         // Hit test for custom keyboard first so keyboard stays interactive when bookmarks are open
@@ -2298,50 +2461,17 @@ class MainActivity : AppCompatActivity(),
             }
         }
 
-        // Handle navigation bar and toggle bar clicks only if visible - PRIORITIZE OVER SCROLLBARS
-        if (dualWebViewGroup.isNavBarVisible()) {
-            val UILocation = IntArray(2)
-            dualWebViewGroup.leftEyeUIContainer.getLocationOnScreen(UILocation)
-            
-            // Calculate local distance relative to UI container on screen
-            val translatedX = interactionX - UILocation[0]
-            val translatedY = interactionY - UILocation[1]
-            
-            val localX: Float
-            val localY: Float
-            
-            if (isAnchored) {
-                // Account for rotation in anchored mode
-                val rotationRad = Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
-                val cos = Math.cos(rotationRad).toFloat()
-                val sin = Math.sin(rotationRad).toFloat()
-                localX = translatedX * cos + translatedY * sin
-                localY = -translatedX * sin + translatedY * cos
-            } else {
-                // Direct translation for non-anchored mode
-                localX = translatedX
-                localY = translatedY
-            }
-
-            // Hit test against scaled boundaries
-            val visualToggleBarWidth = 40 * scale
-            val visualBottomNavStart = (480 - 40) * scale
-
-            // Handle toggle bar clicks
-            if (localX >= 0 && localX < visualToggleBarWidth && localY >= 0 && localY < 440 * scale) {
-                isSimulatingTouchEvent = false
-                dualWebViewGroup.handleNavigationClick(localX / scale, localY / scale)
-                return
-            }
-
-            // Handle navigation bar clicks
-            if (localY >= visualBottomNavStart) {
-                isSimulatingTouchEvent = false
-                val adjustedX = (localX - visualToggleBarWidth) / scale
-                val adjustedY = localY / scale
-                dualWebViewGroup.handleNavigationClick(adjustedX, adjustedY)
-                return
-            }
+        // Handle toggle/navigation bar clicks before scrollbars/web content
+        val toggleHit =
+                dualWebViewGroup.isToggleBarVisible() &&
+                        dualWebViewGroup.isPointInToggleBar(interactionX, interactionY)
+        val navHit =
+                dualWebViewGroup.isNavBarVisible() &&
+                        dualWebViewGroup.isPointInNavBar(interactionX, interactionY)
+        if (toggleHit || navHit) {
+            isSimulatingTouchEvent = false
+            dualWebViewGroup.handleNavigationClick(interactionX, interactionY)
+            return
         }
 
         // Check for scrollbar interaction
@@ -2361,15 +2491,16 @@ class MainActivity : AppCompatActivity(),
         try {
             val webViewLocation = IntArray(2)
             webView.getLocationOnScreen(webViewLocation)
-            
+
             val translatedX = interactionX - webViewLocation[0]
             val translatedY = interactionY - webViewLocation[1]
-            
+
             val adjustedX: Float
             val adjustedY: Float
 
             if (isAnchored) {
-                val rotationRad = Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
+                val rotationRad =
+                        Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
                 val cos = Math.cos(rotationRad).toFloat()
                 val sin = Math.sin(rotationRad).toFloat()
                 val unscaledX = translatedX * cos + translatedY * sin
@@ -2384,17 +2515,20 @@ class MainActivity : AppCompatActivity(),
             val eventTime = SystemClock.uptimeMillis()
 
             // DOWN event
-            val motionEventDown = MotionEvent.obtain(
-                eventTime, eventTime,
-                MotionEvent.ACTION_DOWN,
-                adjustedX, adjustedY,
-                1  // pointer count
-            ).apply {
-                source = InputDevice.SOURCE_TOUCHSCREEN
-            }
+            val motionEventDown =
+                    MotionEvent.obtain(
+                                    eventTime,
+                                    eventTime,
+                                    MotionEvent.ACTION_DOWN,
+                                    adjustedX,
+                                    adjustedY,
+                                    1 // pointer count
+                            )
+                            .apply { source = InputDevice.SOURCE_TOUCHSCREEN }
             webView.dispatchTouchEvent(motionEventDown)
 
-            webView.evaluateJavascript("""
+            webView.evaluateJavascript(
+                    """
     (function() {
         var element = document.elementFromPoint($adjustedX, $adjustedY);
         var targetUrl = null;
@@ -2423,33 +2557,48 @@ class MainActivity : AppCompatActivity(),
         }
         return null;
     })();
-""") { _ ->
+"""
+            ) { _ ->
                 // Complete the touch sequence regardless of whether we found a special link
-                Handler(Looper.getMainLooper()).postDelayed({
-                    val motionEventUp = MotionEvent.obtain(
-                        eventTime, SystemClock.uptimeMillis(),
-                        MotionEvent.ACTION_UP,
-                        adjustedX, adjustedY,
-                        1
-                    ).apply {
-                        source = InputDevice.SOURCE_TOUCHSCREEN
-                    }
-                    webView.dispatchTouchEvent(motionEventUp)
+                Handler(Looper.getMainLooper())
+                        .postDelayed(
+                                {
+                                    val motionEventUp =
+                                            MotionEvent.obtain(
+                                                            eventTime,
+                                                            SystemClock.uptimeMillis(),
+                                                            MotionEvent.ACTION_UP,
+                                                            adjustedX,
+                                                            adjustedY,
+                                                            1
+                                                    )
+                                                    .apply {
+                                                        source = InputDevice.SOURCE_TOUCHSCREEN
+                                                    }
+                                    webView.dispatchTouchEvent(motionEventUp)
 
-                    // Clean up
-                    motionEventDown.recycle()
-                    motionEventUp.recycle()
+                                    // Clean up
+                                    motionEventDown.recycle()
+                                    motionEventUp.recycle()
 
-                    // Reset states and check keyboard
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        checkAndShowKeyboard(adjustedX.toInt(), adjustedY.toInt())
-                        isSimulatingTouchEvent = false
-                        cursorJustAppeared = false
-                        isToggling = false
-                    }, 150)
-                }, 16)
+                                    // Reset states and check keyboard
+                                    Handler(Looper.getMainLooper())
+                                            .postDelayed(
+                                                    {
+                                                        checkAndShowKeyboard(
+                                                                adjustedX.toInt(),
+                                                                adjustedY.toInt()
+                                                        )
+                                                        isSimulatingTouchEvent = false
+                                                        cursorJustAppeared = false
+                                                        isToggling = false
+                                                    },
+                                                    150
+                                            )
+                                },
+                                16
+                        )
             }
-
         } catch (e: Exception) {
             DebugLog.e("ClickDebug", "Error in dispatchTouchEventAtCursor: ${e.message}")
             e.printStackTrace()
@@ -2458,7 +2607,8 @@ class MainActivity : AppCompatActivity(),
     }
 
     private fun checkAndShowKeyboard(adjustedX: Int, adjustedY: Int) {
-        webView.evaluateJavascript("""
+        webView.evaluateJavascript(
+                """
         (function() {
             var element = document.elementFromPoint($adjustedX, $adjustedY);
             var node = element;
@@ -2633,22 +2783,27 @@ class MainActivity : AppCompatActivity(),
 
             return 'regular';
         })();
-    """) { result ->
+    """
+        ) { result ->
             DebugLog.d("InputDebug", "Element detection result after touch: $result")
             if (result?.contains("input") == true) {
-                Handler(Looper.getMainLooper()).post {
-                    showCustomKeyboard()
-                }
+                Handler(Looper.getMainLooper()).post { showCustomKeyboard() }
             }
         }
     }
 
-
     private fun sendEnterToWebView() {
         if (dualWebViewGroup.isUrlEditing()) {
             sendEnterInLinkEditText()
+            return
+        }
+        if (dualWebViewGroup.isChatVisible()) {
+            dualWebViewGroup.sendEnterToChatInput()
+            hideCustomKeyboard()
+            return
         } else {
-            webView.evaluateJavascript("""
+            webView.evaluateJavascript(
+                    """
         (function() {
             var el = document.activeElement;
             if (!el) {
@@ -2719,16 +2874,13 @@ class MainActivity : AppCompatActivity(),
             dispatchKeyEvents(el);
             return true;
         })();
-        """) { result ->
+        """
+            ) { result ->
                 DebugLog.d("InputDebug", "Enter JavaScript result: $result")
-                Handler(Looper.getMainLooper()).post {
-                    hideCustomKeyboard()
-                }
+                Handler(Looper.getMainLooper()).post { hideCustomKeyboard() }
             }
         }
     }
-
-
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
@@ -2748,8 +2900,9 @@ class MainActivity : AppCompatActivity(),
         this.webView.setOnTouchListener { _, event ->
             // Replicated touch listener logic
             if (event.action == MotionEvent.ACTION_DOWN ||
-                event.action == MotionEvent.ACTION_UP ||
-                event.action == MotionEvent.ACTION_CANCEL) {
+                            event.action == MotionEvent.ACTION_UP ||
+                            event.action == MotionEvent.ACTION_CANCEL
+            ) {
                 pendingTouchRunnable?.let { pendingTouchHandler?.removeCallbacks(it) }
                 pendingTouchRunnable = null
             }
@@ -2788,12 +2941,62 @@ class MainActivity : AppCompatActivity(),
     private fun configureWebView(webView: WebView) {
         // First check if speech recognition is available
         val speechRecognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-        val speechRecognitionAvailable = packageManager.resolveActivity(speechRecognizerIntent, 0) != null
+        val speechRecognitionAvailable =
+                packageManager.resolveActivity(speechRecognizerIntent, 0) != null
         DebugLog.d("WebView", "Speech recognition available: $speechRecognitionAvailable")
 
         // Section 1: Basic WebView Configuration
         WebView.setWebContentsDebuggingEnabled(true)
-        webView.addJavascriptInterface(WebAppInterface(this, webView), "Android")
+        webView.addJavascriptInterface(WebAppInterface(this, webView), "GroqBridge")
+
+        // Intercept taplink://chat URLs
+        webView.webViewClient =
+                object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            request: WebResourceRequest?
+                    ): Boolean {
+                        val url = request?.url?.toString() ?: return false
+                        DebugLog.d("MainActivityClient", "Checking URL: $url")
+
+                        if (url.startsWith("taplink://chat")) {
+                            DebugLog.d("MainActivityClient", "Intercepted taplink://chat")
+                            val uri = android.net.Uri.parse(url)
+                            val msg = uri.getQueryParameter("msg")
+                            val history = uri.getQueryParameter("history")
+
+                            if (msg != null && view != null) {
+                                val webInterface =
+                                        com.TapLinkX3.app.WebAppInterface(this@MainActivity, view)
+                                webInterface.chatWithGroq(msg, history ?: "[]")
+                            }
+                            return true
+                        }
+                        return false
+                    }
+
+                    @Deprecated("Deprecated in Java")
+                    override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                        DebugLog.d("MainActivityClient", "Checking URL (deprecated): $url")
+                        if (url != null && url.startsWith("taplink://chat")) {
+                            DebugLog.d(
+                                    "MainActivityClient",
+                                    "Intercepted taplink://chat (deprecated)"
+                            )
+                            val uri = android.net.Uri.parse(url)
+                            val msg = uri.getQueryParameter("msg")
+                            val history = uri.getQueryParameter("history")
+
+                            if (msg != null && view != null) {
+                                val webInterface =
+                                        com.TapLinkX3.app.WebAppInterface(this@MainActivity, view)
+                                webInterface.chatWithGroq(msg, history ?: "[]")
+                            }
+                            return true
+                        }
+                        return false
+                    }
+                }
 
         webView.apply {
             isFocusable = true
@@ -2855,9 +3058,10 @@ class MainActivity : AppCompatActivity(),
                     defaultUserAgent = WebSettings.getDefaultUserAgent(this@MainActivity)
                 }
 
-                customUserAgent = "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) " +
-                        "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                        "Chrome/$wvVersion Mobile Safari/537.36"
+                customUserAgent =
+                        "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) " +
+                                "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                                "Chrome/$wvVersion Mobile Safari/537.36"
 
                 settings.userAgentString = customUserAgent
 
@@ -2876,73 +3080,83 @@ class MainActivity : AppCompatActivity(),
             }
 
             // Section 3: Single WebViewClient Implementation
-            webViewClient = object : WebViewClient() {
-                private var lastValidUrl: String? = null
+            webViewClient =
+                    object : WebViewClient() {
+                        private var lastValidUrl: String? = null
 
-                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                    super.onPageStarted(view, url, favicon)
-                    DebugLog.d("WebViewDebug", "Page started loading: $url")
+                        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                            super.onPageStarted(view, url, favicon)
+                            DebugLog.d("WebViewDebug", "Page started loading: $url")
 
-                    // Netflix Fix: Force default User Agent to ensure Widevine CDM works
-                    val isNetflix = url?.contains("netflix.com") == true
-                    if (isNetflix) {
-                        if (view?.settings?.userAgentString != defaultUserAgent) {
-                            view?.settings?.userAgentString = defaultUserAgent
-                            DebugLog.d("NetflixFix", "Switched to default User Agent for Netflix")
-                        }
-                    } else {
-                        // Restore correct UA for other sites based on browsing mode
-                        if (dualWebViewGroup.isDesktopMode()) {
-                            val desktopUA = dualWebViewGroup.getDesktopUserAgent()
-                            if (view?.settings?.userAgentString != desktopUA) {
-                                view?.settings?.userAgentString = desktopUA
+                            // Netflix Fix: Force default User Agent to ensure Widevine CDM works
+                            val isNetflix = url?.contains("netflix.com") == true
+                            if (isNetflix) {
+                                if (view?.settings?.userAgentString != defaultUserAgent) {
+                                    view?.settings?.userAgentString = defaultUserAgent
+                                    DebugLog.d(
+                                            "NetflixFix",
+                                            "Switched to default User Agent for Netflix"
+                                    )
+                                }
+                            } else {
+                                // Restore correct UA for other sites based on browsing mode
+                                if (dualWebViewGroup.isDesktopMode()) {
+                                    val desktopUA = dualWebViewGroup.getDesktopUserAgent()
+                                    if (view?.settings?.userAgentString != desktopUA) {
+                                        view?.settings?.userAgentString = desktopUA
+                                    }
+                                } else {
+                                    if (view?.settings?.userAgentString != customUserAgent &&
+                                                    customUserAgent != null
+                                    ) {
+                                        view?.settings?.userAgentString = customUserAgent
+                                    }
+                                }
                             }
-                        } else {
-                            if (view?.settings?.userAgentString != customUserAgent && customUserAgent != null) {
-                                view?.settings?.userAgentString = customUserAgent
+
+                            // Show loading bar immediately
+                            dualWebViewGroup.updateLoadingProgress(0)
+                            dualWebViewGroup.clearJsScrollMetrics()
+
+                            if (url != null && !url.startsWith("about:blank")) {
+                                lastValidUrl = url
+                                view?.visibility = View.INVISIBLE
+
+                                // Inject location early so it's available before page JS runs
+                                if (lastGpsLat != null && lastGpsLon != null) {
+                                    dualWebViewGroup.injectLocation(lastGpsLat!!, lastGpsLon!!)
+                                }
+                            } else if (url?.startsWith("about:blank") == true &&
+                                            lastValidUrl != null
+                            ) {
+                                // Cancel about:blank load immediately
+                                view?.stopLoading()
+                                view?.loadUrl(lastValidUrl!!)
                             }
                         }
-                    }
 
-                    // Show loading bar immediately
-                    dualWebViewGroup.updateLoadingProgress(0)
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            super.onPageFinished(view, url)
+                            DebugLog.d("WebViewDebug", "Page finished loading: $url")
 
-                    if (url != null && !url.startsWith("about:blank")) {
-                        lastValidUrl = url
-                        view?.visibility = View.INVISIBLE
-                        
-                        // Inject location early so it's available before page JS runs
-                        if (lastGpsLat != null && lastGpsLon != null) {
-                            dualWebViewGroup.injectLocation(lastGpsLat!!, lastGpsLon!!)
-                        }
-                    } else if (url?.startsWith("about:blank") == true && lastValidUrl != null) {
-                        // Cancel about:blank load immediately
-                        view?.stopLoading()
-                        view?.loadUrl(lastValidUrl!!)
-                    }
-                }
+                            // Ensure loading bar is hidden when finished
+                            dualWebViewGroup.updateLoadingProgress(100)
 
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    super.onPageFinished(view, url)
-                    DebugLog.d("WebViewDebug", "Page finished loading: $url")
+                            if (url != null && !url.startsWith("about:blank")) {
+                                view?.visibility = View.VISIBLE
+                                injectJavaScriptForInputFocus()
 
-                    // Ensure loading bar is hidden when finished
-                    dualWebViewGroup.updateLoadingProgress(100)
+                                // Re-apply saved font settings to new page
+                                dualWebViewGroup.reapplyWebFontSettings()
 
-                    if (url != null && !url.startsWith("about:blank")) {
-                        view?.visibility = View.VISIBLE
-                        injectJavaScriptForInputFocus()
-                        
-                        // Re-apply saved font settings to new page
-                        dualWebViewGroup.reapplyWebFontSettings()
+                                // Inject last known location if available
+                                if (lastGpsLat != null && lastGpsLon != null) {
+                                    dualWebViewGroup.injectLocation(lastGpsLat!!, lastGpsLon!!)
+                                }
 
-                        // Inject last known location if available
-                        if (lastGpsLat != null && lastGpsLon != null) {
-                            dualWebViewGroup.injectLocation(lastGpsLat!!, lastGpsLon!!)
-                        }
-
-                        // Inject media listeners with enhanced YouTube support
-                        view?.evaluateJavascript("""
+                                // Inject media listeners with enhanced YouTube support
+                                view?.evaluateJavascript(
+                                        """
                             (function() {
                                 console.log('[TapLink] Media detection script starting...');
                                 let lastPlayingState = false;
@@ -3022,37 +3236,121 @@ class MainActivity : AppCompatActivity(),
                                 
                                 console.log('[TapLink] Media detection script initialized');
                             })();
-                        """, null)
-                    }
-                }
+                        """,
+                                        null
+                                )
 
-                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                    val url = request?.url?.toString() ?: return false
+                                view?.evaluateJavascript(
+                                        """
+                            (function() {
+                                if (window.__taplinkScrollReporterInstalled) {
+                                    if (window.__taplinkReportScrollMetrics) {
+                                        window.__taplinkReportScrollMetrics();
+                                    }
+                                    return;
+                                }
+                                window.__taplinkScrollReporterInstalled = true;
 
-                    // Block about:blank navigations
-                    if (url.startsWith("about:blank")) {
-                        return true
-                    }
+                                var scrollEl = null;
+                                var scheduled = false;
 
-                    // Handle app intents
-                    if (url.startsWith("intent://") || url.startsWith("market://")) {
-                        val fallbackUrl = url.substringAfter("fallback_url=", "")
-                            .substringBefore("#", "")
-                            .substringBefore("&", "")
+                                function pickScrollElement() {
+                                    var marked = document.querySelector('[data-taplink-scroll]');
+                                    if (marked) {
+                                        return marked;
+                                    }
+                                    return document.scrollingElement || document.documentElement || document.body;
+                                }
 
-                        if (fallbackUrl.isNotEmpty() &&
-                            (fallbackUrl.startsWith("http") || fallbackUrl.startsWith("https"))) {
-                            view?.loadUrl(fallbackUrl)
-                            return true
+                                function schedule() {
+                                    if (scheduled) return;
+                                    scheduled = true;
+                                    requestAnimationFrame(function() {
+                                        scheduled = false;
+                                        report();
+                                    });
+                                }
+
+                                function attachScrollListener(el) {
+                                    if (scrollEl && scrollEl !== el) {
+                                        scrollEl.removeEventListener('scroll', schedule);
+                                    }
+                                    scrollEl = el;
+                                    if (scrollEl) {
+                                        scrollEl.addEventListener('scroll', schedule, { passive: true });
+                                    }
+                                }
+
+                                function report() {
+                                    var el = pickScrollElement();
+                                    if (!el) return;
+                                    if (el !== scrollEl) {
+                                        attachScrollListener(el);
+                                    }
+                                    var rangeX = Math.max(el.scrollWidth || 0, el.clientWidth || 0);
+                                    var extentX = el.clientWidth || 0;
+                                    var offsetX = el.scrollLeft || 0;
+                                    var rangeY = Math.max(el.scrollHeight || 0, el.clientHeight || 0);
+                                    var extentY = el.clientHeight || 0;
+                                    var offsetY = el.scrollTop || 0;
+                                    if (window.AndroidInterface &&
+                                            typeof window.AndroidInterface.onScrollMetrics === 'function') {
+                                        window.AndroidInterface.onScrollMetrics(
+                                                rangeX,
+                                                extentX,
+                                                offsetX,
+                                                rangeY,
+                                                extentY,
+                                                offsetY
+                                        );
+                                    }
+                                }
+
+                                window.__taplinkReportScrollMetrics = report;
+                                window.addEventListener('resize', schedule);
+                                setInterval(report, 1000);
+                                report();
+                            })();
+                        """,
+                                        null
+                                )
+                            }
                         }
-                        return true
-                    }
 
-                    return false  // Let WebView handle normal URLs
-                }
-            }
+                        override fun shouldOverrideUrlLoading(
+                                view: WebView?,
+                                request: WebResourceRequest?
+                        ): Boolean {
+                            val url = request?.url?.toString() ?: return false
+
+                            // Block about:blank navigations
+                            if (url.startsWith("about:blank")) {
+                                return true
+                            }
+
+                            // Handle app intents
+                            if (url.startsWith("intent://") || url.startsWith("market://")) {
+                                val fallbackUrl =
+                                        url.substringAfter("fallback_url=", "")
+                                                .substringBefore("#", "")
+                                                .substringBefore("&", "")
+
+                                if (fallbackUrl.isNotEmpty() &&
+                                                (fallbackUrl.startsWith("http") ||
+                                                        fallbackUrl.startsWith("https"))
+                                ) {
+                                    view?.loadUrl(fallbackUrl)
+                                    return true
+                                }
+                                return true
+                            }
+
+                            return false // Let WebView handle normal URLs
+                        }
+                    }
             // Add more detailed logging to track input field interactions
-            webView.evaluateJavascript("""
+            webView.evaluateJavascript(
+                    """
         (function() {
             document.addEventListener('focus', function(e) {
                 console.log('Focus event:', {
@@ -3064,174 +3362,227 @@ class MainActivity : AppCompatActivity(),
                 });
             }, true);
         })();
-    """, null)
-
+    """,
+                    null
+            )
 
             // Consolidate WebChromeClient to handle permissions, file choosing, and custom views
-            webChromeClient = object : WebChromeClient() {
-                // From first client
-                override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    super.onProgressChanged(view, newProgress)
-                    dualWebViewGroup.updateLoadingProgress(newProgress)
-                }
-                override fun onReceivedTouchIconUrl(view: WebView?, url: String?, precomposed: Boolean) {
-                    DebugLog.d("WebViewDebug", "Received touch icon URL: $url")
-                    super.onReceivedTouchIconUrl(view, url, precomposed)
-                }
+            webChromeClient =
+                    object : WebChromeClient() {
+                        // From first client
+                        override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                            super.onProgressChanged(view, newProgress)
+                            dualWebViewGroup.updateLoadingProgress(newProgress)
+                        }
+                        override fun onReceivedTouchIconUrl(
+                                view: WebView?,
+                                url: String?,
+                                precomposed: Boolean
+                        ) {
+                            DebugLog.d("WebViewDebug", "Received touch icon URL: $url")
+                            super.onReceivedTouchIconUrl(view, url, precomposed)
+                        }
 
-                override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
-                    DebugLog.d("WebViewInput", "${consoleMessage.messageLevel()} [${consoleMessage.lineNumber()}]: ${consoleMessage.message()}")
-                    return true
-                }
+                        override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+                            DebugLog.d(
+                                    "WebViewInput",
+                                    "${consoleMessage.messageLevel()} [${consoleMessage.lineNumber()}]: ${consoleMessage.message()}"
+                            )
+                            return true
+                        }
 
-                // Combined onPermissionRequest
-                override fun onPermissionRequest(request: PermissionRequest) {
-                    DebugLog.d("WebView", "Permission request: ${request.resources.joinToString()}")
+                        // Combined onPermissionRequest
+                        override fun onPermissionRequest(request: PermissionRequest) {
+                            DebugLog.d(
+                                    "WebView",
+                                    "Permission request: ${request.resources.joinToString()}"
+                            )
 
-                    val permissions = mutableListOf<String>()
-                    val requiredAndroidPermissions = mutableListOf<String>()
+                            val permissions = mutableListOf<String>()
+                            val requiredAndroidPermissions = mutableListOf<String>()
 
-                    request.resources.forEach { resource ->
-                        when (resource) {
-                            PermissionRequest.RESOURCE_AUDIO_CAPTURE -> {
-                                permissions.add(resource)
-                                requiredAndroidPermissions.add(android.Manifest.permission.RECORD_AUDIO)
-                                // Configure AR glasses microphone for voice assistant mode
-                                audioManager?.setParameters("audio_source_record=voiceassistant")
+                            request.resources.forEach { resource ->
+                                when (resource) {
+                                    PermissionRequest.RESOURCE_AUDIO_CAPTURE -> {
+                                        permissions.add(resource)
+                                        requiredAndroidPermissions.add(
+                                                android.Manifest.permission.RECORD_AUDIO
+                                        )
+                                        // Configure AR glasses microphone for voice assistant mode
+                                        audioManager?.setParameters(
+                                                "audio_source_record=voiceassistant"
+                                        )
+                                    }
+                                    PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
+                                        permissions.add(resource)
+                                        requiredAndroidPermissions.add(
+                                                android.Manifest.permission.CAMERA
+                                        )
+                                    }
+                                }
                             }
-                            PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
-                                permissions.add(resource)
-                                requiredAndroidPermissions.add(android.Manifest.permission.CAMERA)
+
+                            runOnUiThread {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                    val notGrantedPermissions =
+                                            requiredAndroidPermissions.filter {
+                                                checkSelfPermission(it) !=
+                                                        PackageManager.PERMISSION_GRANTED
+                                            }
+
+                                    if (notGrantedPermissions.isNotEmpty()) {
+                                        pendingPermissionRequest = request
+                                        requestPermissions(
+                                                notGrantedPermissions.toTypedArray(),
+                                                PERMISSIONS_REQUEST_CODE
+                                        )
+                                    } else {
+                                        request.grant(permissions.toTypedArray())
+                                    }
+                                } else {
+                                    request.grant(permissions.toTypedArray())
+                                }
                             }
                         }
-                    }
 
-                    runOnUiThread {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            val notGrantedPermissions = requiredAndroidPermissions.filter {
-                                checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
-                            }
+                        override fun onPermissionRequestCanceled(request: PermissionRequest) {
+                            pendingPermissionRequest = null
+                            // Reset audio source when permissions are cancelled
+                            audioManager?.setParameters("audio_source_record=off")
+                        }
 
-                            if (notGrantedPermissions.isNotEmpty()) {
-                                pendingPermissionRequest = request
-                                requestPermissions(notGrantedPermissions.toTypedArray(), PERMISSIONS_REQUEST_CODE)
-                            } else {
-                                request.grant(permissions.toTypedArray())
+                        override fun onGeolocationPermissionsShowPrompt(
+                                origin: String,
+                                callback: GeolocationPermissions.Callback
+                        ) {
+                            // Always grant permission for WebView content so our injected GPS logic
+                            // takes over
+                            ensureGpsUpdates()
+                            callback.invoke(origin, true, false)
+                        }
+
+                        // From second client
+                        override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                            if (view == null) {
+                                callback?.onCustomViewHidden()
+                                return
                             }
-                        } else {
-                            request.grant(permissions.toTypedArray())
+                            showFullScreenCustomView(view, callback)
+                        }
+
+                        override fun onHideCustomView() {
+                            hideFullScreenCustomView()
+                        }
+
+                        // From first client
+                        override fun onShowFileChooser(
+                                webView: WebView?,
+                                filePathCallback: ValueCallback<Array<Uri>>?,
+                                fileChooserParams: FileChooserParams?
+                        ): Boolean {
+                            // Cancel any ongoing request
+                            this@MainActivity.filePathCallback?.onReceiveValue(null)
+                            this@MainActivity.filePathCallback = null
+
+                            this@MainActivity.filePathCallback = filePathCallback
+
+                            // Build an Intent array to include camera capture + file choose
+                            val takePictureIntent = createCameraIntent()
+                            val contentSelectionIntent =
+                                    createContentSelectionIntent(fileChooserParams?.acceptTypes)
+
+                            // Let user pick from either camera or existing files
+                            val intentArray =
+                                    if (takePictureIntent != null) arrayOf(takePictureIntent)
+                                    else arrayOfNulls<Intent>(0)
+
+                            // Create a chooser
+                            val chooserIntent =
+                                    Intent(Intent.ACTION_CHOOSER).apply {
+                                        putExtra(Intent.EXTRA_INTENT, contentSelectionIntent)
+                                        putExtra(Intent.EXTRA_TITLE, "Image Chooser")
+                                        putExtra(
+                                                Intent.EXTRA_INITIAL_INTENTS,
+                                                intentArray.filterNotNull().toTypedArray()
+                                        )
+                                    }
+
+                            try {
+                                @Suppress("DEPRECATION")
+                                startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
+                            } catch (e: ActivityNotFoundException) {
+                                this@MainActivity.filePathCallback = null
+                                return false
+                            }
+                            return true
+                        }
+
+                        // Custom Dialog Handling
+                        override fun onJsAlert(
+                                view: WebView?,
+                                url: String?,
+                                message: String?,
+                                result: android.webkit.JsResult?
+                        ): Boolean {
+                            // DebugLog.d("DialogDebug", "onJsAlert: $message")
+                            dualWebViewGroup.showAlertDialog(message ?: "") { result?.confirm() }
+                            return true
+                        }
+
+                        override fun onJsConfirm(
+                                view: WebView?,
+                                url: String?,
+                                message: String?,
+                                result: android.webkit.JsResult?
+                        ): Boolean {
+                            // DebugLog.d("DialogDebug", "onJsConfirm: $message")
+                            dualWebViewGroup.showConfirmDialog(
+                                    message ?: "",
+                                    { result?.confirm() },
+                                    { result?.cancel() }
+                            )
+                            return true
+                        }
+
+                        override fun onJsPrompt(
+                                view: WebView?,
+                                url: String?,
+                                message: String?,
+                                defaultValue: String?,
+                                result: android.webkit.JsPromptResult?
+                        ): Boolean {
+                            // DebugLog.d("DialogDebug", "onJsPrompt: $message")
+                            dualWebViewGroup.showPromptDialog(
+                                    message ?: "",
+                                    defaultValue,
+                                    { text -> result?.confirm(text) },
+                                    { result?.cancel() }
+                            )
+                            return true
+                        }
+
+                        override fun onJsBeforeUnload(
+                                view: WebView?,
+                                url: String?,
+                                message: String?,
+                                result: android.webkit.JsResult?
+                        ): Boolean {
+                            // DebugLog.d("DialogDebug", "onJsBeforeUnload: $message")
+                            dualWebViewGroup.showConfirmDialog(
+                                    message ?: "Are you sure you want to leave this page?",
+                                    { result?.confirm() },
+                                    { result?.cancel() }
+                            )
+                            return true
                         }
                     }
-                }
-
-                override fun onPermissionRequestCanceled(request: PermissionRequest) {
-                    pendingPermissionRequest = null
-                    // Reset audio source when permissions are cancelled
-                    audioManager?.setParameters("audio_source_record=off")
-                }
-
-                override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
-                    // Always grant permission for WebView content so our injected GPS logic takes over
-                    ensureGpsUpdates()
-                    callback.invoke(origin, true, false)
-                }
-
-                // From second client
-                override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
-                    if (view == null) {
-                        callback?.onCustomViewHidden()
-                        return
-                    }
-                    showFullScreenCustomView(view, callback)
-                }
-
-                override fun onHideCustomView() {
-                    hideFullScreenCustomView()
-                }
-
-                // From first client
-                override fun onShowFileChooser(
-                    webView: WebView?,
-                    filePathCallback: ValueCallback<Array<Uri>>?,
-                    fileChooserParams: FileChooserParams?
-                ): Boolean {
-                    // Cancel any ongoing request
-                    this@MainActivity.filePathCallback?.onReceiveValue(null)
-                    this@MainActivity.filePathCallback = null
-
-                    this@MainActivity.filePathCallback = filePathCallback
-
-                    // Build an Intent array to include camera capture + file choose
-                    val takePictureIntent = createCameraIntent()
-                    val contentSelectionIntent = createContentSelectionIntent(fileChooserParams?.acceptTypes)
-
-                    // Let user pick from either camera or existing files
-                    val intentArray = if (takePictureIntent != null) arrayOf(takePictureIntent) else arrayOfNulls<Intent>(0)
-
-                    // Create a chooser
-                    val chooserIntent = Intent(Intent.ACTION_CHOOSER).apply {
-                        putExtra(Intent.EXTRA_INTENT, contentSelectionIntent)
-                        putExtra(Intent.EXTRA_TITLE, "Image Chooser")
-                        putExtra(Intent.EXTRA_INITIAL_INTENTS, intentArray.filterNotNull().toTypedArray())
-                    }
-
-                    try {
-                        @Suppress("DEPRECATION")
-                        startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
-                    } catch (e: ActivityNotFoundException) {
-                        this@MainActivity.filePathCallback = null
-                        return false
-                    }
-                    return true
-                }
-                
-                // Custom Dialog Handling
-                override fun onJsAlert(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
-                    // DebugLog.d("DialogDebug", "onJsAlert: $message")
-                    dualWebViewGroup.showAlertDialog(message ?: "") {
-                        result?.confirm()
-                    }
-                    return true
-                }
-
-                override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
-                    // DebugLog.d("DialogDebug", "onJsConfirm: $message")
-                    dualWebViewGroup.showConfirmDialog(message ?: "", {
-                        result?.confirm()
-                    }, {
-                        result?.cancel()
-                    })
-                    return true
-                }
-
-                override fun onJsPrompt(view: WebView?, url: String?, message: String?, defaultValue: String?, result: android.webkit.JsPromptResult?): Boolean {
-                    // DebugLog.d("DialogDebug", "onJsPrompt: $message")
-                    dualWebViewGroup.showPromptDialog(message ?: "", defaultValue, { text ->
-                        result?.confirm(text)
-                    }, {
-                        result?.cancel()
-                    })
-                    return true
-                }
-
-                override fun onJsBeforeUnload(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
-                    // DebugLog.d("DialogDebug", "onJsBeforeUnload: $message")
-                    dualWebViewGroup.showConfirmDialog(message ?: "Are you sure you want to leave this page?", {
-                        result?.confirm()
-                    }, {
-                        result?.cancel()
-                    })
-                    return true
-                }
-            }
         }
-
 
         // Section 5: Input Handling Configuration
         // Section 5: Input Handling Configuration
         disableDefaultKeyboard(webView)
         @Suppress("DEPRECATION")
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
 
         // Only try restoration if this is the initial window
         if (webView == dualWebViewGroup.getWebView()) {
@@ -3253,25 +3604,32 @@ class MainActivity : AppCompatActivity(),
             setSupportMultipleWindows(true)
         }
 
-        logPermissionState()  // Log initial permission state
+        logPermissionState() // Log initial permission state
 
         webView.addJavascriptInterface(AndroidInterface(this), "AndroidInterface")
         // Add JavaScript interface for custom media handling if needed
-        webView.addJavascriptInterface(object {
-            @JavascriptInterface
-            fun onMediaStart(type: String) {
-                when (type) {
-                    "audio" -> audioManager?.setParameters("audio_source_record=voiceassistant")
-                    "video" -> { /* Handle camera initialization if needed */ }
-                }
-            }
+        webView.addJavascriptInterface(
+                object {
+                    @JavascriptInterface
+                    fun onMediaStart(type: String) {
+                        when (type) {
+                            "audio" ->
+                                    audioManager?.setParameters(
+                                            "audio_source_record=voiceassistant"
+                                    )
+                            "video" -> {
+                                /* Handle camera initialization if needed */
+                            }
+                        }
+                    }
 
-            @JavascriptInterface
-            fun onMediaStop() {
-                audioManager?.setParameters("audio_source_record=off")
-            }
-        }, "AndroidMediaInterface")
-
+                    @JavascriptInterface
+                    fun onMediaStop() {
+                        audioManager?.setParameters("audio_source_record=off")
+                    }
+                },
+                "AndroidMediaInterface"
+        )
     }
 
     private fun tryRestoreSession() {
@@ -3284,7 +3642,7 @@ class MainActivity : AppCompatActivity(),
             val lastUrl = prefs.getString(keyLastUrl, null)
             DebugLog.d("WebViewDebug", "Last saved URL: $lastUrl")
 
-            val defaultDashboardUrl = "file:///android_asset/AR_Dashboard_Landscape_Sidebar.html"
+            val defaultDashboardUrl = Constants.DEFAULT_URL
             var restored = false
 
             if (!savedState.isNullOrBlank()) {
@@ -3313,12 +3671,14 @@ class MainActivity : AppCompatActivity(),
             }
         } catch (e: Exception) {
             DebugLog.e("WebViewDebug", "Error restoring session", e)
-            webView.loadUrl("file:///android_asset/AR_Dashboard_Landscape_Sidebar.html")
+            webView.loadUrl(Constants.DEFAULT_URL)
         }
     }
 
-
-    private class WebAppInterface(private val activity: MainActivity, private val webView: WebView) {
+    private class WebAppInterface(
+            private val activity: MainActivity,
+            private val webView: WebView
+    ) {
         @JavascriptInterface
         fun onInputFocus() {
             activity.runOnUiThread {
@@ -3351,7 +3711,6 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
-
     private fun createCameraIntent(): Intent? {
         val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
         if (cameraIntent.resolveActivity(packageManager) == null) {
@@ -3363,11 +3722,7 @@ class MainActivity : AppCompatActivity(),
         }
         // Create a file/URI to store the image
         val imageFile = createTempImageFile() ?: return null
-        cameraImageUri = FileProvider.getUriForFile(
-            this,
-            "$packageName.fileprovider",
-            imageFile
-        )
+        cameraImageUri = FileProvider.getUriForFile(this, "$packageName.fileprovider", imageFile)
         cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, cameraImageUri)
         return cameraIntent
     }
@@ -3385,11 +3740,7 @@ class MainActivity : AppCompatActivity(),
     private fun createTempImageFile(): File? {
         return try {
             val storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-            File.createTempFile(
-                "tmp_image_",
-                ".jpg",
-                storageDir
-            )
+            File.createTempFile("tmp_image_", ".jpg", storageDir)
         } catch (e: IOException) {
             DebugLog.e("FileChooser", "Cannot create temp file", e)
             null
@@ -3412,9 +3763,11 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
-
     @Suppress("DEPRECATION")
-    private fun showFullScreenCustomView(view: View, callback: WebChromeClient.CustomViewCallback?) {
+    private fun showFullScreenCustomView(
+            view: View,
+            callback: WebChromeClient.CustomViewCallback?
+    ) {
         if (fullScreenCustomView != null) {
             callback?.onCustomViewHidden()
             return
@@ -3426,14 +3779,13 @@ class MainActivity : AppCompatActivity(),
         originalOrientation = requestedOrientation
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.decorView.systemUiVisibility = (
-            View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-            )
+        window.decorView.systemUiVisibility =
+                (View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                        View.SYSTEM_UI_FLAG_FULLSCREEN or
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
 
         dualWebViewGroup.showFullScreenOverlay(view)
         cursorLeftView.visibility = View.GONE
@@ -3469,7 +3821,8 @@ class MainActivity : AppCompatActivity(),
                 if (filePathCallback != null) {
                     var results: Array<Uri>? = null
 
-                    // Check if response is from Camera (data is null/empty but cameraImageUri is set)
+                    // Check if response is from Camera (data is null/empty but cameraImageUri is
+                    // set)
                     // or from File Picker (data has URI)
                     if (data == null || data.data == null) {
                         // If cameraImageUri is populated, use it
@@ -3478,9 +3831,7 @@ class MainActivity : AppCompatActivity(),
                         }
                     } else {
                         // File picker result
-                        data.dataString?.let {
-                            results = arrayOf(Uri.parse(it))
-                        }
+                        data.dataString?.let { results = arrayOf(Uri.parse(it)) }
                     }
 
                     filePathCallback?.onReceiveValue(results)
@@ -3499,7 +3850,8 @@ class MainActivity : AppCompatActivity(),
                 val base64Image = convertBitmapToBase64(imageBitmap as Bitmap)
 
                 // Send the image back to Google Search
-                webView.evaluateJavascript("""
+                webView.evaluateJavascript(
+                        """
                 (function() {
                     // Find Google's image search input
                     var input = document.querySelector('input[type="file"][name="image_url"]');
@@ -3525,7 +3877,9 @@ class MainActivity : AppCompatActivity(),
                             input.dispatchEvent(new Event('change', { bubbles: true }));
                         });
                 })();
-            """, null)
+            """,
+                        null
+                )
             }
         }
     }
@@ -3542,10 +3896,14 @@ class MainActivity : AppCompatActivity(),
             val permissionsToRequest = mutableListOf<String>()
 
             // Check both permissions
-            if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
+                            PackageManager.PERMISSION_GRANTED
+            ) {
                 permissionsToRequest.add(android.Manifest.permission.RECORD_AUDIO)
             }
-            if (checkSelfPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS) != PackageManager.PERMISSION_GRANTED) {
+            if (checkSelfPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS) !=
+                            PackageManager.PERMISSION_GRANTED
+            ) {
                 permissionsToRequest.add(android.Manifest.permission.MODIFY_AUDIO_SETTINGS)
             }
 
@@ -3555,31 +3913,31 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
-
     private fun logPermissionState() {
-        val cameraPermission = ContextCompat.checkSelfPermission(
-            this,
-            android.Manifest.permission.CAMERA
-        )
-        val micPermission = ContextCompat.checkSelfPermission(
-            this,
-            android.Manifest.permission.RECORD_AUDIO
-        )
+        val cameraPermission =
+                ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
+        val micPermission =
+                ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
 
-        DebugLog.d("PermissionDebug", """
+        DebugLog.d(
+                "PermissionDebug",
+                """
         Permission State:
         Camera: ${if (cameraPermission == PackageManager.PERMISSION_GRANTED) "GRANTED" else "DENIED"}
         Microphone: ${if (micPermission == PackageManager.PERMISSION_GRANTED) "GRANTED" else "DENIED"}
-    """.trimIndent())
+    """.trimIndent()
+        )
     }
 
     private fun disableDefaultKeyboard(targetWebView: WebView) {
         try {
-            val method = WebView::class.java.getMethod("setShowSoftInputOnFocus", Boolean::class.java)
+            val method =
+                    WebView::class.java.getMethod("setShowSoftInputOnFocus", Boolean::class.java)
             method.invoke(targetWebView, false)
         } catch (e: Exception) {
             // Fallback for older Android versions
-            targetWebView.evaluateJavascript("""
+            targetWebView.evaluateJavascript(
+                    """
             document.addEventListener('focus', function(e) {
                 if (e.target.tagName === 'INPUT' || 
                     e.target.tagName === 'TEXTAREA' || 
@@ -3589,7 +3947,9 @@ class MainActivity : AppCompatActivity(),
                     setTimeout(() => e.target.focus(), 50);
                 }
             }, true);
-        """, null)
+        """,
+                    null
+            )
         }
     }
 
@@ -3597,30 +3957,29 @@ class MainActivity : AppCompatActivity(),
         toggleAnchor()
     }
 
-
     // Add this method to handle permission results
     override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
+            requestCode: Int,
+            permissions: Array<out String>,
+            grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         when (requestCode) {
             CAMERA_PERMISSION_CODE -> {
-                cameraPermissionGranted = grantResults.isNotEmpty() &&
-                    grantResults[0] == PackageManager.PERMISSION_GRANTED
+                cameraPermissionGranted =
+                        grantResults.isNotEmpty() &&
+                                grantResults[0] == PackageManager.PERMISSION_GRANTED
 
                 if (!cameraPermissionGranted) {
                     DebugLog.e("Camera", "Camera permission denied")
                     // Inform user that camera features won't work
                     webView.evaluateJavascript(
-                        "alert('Camera permission is required for image search');",
-                        null
+                            "alert('Camera permission is required for image search');",
+                            null
                     )
                 }
             }
-
         }
     }
 
@@ -3639,7 +3998,7 @@ class MainActivity : AppCompatActivity(),
 
         if (wasKeyboardDismissedByEnter) {
             wasKeyboardDismissedByEnter = false
-            if(!dualWebViewGroup.isUrlEditing()) {
+            if (!dualWebViewGroup.isUrlEditing()) {
                 return
             }
         }
@@ -3647,15 +4006,17 @@ class MainActivity : AppCompatActivity(),
         // Ensure keyboard view exists and is properly configured
         if (keyboardView == null) {
             DebugLog.d("KeyboardDebug", "3. Creating new keyboard view")
-            keyboardView = CustomKeyboardView(this).apply {
-                layoutParams = FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    Gravity.BOTTOM
-                )
-                setOnKeyboardActionListener(this@MainActivity)
-                DebugLog.d("KeyboardDebug", "Keyboard created with visibility: $visibility")
-            }
+            keyboardView =
+                    CustomKeyboardView(this).apply {
+                        layoutParams =
+                                FrameLayout.LayoutParams(
+                                        FrameLayout.LayoutParams.MATCH_PARENT,
+                                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                                        Gravity.BOTTOM
+                                )
+                        setOnKeyboardActionListener(this@MainActivity)
+                        DebugLog.d("KeyboardDebug", "Keyboard created with visibility: $visibility")
+                    }
         }
 
         // Hide info bars when keyboard shows
@@ -3666,12 +4027,15 @@ class MainActivity : AppCompatActivity(),
 
         keyboardView?.let { keyboard ->
             // Log state before setting keyboard
-            DebugLog.d("KeyboardDebug", """
+            DebugLog.d(
+                    "KeyboardDebug",
+                    """
             Before setKeyboard:
             Keyboard visibility: ${keyboard.visibility}
             Container visibility: ${dualWebViewGroup.keyboardContainer.visibility}
             isKeyboardVisible: $isKeyboardVisible
-        """.trimIndent())
+        """.trimIndent()
+            )
 
             // Force visibility BEFORE setting keyboard
             keyboard.visibility = View.VISIBLE
@@ -3680,14 +4044,17 @@ class MainActivity : AppCompatActivity(),
             dualWebViewGroup.setKeyboard(keyboard)
 
             // Log state after setting keyboard
-            DebugLog.d("KeyboardDebug", """
+            DebugLog.d(
+                    "KeyboardDebug",
+                    """
             After setKeyboard:
             Keyboard visibility: ${keyboard.visibility}
             Container visibility: ${dualWebViewGroup.keyboardContainer.visibility}
             isKeyboardVisible: $isKeyboardVisible
-        """.trimIndent())
+        """.trimIndent()
+            )
             isKeyboardVisible = true
-            
+
             // Ensure keyboard is on top of dialogs
             dualWebViewGroup.keyboardContainer.elevation = 3000f
             dualWebViewGroup.keyboardContainer.bringToFront()
@@ -3703,24 +4070,24 @@ class MainActivity : AppCompatActivity(),
 
     private fun toggleAnchor() {
 
-
-
-
         isAnchored = !isAnchored
-        
+
         // Save anchored mode state
         getSharedPreferences(prefsName, MODE_PRIVATE)
-            .edit()
-            .putBoolean(Constants.KEY_IS_ANCHORED, isAnchored)
-            .apply()
-        
+                .edit()
+                .putBoolean(Constants.KEY_IS_ANCHORED, isAnchored)
+                .apply()
+
         hideCustomKeyboard()
-        DebugLog.d("AnchorDebug", """
+        DebugLog.d(
+                "AnchorDebug",
+                """
         Anchor toggled:
         isAnchored: $isAnchored
         isKeyboardVisible: $isKeyboardVisible
         keyboardView null?: ${keyboardView == null}
-    """.trimIndent())
+    """.trimIndent()
+        )
         if (isAnchored) {
             // Move cursor to center of left screen
             centerCursor()
@@ -3730,82 +4097,90 @@ class MainActivity : AppCompatActivity(),
             smoothedDeltaY = 0f
             smoothedRollDeg = 0f
             lastFrameTime = 0L
-            
+
             sensorEventListener = createSensorEventListener()
             rotationSensor?.let { sensor ->
                 // Use FASTEST for maximum responsiveness (smoothing handles jitter)
-                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_GAME)
+                sensorManager.registerListener(
+                        sensorEventListener,
+                        sensor,
+                        SensorManager.SENSOR_DELAY_GAME
+                )
             }
             dualWebViewGroup.startAnchoring()
-
-
         } else {
             // CRITICAL: Set isAnchored to false FIRST to stop any pending sensor callbacks
             // (The sensor listener checks this flag before applying updates)
-            
+
             // Stop sensor updates immediately
             sensorManager.unregisterListener(sensorEventListener)
-            
+
             // Wait a tiny bit for any in-flight Choreographer callbacks to complete
             // before resetting positions
-            Handler(Looper.getMainLooper()).postDelayed({
-                // Now reset view positions after sensor updates have stopped
-                dualWebViewGroup.stopAnchoring()
-                
-                // Restore cursor position
-                refreshCursor()
-            }, 50) // Small delay to ensure pending frames are processed
+            Handler(Looper.getMainLooper())
+                    .postDelayed(
+                            {
+                                // Now reset view positions after sensor updates have stopped
+                                dualWebViewGroup.stopAnchoring()
+
+                                // Restore cursor position
+                                refreshCursor()
+                            },
+                            50
+                    ) // Small delay to ensure pending frames are processed
         }
     }
 
     private fun scheduleCursorUpdate() {
         if (!pendingCursorUpdate) {
             pendingCursorUpdate = true
-            uiHandler.postDelayed({
-                pendingCursorUpdate = false
-                refreshCursor()
-            }, 8)
+            uiHandler.postDelayed(
+                    {
+                        pendingCursorUpdate = false
+                        refreshCursor()
+                    },
+                    8
+            )
         }
     }
 
     /**
-     * Updates the smoothing factors based on user preference slider (0-100)
-     * 0 = Fastest/least smooth (high factor values = more responsive)
-     * 100 = Slowest/most smooth (low factor values = very smooth)
-     * 80 = Default balanced setting
+     * Updates the smoothing factors based on user preference slider (0-100) 0 = Fastest/least
+     * smooth (high factor values = more responsive) 100 = Slowest/most smooth (low factor values =
+     * very smooth) 80 = Default balanced setting
      */
     private fun updateSmoothnessFactors(level: Int) {
         smoothnessLevel = level.coerceIn(0, 100)
-        
+
         // Map 0-100 to smoothing factors with INVERTED non-linear scaling
         // Higher slider values = LOWER factors = MORE smoothing
         // Lower slider values = HIGHER factors = LESS smoothing (more responsive)
-        
+
         // Quaternion SLERP: 0.20 (fast/left) to 0.02 (very smooth/right)
         // Inverting: 100 - level gives us the inverse
         val invertedLevel = 100 - smoothnessLevel
         anchorSmoothingFactor = 0.02f + (invertedLevel / 100f) * 0.18f
-        
+
         // Velocity smoothing: 0.30 (fast/left) to 0.05 (very smooth/right)
         velocitySmoothing = 0.05f + (invertedLevel / 100f) * 0.25f
-        
-        DebugLog.d("SmoothnessDebug", """
+
+        DebugLog.d(
+                "SmoothnessDebug",
+                """
             Smoothness updated:
             Level: $smoothnessLevel (0=fast, 100=smooth)
             Inverted: $invertedLevel
             Quaternion SLERP: $anchorSmoothingFactor
             Velocity Damping: $velocitySmoothing
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
-    /**
-     * Public function called from DualWebViewGroup when user adjusts smoothness slider
-     */
+    /** Public function called from DualWebViewGroup when user adjusts smoothness slider */
     fun updateAnchorSmoothness(level: Int) {
         updateSmoothnessFactors(level)
         // Preference is already saved by DualWebViewGroup, just update the factors
     }
-
 
     private fun createSensorEventListener(): SensorEventListener {
         return object : SensorEventListener {
@@ -3831,7 +4206,12 @@ class MainActivity : AppCompatActivity(),
                     smoothedQuaternion = currentQuaternion.clone()
                 } else {
                     // Apply smoothing (SLERP) using dynamic factor
-                    smoothedQuaternion = quaternionSlerp(smoothedQuaternion!!, currentQuaternion, anchorSmoothingFactor)
+                    smoothedQuaternion =
+                            quaternionSlerp(
+                                    smoothedQuaternion!!,
+                                    currentQuaternion,
+                                    anchorSmoothingFactor
+                            )
                 }
 
                 // Use the smoothed quaternion for calculations
@@ -3852,22 +4232,29 @@ class MainActivity : AppCompatActivity(),
                 val relativeQuaternion = quaternionMultiply(initialQuaternionInv, activeQuaternion)
 
                 val euler = quaternionToEuler(relativeQuaternion) // [roll, pitch, yaw]
-                val rollRad = euler[2]  // or [2], etc., depends on your system
+                val rollRad = euler[2] // or [2], etc., depends on your system
                 val rollDeg = Math.toDegrees(rollRad.toDouble()).toFloat()
 
                 val deltaX = relativeQuaternion[1] * TRANSLATION_SCALE
                 val deltaY = relativeQuaternion[2] * TRANSLATION_SCALE
 
                 // Apply velocity smoothing (double exponential smoothing) using dynamic factor
-                smoothedDeltaX = smoothedDeltaX * (1f - velocitySmoothing) + deltaX * velocitySmoothing
-                smoothedDeltaY = smoothedDeltaY * (1f - velocitySmoothing) + deltaY * velocitySmoothing
-                smoothedRollDeg = smoothedRollDeg * (1f - velocitySmoothing) + rollDeg * velocitySmoothing
+                smoothedDeltaX =
+                        smoothedDeltaX * (1f - velocitySmoothing) + deltaX * velocitySmoothing
+                smoothedDeltaY =
+                        smoothedDeltaY * (1f - velocitySmoothing) + deltaY * velocitySmoothing
+                smoothedRollDeg =
+                        smoothedRollDeg * (1f - velocitySmoothing) + rollDeg * velocitySmoothing
 
                 // Use Choreographer to sync with display vsync for buttery smooth updates
                 Choreographer.getInstance().postFrameCallback {
                     // Double-check isAnchored before applying update (prevents race conditions)
                     if (isAnchored) {
-                        dualWebViewGroup.updateLeftEyePosition(smoothedDeltaX, smoothedDeltaY, smoothedRollDeg)
+                        dualWebViewGroup.updateLeftEyePosition(
+                                smoothedDeltaX,
+                                smoothedDeltaY,
+                                smoothedRollDeg
+                        )
                     }
                 }
             }
@@ -3883,27 +4270,27 @@ class MainActivity : AppCompatActivity(),
         val z = q[3]
 
         // roll (x-axis rotation)
-        val sinrCosp = 2f * (w*x + y*z)
-        val cosrCosp = 1f - 2f * (x*x + y*y)
+        val sinrCosp = 2f * (w * x + y * z)
+        val cosrCosp = 1f - 2f * (x * x + y * y)
         val roll = atan2(sinrCosp, cosrCosp)
 
         // pitch (y-axis rotation)
-        val sinp = 2f * (w*y - z*x)
-        val pitch = if (abs(sinp) >= 1f) {
-            // Use 90 degrees if out of range
-            PI.toFloat()/2f * if (sinp > 0f) 1f else -1f
-        } else {
-            asin(sinp)
-        }
+        val sinp = 2f * (w * y - z * x)
+        val pitch =
+                if (abs(sinp) >= 1f) {
+                    // Use 90 degrees if out of range
+                    PI.toFloat() / 2f * if (sinp > 0f) 1f else -1f
+                } else {
+                    asin(sinp)
+                }
 
         // yaw (z-axis rotation)
-        val sinyCosp = 2f * (w*z + x*y)
-        val cosyCosp = 1f - 2f * (y*y + z*z)
+        val sinyCosp = 2f * (w * z + x * y)
+        val cosyCosp = 1f - 2f * (y * y + z * z)
         val yaw = atan2(sinyCosp, cosyCosp)
 
         return floatArrayOf(roll, pitch, yaw)
     }
-
 
     /**
      * Toggles the cursor visibility.
@@ -3914,7 +4301,9 @@ class MainActivity : AppCompatActivity(),
      * callbacks attempt to toggle the cursor simultaneously.
      */
     private fun toggleCursorVisibility(forceHide: Boolean = false, forceShow: Boolean = false) {
-        DebugLog.d("DoubleTapDebug", """
+        DebugLog.d(
+                "DoubleTapDebug",
+                """
             Toggle Cursor Visibility:
             Force Hide: $forceHide
             Force Show: $forceShow
@@ -3922,7 +4311,8 @@ class MainActivity : AppCompatActivity(),
             isSimulating: $isSimulatingTouchEvent
             cursorJustAppeared: $cursorJustAppeared
             isToggling: $isToggling
-        """.trimIndent())
+        """.trimIndent()
+        )
 
         synchronized(cursorToggleLock) {
             if (isToggling) return
@@ -3930,11 +4320,12 @@ class MainActivity : AppCompatActivity(),
 
             try {
                 val previouslyVisible = isCursorVisible
-                val targetVisibility = when {
-                    forceHide -> false
-                    forceShow -> true
-                    else -> !previouslyVisible
-                }
+                val targetVisibility =
+                        when {
+                            forceHide -> false
+                            forceShow -> true
+                            else -> !previouslyVisible
+                        }
 
                 if (targetVisibility == previouslyVisible) {
                     return
@@ -3955,12 +4346,17 @@ class MainActivity : AppCompatActivity(),
                     }
 
                     cursorJustAppeared = true
-                    // Block interactions briefly to prevent stale taps from firing as the cursor reappears.
+                    // Block interactions briefly to prevent stale taps from firing as the cursor
+                    // reappears.
                     isSimulatingTouchEvent = true
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        cursorJustAppeared = false
-                        isSimulatingTouchEvent = false
-                    }, 300)
+                    Handler(Looper.getMainLooper())
+                            .postDelayed(
+                                    {
+                                        cursorJustAppeared = false
+                                        isSimulatingTouchEvent = false
+                                    },
+                                    300
+                            )
 
                     resetScrollModeTimer()
                 } else {
@@ -3983,26 +4379,25 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
-
-
-
-
     override fun onCursorPositionChanged(x: Float, y: Float, isVisible: Boolean) {
         val scale = dualWebViewGroup.uiScale
 
-        // Calculate visual position scaled around center (320, 240) and translated (only in non-anchored mode)
+        // Calculate visual position scaled around center (320, 240) and translated (only in
+        // non-anchored mode)
         val transX = if (isAnchored) 0f else dualWebViewGroup.leftEyeUIContainer.translationX
         val transY = if (isAnchored) 0f else dualWebViewGroup.leftEyeUIContainer.translationY
-        
+
         val visualX = 320f + (x - 320f) * scale + transX
         val visualY = 240f + (y - 240f) * scale + transY
 
         // Logic to prevent "wrapping":
         // 1. Left cursor should ONLY be visible if it is within the left screen bounds (< 640)
-        // 2. Right cursor (which is at visualX + 640) should ONLY be visible if visualX >= 0 (so final x >= 640)
-        // Note: We use a small buffer (e.g. -20 to 660) if we want to allow partial cursor visibility at edges,
+        // 2. Right cursor (which is at visualX + 640) should ONLY be visible if visualX >= 0 (so
+        // final x >= 640)
+        // Note: We use a small buffer (e.g. -20 to 660) if we want to allow partial cursor
+        // visibility at edges,
         // but strictly preventing wrapping means keeping it to the 640 boundary.
-        
+
         val showLeft = isVisible && visualX < 640f
         val showRight = isVisible && visualX >= 0f
 
@@ -4046,9 +4441,7 @@ class MainActivity : AppCompatActivity(),
                 val cursorPosition = dualWebViewGroup.urlEditText.selectionStart
 
                 // Insert the key at cursor position
-                val newText = StringBuilder(currentText)
-                    .insert(cursorPosition, key)
-                    .toString()
+                val newText = StringBuilder(currentText).insert(cursorPosition, key).toString()
 
                 // Set text and move cursor after inserted character
                 dualWebViewGroup.setLinkText(newText, cursorPosition + 1)
@@ -4087,9 +4480,8 @@ class MainActivity : AppCompatActivity(),
 
                 if (cursorPosition > 0) {
                     // Delete character before cursor
-                    val newText = StringBuilder(currentText)
-                        .deleteCharAt(cursorPosition - 1)
-                        .toString()
+                    val newText =
+                            StringBuilder(currentText).deleteCharAt(cursorPosition - 1).toString()
 
                     // Set text and move cursor to position before deleted character
                     dualWebViewGroup.setLinkText(newText, cursorPosition - 1)
@@ -4100,7 +4492,8 @@ class MainActivity : AppCompatActivity(),
                 val currentText = input.text.toString()
                 val cursorPosition = input.selectionStart
                 if (cursorPosition > 0) {
-                    val newText = StringBuilder(currentText).deleteCharAt(cursorPosition - 1).toString()
+                    val newText =
+                            StringBuilder(currentText).deleteCharAt(cursorPosition - 1).toString()
                     input.setText(newText)
                     input.setSelection(cursorPosition - 1)
                 }
@@ -4112,12 +4505,11 @@ class MainActivity : AppCompatActivity(),
     }
 
     override fun onEnterPressed() {
-        isKeyboardVisible = false //if enter is pressed keyboard is no longer visible
-        if(isUrlEditing) {
+        isKeyboardVisible = false // if enter is pressed keyboard is no longer visible
+        if (isUrlEditing) {
 
             isUrlEditing = false
             dualWebViewGroup.toggleIsUrlEditing(isUrlEditing)
-
         }
 
         wasKeyboardDismissedByEnter = true
@@ -4130,7 +4522,7 @@ class MainActivity : AppCompatActivity(),
             }
             dualWebViewGroup.getDialogInput() != null -> {
                 // If in dialog input, enter might mean confirm, or just hide keyboard?
-                // Usually OK button handles the confirm. 
+                // Usually OK button handles the confirm.
                 // Let's just hide keyboard for now or do nothing.
                 hideCustomKeyboard()
             }
@@ -4149,9 +4541,10 @@ class MainActivity : AppCompatActivity(),
     }
 
     override fun onRefreshPressed() {
-        //DebugLog.d("Navigation", "Refresh pressed")
+        // DebugLog.d("Navigation", "Refresh pressed")
         val currentUrl = webView.url
-        webView.evaluateJavascript("""
+        webView.evaluateJavascript(
+                """
             (function() {
                 const injectedStyles = document.querySelectorAll('style[data-injected="true"]');
                 injectedStyles.forEach(style => style.remove());
@@ -4161,17 +4554,22 @@ class MainActivity : AppCompatActivity(),
                     viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
                 }
             })();
-        """, null)
+        """,
+                null
+        )
 
-        Handler(Looper.getMainLooper()).postDelayed({
-            if (currentUrl != null) {
-                webView.loadUrl(currentUrl)
-            } else {
-                webView.loadUrl("https://www.google.com")
-            }
-        }, 50)
+        Handler(Looper.getMainLooper())
+                .postDelayed(
+                        {
+                            if (currentUrl != null) {
+                                webView.loadUrl(currentUrl)
+                            } else {
+                                webView.loadUrl(Constants.DEFAULT_URL)
+                            }
+                        },
+                        50
+                )
     }
-
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         // Ignore touches from cyttsp6_mt device
@@ -4183,35 +4581,36 @@ class MainActivity : AppCompatActivity(),
         if (ev.action == MotionEvent.ACTION_DOWN) {
             wasTouchOnBookmarks = false
             wasKeyboardVisibleAtDown = isKeyboardVisible
-            
+
             if (::dualWebViewGroup.isInitialized) {
                 // In anchored mode, use the eye center (look-to-click) for coordinate checks
                 // In non-anchored mode, use the raw touch coordinates
                 val checkX: Float
                 val checkY: Float
-                
+
                 if (isAnchored) {
                     val groupLocation = IntArray(2)
                     dualWebViewGroup.getLocationOnScreen(groupLocation)
                     checkX = 320f + groupLocation[0]
                     checkY = 240f + groupLocation[1]
                 } else {
-                    // In non-anchored mode, check if the CURSOR (not the touch) is over the bookmarks
+                    // In non-anchored mode, check if the CURSOR (not the touch) is over the
+                    // bookmarks
                     // This matches the logic in dispatchTouchEventAtCursor
                     val scale = dualWebViewGroup.uiScale
                     val transX = dualWebViewGroup.leftEyeUIContainer.translationX
                     val transY = dualWebViewGroup.leftEyeUIContainer.translationY
-                    
+
                     val visualX = 320f + (lastCursorX - 320f) * scale + transX
                     val visualY = 240f + (lastCursorY - 240f) * scale + transY
-                    
+
                     val groupLocation = IntArray(2)
                     dualWebViewGroup.getLocationOnScreen(groupLocation)
-                    
+
                     checkX = visualX + groupLocation[0]
                     checkY = visualY + groupLocation[1]
                 }
-                
+
                 if (dualWebViewGroup.isPointInBookmarks(checkX, checkY)) {
                     wasTouchOnBookmarks = true
                 }
@@ -4230,7 +4629,9 @@ class MainActivity : AppCompatActivity(),
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        DebugLog.d("RingInput", """
+        DebugLog.d(
+                "RingInput",
+                """
         Touch Event:
         Action: ${event.action}
         Source: ${event.source}
@@ -4241,11 +4642,12 @@ class MainActivity : AppCompatActivity(),
         EventTime: ${event.eventTime}
         DownTime: ${event.downTime}
         Duration: ${event.eventTime - event.downTime}ms
-    """.trimIndent())
+    """.trimIndent()
+        )
 
         // Use the result captured in dispatchTouchEvent to avoid calling it twice
         val handled = isGestureHandled
-        
+
         if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
             // triple click menu fling logic was here
         }
@@ -4266,17 +4668,14 @@ class MainActivity : AppCompatActivity(),
         dualWebViewGroup.showSettings()
     }
 
-
-
-
     // Add the navigation interface implementations
     override fun onNavigationBackPressed() {
         val historyList = webView.copyBackForwardList()
         val canGoBack = webView.canGoBack()
 
         DebugLog.d(
-            "NavigationDebug",
-            """
+                "NavigationDebug",
+                """
             Back pressed:
             Current URL: ${webView.url}
             Can go back: $canGoBack
@@ -4305,7 +4704,7 @@ class MainActivity : AppCompatActivity(),
 
         // Clear all JavaScript intervals and timeouts
         webView.evaluateJavascript(
-            """
+                """
                 (function() {
                     // Clear all intervals and timeouts
                     const highestId = window.setInterval(() => {}, 0);
@@ -4323,7 +4722,7 @@ class MainActivity : AppCompatActivity(),
                     window.prompt = function(){return '';};
                 })();
             """.trimIndent(),
-            null
+                null
         )
 
         // Keep JavaScript enabled and go back
@@ -4335,8 +4734,6 @@ class MainActivity : AppCompatActivity(),
     override fun onQuitPressed() {
         finish()
     }
-
-
 
     override fun onDestroy() {
         super.onDestroy()
@@ -4351,14 +4748,13 @@ class MainActivity : AppCompatActivity(),
         stopGpsUpdates()
     }
 
-
     override fun onStop() {
         super.onStop()
 
         // Get the current URL from the WebView
         val currentUrl = webView.url
         DebugLog.d("WebViewDebug", "Saving current URL: $currentUrl")
-        
+
         // Save all windows state
         if (::dualWebViewGroup.isInitialized) {
             dualWebViewGroup.saveAllWindowsState()
@@ -4367,9 +4763,9 @@ class MainActivity : AppCompatActivity(),
         if (currentUrl != null && !currentUrl.startsWith("about:blank")) {
             // Save the URL to SharedPreferences
             getSharedPreferences(prefsName, MODE_PRIVATE)
-                .edit()
-                .putString(keyLastUrl, currentUrl)
-                .apply()
+                    .edit()
+                    .putString(keyLastUrl, currentUrl)
+                    .apply()
 
             // Store it in our property for reference
             lastUrl = currentUrl
@@ -4381,16 +4777,12 @@ class MainActivity : AppCompatActivity(),
             try {
                 val parcel = Parcel.obtain()
                 webViewState.writeToParcel(parcel, 0)
-                val serializedState = Base64.encodeToString(
-                    parcel.marshall(),
-                    Base64.DEFAULT
-                )
+                val serializedState = Base64.encodeToString(parcel.marshall(), Base64.DEFAULT)
                 parcel.recycle()
 
-                getSharedPreferences(prefsName, MODE_PRIVATE)
-                    .edit {
-                        putString(Constants.KEY_WEBVIEW_STATE, serializedState)
-                    }
+                getSharedPreferences(prefsName, MODE_PRIVATE).edit {
+                    putString(Constants.KEY_WEBVIEW_STATE, serializedState)
+                }
 
                 DebugLog.d("WebViewDebug", "WebView state saved successfully")
             } catch (e: Exception) {
@@ -4402,12 +4794,29 @@ class MainActivity : AppCompatActivity(),
     // Add JavaScript interface to reset capturing state
     class AndroidInterface(private val activity: MainActivity) {
         @JavascriptInterface
-        fun onCaptureComplete() {
+        fun onScrollMetrics(
+                rangeX: Int,
+                extentX: Int,
+                offsetX: Int,
+                rangeY: Int,
+                extentY: Int,
+                offsetY: Int
+        ) {
             activity.runOnUiThread {
-                activity.isCapturing = false
+                activity.dualWebViewGroup.updateScrollMetricsFromJs(
+                        rangeX,
+                        extentX,
+                        offsetX,
+                        rangeY,
+                        extentY,
+                        offsetY
+                )
             }
         }
+
+        @JavascriptInterface
+        fun onCaptureComplete() {
+            activity.runOnUiThread { activity.isCapturing = false }
+        }
     }
-
-
 }

@@ -45,6 +45,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import kotlin.math.roundToInt
+import org.json.JSONObject
 
 @SuppressLint("ClickableViewAccessibility")
 class DualWebViewGroup
@@ -70,6 +71,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val webView: InternalWebView,
             var thumbnail: Bitmap? = null,
             var title: String = "New Tab"
+    )
+
+    private data class ScrollMetrics(
+            val rangeX: Int,
+            val extentX: Int,
+            val offsetX: Int,
+            val rangeY: Int,
+            val extentY: Int,
+            val offsetY: Int
     )
 
     private val windows = mutableListOf<BrowserWindow>()
@@ -111,6 +121,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val MIN_CAPTURE_INTERVAL = 16L // Cap at ~60fps
     private var lastCursorUpdateTime = 0L
     private val CURSOR_UPDATE_INTERVAL = 16L // 60fps cap for cursor updates
+    private var jsScrollMetrics: ScrollMetrics? = null
+    private var jsScrollMetricsTimestamp = 0L
+    private val jsScrollMetricsTimeoutMs = 2000L
 
     private var leftSystemInfoView: SystemInfoView
 
@@ -187,6 +200,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var isHoveringBookmarksMenu = false
 
     private lateinit var leftBookmarksView: BookmarksView
+    private lateinit var chatView: ChatView
 
     var navigationListener: NavigationListener? = null
     var linkEditingListener: LinkEditingListener? = null
@@ -317,6 +331,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     var keyboardListener: KeyboardListener? = null
+        set(value) {
+            field = value
+            if (::chatView.isInitialized) {
+                chatView.keyboardListener = value
+            }
+        }
 
     private var navButtons: Map<String, NavButton>
 
@@ -457,7 +477,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (isWebViewScrollEnabled()) {
             // Scroll the WebView content
             val scrollAmount = delta * 15 // Increase sensitivity
-            webView.scrollBy(scrollAmount, 0)
+            if (shouldUseJsScrollForAxis(isHorizontal = true)) {
+                webView.evaluateJavascript(
+                        "window.scrollBy({ left: $scrollAmount, top: 0 });",
+                        null
+                )
+            } else {
+                webView.scrollBy(scrollAmount, 0)
+            }
             updateScrollBarThumbs(0, 0) // Update thumbs immediately
         } else {
             // Pan the viewport
@@ -474,7 +501,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (isWebViewScrollEnabled()) {
             // Scroll the WebView content
             val scrollAmount = delta * 15 // Increase sensitivity
-            webView.scrollBy(0, scrollAmount)
+            if (shouldUseJsScrollForAxis(isHorizontal = false)) {
+                webView.evaluateJavascript(
+                        "window.scrollBy({ top: $scrollAmount, left: 0 });",
+                        null
+                )
+            } else {
+                webView.scrollBy(0, scrollAmount)
+            }
             updateScrollBarThumbs(0, 0) // Update thumbs immediately
         } else {
             // Pan the viewport
@@ -487,8 +521,29 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
+    private fun getFreshJsScrollMetrics(): ScrollMetrics? {
+        val metrics = jsScrollMetrics ?: return null
+        val ageMs = SystemClock.uptimeMillis() - jsScrollMetricsTimestamp
+        return if (ageMs <= jsScrollMetricsTimeoutMs) metrics else null
+    }
+
+    private fun shouldUseJsScrollForAxis(isHorizontal: Boolean): Boolean {
+        val metrics = getFreshJsScrollMetrics() ?: return false
+        val range =
+                if (isHorizontal) webView.getHorizontalScrollRange()
+                else webView.getVerticalScrollRange()
+        val extent =
+                if (isHorizontal) webView.getHorizontalScrollExtent()
+                else webView.getVerticalScrollExtent()
+        val jsRange = if (isHorizontal) metrics.rangeX else metrics.rangeY
+        val jsExtent = if (isHorizontal) metrics.extentX else metrics.extentY
+        return range <= extent && jsRange > jsExtent
+    }
+
     private fun updateScrollBarThumbs(xProgress: Int, yProgress: Int) {
         if (isWebViewScrollEnabled()) {
+            val metrics = getFreshJsScrollMetrics()
+
             // Update Horizontal Thumb based on WebView scroll
             val hTrackWidth = (horizontalScrollBar.getChildAt(1) as? FrameLayout)?.width ?: 0
             if (hTrackWidth > 0) {
@@ -506,12 +561,18 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 // Let's defer exact horizontal proportion calculation or use a safe fallback.
 
                 // Using standard view methods available on WebView (which is a View)
-                val range = webView.getHorizontalScrollRange()
-                val extent = webView.getHorizontalScrollExtent()
-                val offset = webView.getHorizontalScrollOffset()
+                val webRange = webView.getHorizontalScrollRange()
+                val webExtent = webView.getHorizontalScrollExtent()
+                val webOffset = webView.getHorizontalScrollOffset()
+                val useJs =
+                        metrics != null && webRange <= webExtent && metrics.rangeX > metrics.extentX
+                val range = if (useJs) metrics!!.rangeX else webRange
+                val extent = if (useJs) metrics.extentX else webExtent
+                val offset = if (useJs) metrics.offsetX else webOffset
 
                 if (range > extent) {
-                    val ratio = offset.toFloat() / (range - extent).toFloat()
+                    val maxScroll = range - extent
+                    val ratio = offset.coerceIn(0, maxScroll).toFloat() / maxScroll
                     val hMargin = (ratio * maxMargin).toInt().coerceIn(0, maxMargin)
 
                     (hScrollThumb.layoutParams as? FrameLayout.LayoutParams)?.let {
@@ -527,12 +588,18 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val thumbHeight = 60
                 val maxMargin = vTrackHeight - thumbHeight
 
-                val range = webView.getVerticalScrollRange()
-                val extent = webView.getVerticalScrollExtent()
-                val offset = webView.getVerticalScrollOffset()
+                val webRange = webView.getVerticalScrollRange()
+                val webExtent = webView.getVerticalScrollExtent()
+                val webOffset = webView.getVerticalScrollOffset()
+                val useJs =
+                        metrics != null && webRange <= webExtent && metrics.rangeY > metrics.extentY
+                val range = if (useJs) metrics!!.rangeY else webRange
+                val extent = if (useJs) metrics.extentY else webExtent
+                val offset = if (useJs) metrics.offsetY else webOffset
 
                 if (range > extent) {
-                    val ratio = offset.toFloat() / (range - extent).toFloat()
+                    val maxScroll = range - extent
+                    val ratio = offset.coerceIn(0, maxScroll).toFloat() / maxScroll
                     val vMargin = (ratio * maxMargin).toInt().coerceIn(0, maxMargin)
 
                     (vScrollThumb.layoutParams as? FrameLayout.LayoutParams)?.let {
@@ -619,8 +686,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         // Always check WebView scrollability since we disabled viewport panning
-        val showHorz = webView.canScrollHorizontally(-1) || webView.canScrollHorizontally(1)
-        val showVert = webView.canScrollVertically(-1) || webView.canScrollVertically(1)
+        val webHRange = webView.getHorizontalScrollRange()
+        val webHExtent = webView.getHorizontalScrollExtent()
+        val webVRange = webView.getVerticalScrollRange()
+        val webVExtent = webView.getVerticalScrollExtent()
+        val metrics = getFreshJsScrollMetrics()
+        val showHorz =
+                (webHRange > webHExtent) || (metrics != null && metrics.rangeX > metrics.extentX)
+        val showVert =
+                (webVRange > webVExtent) || (metrics != null && metrics.rangeY > metrics.extentY)
 
         horizontalScrollBar.visibility = if (showHorz) View.VISIBLE else View.GONE
         verticalScrollBar.visibility = if (showVert) View.VISIBLE else View.GONE
@@ -689,6 +763,25 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         ) {
             updateScrollBarThumbs(0, 0)
         }
+    }
+
+    fun updateScrollMetricsFromJs(
+            rangeX: Int,
+            extentX: Int,
+            offsetX: Int,
+            rangeY: Int,
+            extentY: Int,
+            offsetY: Int
+    ) {
+        jsScrollMetrics = ScrollMetrics(rangeX, extentX, offsetX, rangeY, extentY, offsetY)
+        jsScrollMetricsTimestamp = SystemClock.uptimeMillis()
+        updateScrollBarsVisibility()
+        updateScrollBarThumbs(0, 0)
+    }
+
+    fun clearJsScrollMetrics() {
+        jsScrollMetrics = null
+        jsScrollMetricsTimestamp = 0L
     }
 
     // Function to update the cursor positions and visibility
@@ -1009,16 +1102,21 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Force the container to the front by removing and re-adding at the end
         // Preserve the layout params
-        val savedParams =
+        // Force the container to the front using bringToFront() instead of remove/add
+        // which can cause layout state loss
+        val params =
                 windowsOverviewContainer?.layoutParams as? FrameLayout.LayoutParams
                         ?: FrameLayout.LayoutParams(640 - toggleBarWidthPx, 480 - navBarHeightPx)
                                 .apply {
                                     leftMargin = toggleBarWidthPx
-                                    bottomMargin = navBarHeightPx
+                                    // Explicitly set Gravity to avoid any ambiguity
+                                    gravity = Gravity.TOP or Gravity.START
                                 }
 
-        leftEyeUIContainer.removeView(windowsOverviewContainer)
-        leftEyeUIContainer.addView(windowsOverviewContainer, savedParams)
+        // Ensure params are applied
+        windowsOverviewContainer?.layoutParams = params
+
+        windowsOverviewContainer?.bringToFront()
 
         requestLayout()
         invalidate()
@@ -1293,7 +1391,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         if (url.isNotEmpty()) {
                             newWebView.loadUrl(url)
                         } else {
-                            newWebView.loadUrl("https://www.google.com")
+                            newWebView.loadUrl(Constants.DEFAULT_URL)
                         }
                     }
 
@@ -1330,11 +1428,72 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     private fun configureWebView(webView: WebView) {
+        val settings = webView.settings
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        settings.databaseEnabled = true
+        settings.useWideViewPort = true
+        settings.loadWithOverviewMode = true
+        settings.setSupportZoom(true)
+        settings.builtInZoomControls = true
+        settings.displayZoomControls = false
+        settings.mediaPlaybackRequiresUserGesture = false
+
+        // Keep WebAppInterface for referencing context/logic if needed, but primary comms via URL
+        // scheme
+        // Enable Native Bridge for Chat
+        // GroqBridge removed
+
+        webView.webViewClient =
+                object : android.webkit.WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                            view: android.webkit.WebView?,
+                            request: android.webkit.WebResourceRequest?
+                    ): Boolean {
+                        val url = request?.url?.toString() ?: return false
+                        Log.d("GroqUrl", "Checking URL: $url")
+
+                        if (url.startsWith("taplink://chat")) {
+                            Log.d("GroqUrl", "Intercepted taplink://chat")
+                            val uri = android.net.Uri.parse(url)
+                            val msg = uri.getQueryParameter("msg")
+                            val history = uri.getQueryParameter("history")
+
+                            if (msg != null && view != null) {
+                                // Use the top-level WebAppInterface class we created
+                                WebAppInterface(context, view).chatWithGroq(msg, history ?: "[]")
+                            }
+                            return true
+                        }
+                        return false
+                    }
+
+                    @Deprecated("Deprecated in Java")
+                    override fun shouldOverrideUrlLoading(
+                            view: android.webkit.WebView?,
+                            url: String?
+                    ): Boolean {
+                        Log.d("GroqUrl", "Checking URL (deprecated): $url")
+                        if (url != null && url.startsWith("taplink://chat")) {
+                            Log.d("GroqUrl", "Intercepted taplink://chat (deprecated)")
+                            val uri = android.net.Uri.parse(url)
+                            val msg = uri.getQueryParameter("msg")
+                            val history = uri.getQueryParameter("history")
+
+                            if (msg != null && view != null) {
+                                WebAppInterface(context, view).chatWithGroq(msg, history ?: "[]")
+                            }
+                            return true
+                        }
+                        return false
+                    }
+                }
+
         webView.apply {
             setBackgroundColor(Color.BLACK)
-            isClickable = false
-            isFocusable = false
-            isFocusableInTouchMode = false
+            isClickable = true
+            isFocusable = true
+            isFocusableInTouchMode = true
             setLayerType(View.LAYER_TYPE_HARDWARE, null)
             layoutParams = LayoutParams(640, LayoutParams.MATCH_PARENT)
             setOnTouchListener { _, _ -> keyboardContainer.visibility == View.VISIBLE }
@@ -1502,6 +1661,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                 NavButton(
                                         left = leftNavigationBar.findViewById(R.id.btnQuit),
                                         right = leftNavigationBar.findViewById(R.id.btnQuit)
+                                ),
+                        "chat" to
+                                NavButton(
+                                        left = leftNavigationBar.findViewById(R.id.btnChat),
+                                        right = leftNavigationBar.findViewById(R.id.btnChat)
                                 )
                 )
 
@@ -1652,6 +1816,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             if (::leftBookmarksView.isInitialized) {
                 leftBookmarksView.bringToFront()
             }
+            if (::chatView.isInitialized) {
+                chatView.bringToFront()
+            }
         }
 
         // Set up the container hierarchy
@@ -1683,7 +1850,28 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             addView(dialogContainer)
             addView(leftSystemInfoView)
             addView(urlEditText)
-            addView(maskOverlay) // Add mask overlay for proper mirroring to both eyes
+            addView(
+                    maskOverlay
+            ) // Add mask overlay for proper mirroring to both eyes // Add mask overlay for proper
+            // mirroring to both eyes
+
+            // Initialize ChatView here
+            chatView =
+                    ChatView(context).apply {
+                        layoutParams =
+                                FrameLayout.LayoutParams(560, 420)
+                                        .apply { // Slightly smaller than full window
+                                            gravity = Gravity.CENTER
+                                        }
+                        visibility = View.GONE
+                        elevation = 2000f // High elevation
+                        keyboardListener = this@DualWebViewGroup.keyboardListener
+                    }
+            addView(chatView)
+            chatView.disableSystemKeyboard()
+
+            // Setup listener for Chat button
+            leftNavigationBar.findViewById<View>(R.id.btnChat)?.setOnClickListener { toggleChat() }
             postDelayed(
                     {
                         initializeToggleButtons()
@@ -2352,6 +2540,19 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return leftBookmarksView.visibility == View.VISIBLE
     }
 
+    private fun toggleChat() {
+        if (chatView.visibility == View.VISIBLE) {
+            chatView.visibility = View.GONE
+        } else {
+            chatView.visibility = View.VISIBLE
+            chatView.bringToFront()
+        }
+        post {
+            requestLayout()
+            invalidate()
+        }
+    }
+
     private fun toggleBookmarks() {
         leftBookmarksView.toggle()
 
@@ -2413,12 +2614,23 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     @SuppressLint("SetJavaScriptEnabled")
     fun getWebView(): WebView {
         return webView.apply {
-            settings.apply {
-                javaScriptEnabled = true
-                domStorageEnabled = true
-                allowContentAccess = true
-                allowFileAccess = true
-            }
+            val settings = this.settings
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            settings.setSupportZoom(true)
+            settings.builtInZoomControls = true
+            settings.displayZoomControls = false
+            settings.mediaPlaybackRequiresUserGesture = false
+
+            // Clean up legacy JS interface - we use URL scheme now
+            // addJavascriptInterface(WebAppInterface(context, this), "Android")
+
+            // Set User Agent
+
+            // Set User Agent
+            // settings.userAgentString = desktopUserAgent // Default to Desktop
         }
     }
 
@@ -3088,6 +3300,34 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Layout the UI container to cover just the left half
         leftEyeUIContainer.layout(0, 0, halfWidth, height)
+
+        if (::chatView.isInitialized &&
+                        chatView.visibility == View.VISIBLE &&
+                        keyboardContainer.visibility == View.VISIBLE
+        ) {
+            val chatMargin = 8.dp()
+            val availableHeight = (eyeHeight - keyboardHeight - chatMargin).coerceAtLeast(0)
+            val baseWidth =
+                    chatView.layoutParams.width.takeIf { it > 0 }
+                            ?: chatView.measuredWidth.takeIf { it > 0 } ?: 560
+            val baseHeight =
+                    chatView.layoutParams.height.takeIf { it > 0 }
+                            ?: chatView.measuredHeight.takeIf { it > 0 } ?: 420
+            val targetWidth = baseWidth.coerceAtMost(halfWidth)
+            val targetHeight = baseHeight.coerceAtMost(availableHeight)
+
+            if (targetHeight > 0) {
+                chatView.measure(
+                        MeasureSpec.makeMeasureSpec(targetWidth, MeasureSpec.EXACTLY),
+                        MeasureSpec.makeMeasureSpec(targetHeight, MeasureSpec.EXACTLY)
+                )
+                val left = (halfWidth - targetWidth) / 2
+                val bottom = eyeHeight - keyboardHeight - chatMargin
+                val top = bottom - chatView.measuredHeight
+                chatView.layout(left, top, left + targetWidth, bottom)
+            }
+            chatView.bringToFront()
+        }
     }
 
     fun cleanupResources() {
@@ -3676,6 +3916,47 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 screenY <= bookmarksLocation[1] + leftBookmarksView.height
     }
 
+    fun isChatVisible(): Boolean {
+        return ::chatView.isInitialized && chatView.visibility == View.VISIBLE
+    }
+
+    fun sendTextToChatInput(text: String) {
+        if (!isChatVisible()) return
+        chatView.sendTextToFocusedInput(text)
+    }
+
+    fun sendBackspaceToChatInput() {
+        if (!isChatVisible()) return
+        chatView.sendBackspaceToFocusedInput()
+    }
+
+    fun sendEnterToChatInput() {
+        if (!isChatVisible()) return
+        chatView.sendEnterToFocusedInput()
+    }
+
+    fun isPointInChat(screenX: Float, screenY: Float): Boolean {
+        if (!isChatVisible()) return false
+
+        val chatLocation = IntArray(2)
+        chatView.getLocationOnScreen(chatLocation)
+
+        return screenX >= chatLocation[0] &&
+                screenX <= chatLocation[0] + chatView.width &&
+                screenY >= chatLocation[1] &&
+                screenY <= chatLocation[1] + chatView.height
+    }
+
+    fun dispatchChatTouchEvent(screenX: Float, screenY: Float) {
+        if (!isChatVisible()) return
+
+        val chatLocation = IntArray(2)
+        chatView.getLocationOnScreen(chatLocation)
+        val localX = screenX - chatLocation[0]
+        val localY = screenY - chatLocation[1]
+        chatView.handleAnchoredTap(localX, localY)
+    }
+
     fun isPointInKeyboard(screenX: Float, screenY: Float): Boolean {
         if (keyboardContainer.visibility != View.VISIBLE) return false
         val kbView = customKeyboard ?: return false
@@ -3831,7 +4112,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     private fun loadARDashboard() {
-        webView.loadUrl("file:///android_asset/AR_Dashboard_Landscape_Sidebar.html")
+        webView.loadUrl(Constants.DEFAULT_URL)
     }
 
     // Method to disable text handles
@@ -4001,27 +4282,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Clear all states initially
         clearAllHoverStates()
 
-        // Helper function to check if cursor is over a button or view
-        fun isOver(button: View?): Boolean {
-            if (button == null || button.visibility != View.VISIBLE) return false
-
-            // Use getGlobalVisibleRect for accurate screen bounds detection
-            val rect = android.graphics.Rect()
-            if (!button.getGlobalVisibleRect(rect)) return false
-
-            val isOver =
-                    screenX >= rect.left &&
-                            screenX <= rect.right &&
-                            screenY >= rect.top &&
-                            screenY <= rect.bottom
-
-            return isOver
-        }
-
         // Check bottom navigation bar buttons ONLY if nav bar is visible
         if (leftNavigationBar.visibility == View.VISIBLE) {
             navButtons.forEach { (name, navButton) ->
-                if (isOver(navButton.left)) {
+                if (isOver(navButton.left, screenX, screenY)) {
                     navButton.isHovered = true
                     navButton.left.isHovered = true
                     navButton.right.isHovered = true
@@ -4045,7 +4309,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         for ((buttonId, name, setHoverFlag) in toggleBarButtons) {
             val button = leftToggleBar.findViewById<View>(buttonId)
-            if (isOver(button)) {
+            if (isOver(button, screenX, screenY)) {
                 button?.isHovered = true
                 setHoverFlag()
                 clearNavigationButtonStates()
@@ -4057,7 +4321,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Check Windows button separately (programmatically created, no resource ID)
         windowsButton?.let { btn ->
-            if (isOver(btn)) {
+            if (isOver(btn, screenX, screenY)) {
                 btn.isHovered = true
                 isHoveringWindowsToggle = true
                 clearNavigationButtonStates()
@@ -4090,7 +4354,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         )
                 for (id in settingsElements) {
                     val view = menu.findViewById<View>(id)
-                    if (isOver(view)) {
+                    if (isOver(view, screenX, screenY)) {
                         view?.isHovered = true
                         // Log.d("HoverDebug", "Hovering over settings element: $id")
                         customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
@@ -4109,7 +4373,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 btnContainer?.let { container ->
                     for (i in 0 until container.childCount) {
                         val button = container.getChildAt(i)
-                        if (isOver(button)) {
+                        if (isOver(button, screenX, screenY)) {
                             button.isHovered = true
                             // Log.d("HoverDebug", "Hovering over dialog button: $i")
                             customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
@@ -4220,7 +4484,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     val child = container.getChildAt(i)
 
                     // First child (i == 0) is the Add Button
-                    if (i == 0 && isOver(child)) {
+                    if (i == 0 && isOver(child, screenX, screenY)) {
                         child.isHovered = true
                         hoveredWindowsOverviewItem = child
                         customKeyboard?.updateHover(-1f, -1f)
@@ -4238,7 +4502,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                 for (k in 0 until windowItem.childCount) {
                                     val itemChild = windowItem.getChildAt(k)
                                     // Delete button is a FontIconView with the X icon
-                                    if (itemChild is FontIconView && isOver(itemChild)) {
+                                    if (itemChild is FontIconView &&
+                                                    isOver(itemChild, screenX, screenY)
+                                    ) {
                                         itemChild.isHovered = true
                                         hoveredWindowsOverviewItem = itemChild
                                         customKeyboard?.updateHover(-1f, -1f)
@@ -4248,7 +4514,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             }
 
                             // Then check the whole window item
-                            if (isOver(windowItem)) {
+                            if (isOver(windowItem, screenX, screenY)) {
                                 windowItem.isHovered = true
                                 hoveredWindowsOverviewItem = windowItem
                                 customKeyboard?.updateHover(-1f, -1f)
@@ -4286,13 +4552,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 // Check children (arrows and track)
                 for (i in 0 until horizontalScrollBar.childCount) {
                     val child = horizontalScrollBar.getChildAt(i)
-                    if (isOver(child)) {
+                    if (isOver(child, screenX, screenY)) {
                         child.isHovered = true
                         child.isActivated = true
 
                         // If we are over the track container, check the thumb specifically
                         if (child == horizontalScrollBar.getChildAt(1)) {
-                            if (isOver(hScrollThumb)) {
+                            if (isOver(hScrollThumb, screenX, screenY)) {
                                 hScrollThumb.isHovered = true
                                 hScrollThumb.isActivated = true
                             }
@@ -4316,13 +4582,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 // Check children (arrows and track)
                 for (i in 0 until verticalScrollBar.childCount) {
                     val child = verticalScrollBar.getChildAt(i)
-                    if (isOver(child)) {
+                    if (isOver(child, screenX, screenY)) {
                         child.isHovered = true
                         child.isActivated = true
 
                         // If we are over the track container, check the thumb specifically
                         if (child == verticalScrollBar.getChildAt(1)) {
-                            if (isOver(vScrollThumb)) {
+                            if (isOver(vScrollThumb, screenX, screenY)) {
                                 vScrollThumb.isHovered = true
                                 vScrollThumb.isActivated = true
                             }
@@ -4431,6 +4697,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Clear navigation button states
         clearNavigationButtonStates()
+
+        if (::chatView.isInitialized) {
+            chatView.clearHover()
+        }
 
         // Clear keyboard hover
         customKeyboard?.updateHoverScreen(-1f, -1f, 1f)
@@ -4568,6 +4838,44 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return !isInScrollMode && leftNavigationBar.visibility == View.VISIBLE
     }
 
+    fun isToggleBarVisible(): Boolean {
+        return leftToggleBar.visibility == View.VISIBLE
+    }
+
+    fun isPointInToggleBar(screenX: Float, screenY: Float): Boolean {
+        val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
+        return isPointInView(localX, localY, leftToggleBar)
+    }
+
+    fun isPointInNavBar(screenX: Float, screenY: Float): Boolean {
+        val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
+        return isPointInView(localX, localY, leftNavigationBar)
+    }
+
+    private fun isPointInView(containerX: Float, containerY: Float, view: View?): Boolean {
+        if (view == null || view.visibility != View.VISIBLE) return false
+        return containerX >= view.left &&
+                containerX <= view.right &&
+                containerY >= view.top &&
+                containerY <= view.bottom
+    }
+
+    private fun isPointInChild(
+            containerX: Float,
+            containerY: Float,
+            parent: View,
+            child: View?
+    ): Boolean {
+        if (child == null || parent.visibility != View.VISIBLE || child.visibility != View.VISIBLE)
+                return false
+        val localX = containerX - parent.left
+        val localY = containerY - parent.top
+        return localX >= child.left &&
+                localX <= child.right &&
+                localY >= child.top &&
+                localY <= child.bottom
+    }
+
     fun isPointInRestoreButton(x: Float, y: Float): Boolean {
         if (btnShowNavBars.visibility != View.VISIBLE) return false
         val loc = IntArray(2)
@@ -4605,92 +4913,69 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
-    fun handleNavigationClick(x: Float, y: Float) {
-        // Ensure nav bar is visible and not in scroll mode before handling click
-        if (isInScrollMode || leftNavigationBar.visibility != View.VISIBLE) return
+    private fun isOver(button: View?, screenX: Float, screenY: Float): Boolean {
+        if (button == null || button.visibility != View.VISIBLE) return false
 
-        val height = height
-        val halfWidth = width / 2
-        val localX = x % halfWidth
-        val toggleBarWidth = toggleBarWidthPx
+        // Use getGlobalVisibleRect for accurate screen bounds detection
+        val rect = android.graphics.Rect()
+        if (!button.getGlobalVisibleRect(rect)) return false
 
-        /* Log.d("TouchDebug", """
-            handleNavigationClick:
-            Coordinates: ($x, $y)
-            Toggle bar width: $toggleBarWidth
-            Is in toggle bar area: ${x < toggleBarWidth}
-            Button height: $buttonHeight
-            Current button row: ${(y / buttonHeight).toInt()}
-        """.trimIndent()) */
+        return screenX >= rect.left &&
+                screenX <= rect.right &&
+                screenY >= rect.top &&
+                screenY <= rect.bottom
+    }
 
-        // First check if settings menu is visible and if click is within its bounds
+    fun handleNavigationClick(screenX: Float, screenY: Float) {
+        if (isInScrollMode) return
+
         if (isSettingsVisible && settingsMenu != null) {
-            val menuLocation = IntArray(2)
-            settingsMenu?.getLocationOnScreen(menuLocation)
-            val menuWidth = settingsMenu?.width ?: 0
-            val menuHeight = settingsMenu?.height ?: 0
-            // Log.d("SettingsDebug", """x: $x, y: $y, menuLocation: ${menuLocation[0]},
-            // ${menuLocation[1]},menuWidth: $menuWidth, menuHeight: $menuHeight""")
-            if (x <= menuWidth && y <= menuHeight) {
-                // Log.d("SettingsDebug", "Dispatching the event to settings")
-
-                // Click is within settings menu bounds - dispatch touch event to settings menu
-                dispatchSettingsTouchEvent(lastCursorX, lastCursorY)
-
-                return // Important: return early to prevent click from reaching toggle bar
-            }
-        }
-
-        // Check if we clicked on a hovered windows overview item
-        if (windowsOverviewContainer?.visibility == View.VISIBLE &&
-                        hoveredWindowsOverviewItem != null
-        ) {
-            val item = hoveredWindowsOverviewItem
-            if (item != null && item.isHovered) {
-                showButtonClickFeedback(item)
-                item.performClick()
+            val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
+            if (isPointInView(localX, localY, settingsMenu)) {
+                dispatchSettingsTouchEvent(screenX, screenY)
                 return
             }
         }
 
-        // Handle toggle bar clicks
-        // Handle toggle bar clicks using hover state
-        val toggleBarButtons =
-                listOf(
-                        R.id.btnModeToggle,
-                        R.id.btnYouTube,
-                        R.id.btnBookmarks,
-                        R.id.btnZoomOut,
-                        R.id.btnZoomIn,
-                        R.id.btnMask,
-                        R.id.btnAnchor
-                )
+        if (leftToggleBar.visibility == View.VISIBLE) {
+            val toggleBarButtons =
+                    listOf(
+                            R.id.btnModeToggle,
+                            R.id.btnYouTube,
+                            R.id.btnBookmarks,
+                            R.id.btnZoomOut,
+                            R.id.btnZoomIn,
+                            R.id.btnMask,
+                            R.id.btnAnchor
+                    )
 
-        for (buttonId in toggleBarButtons) {
-            val button = leftToggleBar.findViewById<View>(buttonId)
-            if (button != null && button.isHovered) {
-                handleLeftMenuAction(buttonId)
-                return
+            for (buttonId in toggleBarButtons) {
+                val button = leftToggleBar.findViewById<View>(buttonId)
+                if (isOver(button, screenX, screenY)) {
+                    handleLeftMenuAction(buttonId)
+                    return
+                }
+            }
+
+            windowsButton?.let { btn ->
+                if (isOver(btn, screenX, screenY)) {
+                    showButtonClickFeedback(btn)
+                    toggleWindowMode()
+                    return
+                }
             }
         }
 
-        // Handle Windows button click separately (programmatically created, no resource ID)
-        windowsButton?.let { btn ->
-            if (btn.isHovered) {
-                showButtonClickFeedback(btn)
-                toggleWindowMode()
-                return
-            }
-        }
-
-        if (y >= height - navBarHeightPx) {
-            keyboardListener?.onHideKeyboard()
-            // Log.d("AnchoredTouchDebug","handling navigation click")
-            navButtons.entries.find { it.value.isHovered }?.let { (key, button) ->
+        if (leftNavigationBar.visibility == View.VISIBLE) {
+            navButtons.entries.firstOrNull { isOver(it.value.left, screenX, screenY) }?.let {
+                    (key, button) ->
+                keyboardListener?.onHideKeyboard()
                 showButtonClickFeedback(button.left)
                 showButtonClickFeedback(button.right)
                 if (key == "hide") {
                     setScrollMode(true)
+                } else if (key == "chat") {
+                    toggleChat()
                 } else {
                     navigationListener?.let { listener ->
                         when (key) {
@@ -4704,14 +4989,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         }
                     }
                 }
-            }
-        }
-
-        if (localX < toggleBarWidthPx) {
-
-            when {
-                isHoveringZoomOut -> handleZoomButtonClick("out")
-                isHoveringZoomIn -> handleZoomButtonClick("in")
             }
         }
     }

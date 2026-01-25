@@ -8,9 +8,20 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
 
 - **Dual-eye rendering** that mirrors a single `WebView` into a left-eye clip with a cursor and a right-eye `SurfaceView` preview.
 - **Custom keyboard** with anchored and focus-driven modes, supporting casing toggles, symbol layouts, and dynamic buttons.
-- **Voice Control** integrated with Groq API for high-accuracy speech-to-text input.
-- **UI Customization** allowing interface scaling, manual screen positioning, and custom font sizes/colors.
+- **Voice Control**: High-accuracy speech-to-text powered by the Groq API. Activate it by pressing the microphone key on the custom keyboard. An API key is required and can be entered via the settings menu.
+
+## Gesture Reference
+
+| Gesture | Action | Notes |
+| --- | --- | --- |
+| **Single Tap** | Click / Focus | Primary interaction. |
+| **Double Tap** | Back | Navigation history previous. |
+| **Triple Tap** | Re-center | Anchored Mode only. |
+
+## Tips
+*   **API Key Entry**: Use the `scrcpy` keyboard to paste your Groq API key into the setting dialog.
 - **Persistent bookmarks** managed through `BookmarksView` with storage handled by `BookmarkManager`.
+- **TapLink AI** powered by Groq, providing a dedicated chat interface for reasoning and real-time help.
 
 ## Useful Features
 
@@ -28,8 +39,10 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
 ## Documentation
 
 - [Setup and Build](docs/SETUP.md) - Instructions for environment setup, building, and installing.
+- [User Guide](docs/USER_GUIDE.md) - **Recommended** for first-time users (gestures, modes, and tools).
 - [Architecture Overview](docs/ARCHITECTURE.md) - Details on the app structure, data flow, and bookmark management.
 - [Input Systems](docs/INPUT_SYSTEM.md) - Explanation of anchored, focus-driven, and voice input modes.
+- [TapLink AI](docs/TAPLINK_AI.md) - Details on the dedicated chat window and Groq integration.
 - [Project History](docs/HISTORY.md) - Release notes and credit history.
 
 ![TapLink X3 app icon](app/src/main/ic_launcher-playstore.png)

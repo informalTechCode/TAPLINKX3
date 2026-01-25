@@ -6,7 +6,14 @@ Anchored keyboard mode pins the on-screen keyboard relative to the viewport inst
 
 When the keyboard is visible and the layout reports `isAnchored = true`, `DualWebViewGroup.onInterceptTouchEvent` checks whether the cursor projection falls inside the keyboard bounds. Any qualifying `ACTION_DOWN`, `ACTION_MOVE`, or `ACTION_UP` event is intercepted and marked as an anchored gesture. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1592-L1650】
 
-`onTouchEvent` then consumes the matching `ACTION_UP` event, recalculates the cursor-aligned keyboard coordinates, and forwards the tap to `CustomKeyboardView.handleAnchoredTap`. Drag and cancel events simply keep the interception state in sync. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1729-L1803】
+`onTouchEvent` then consumes the matching `ACTION_UP` event, recalculates the cursor-aligned keyboard coordinates, and forwards the tap to `CustomKeyboardView.handleAnchoredTap`. Drag and cancel events simply keep the interception state in sync.
+
+### Precision Center Gesture
+*   **Triple Tap**: Instantly re-centers the anchored display to your current head orientation. This is useful if the display drifts or if you change your physical position.
+
+> [!NOTE]
+> **Blank Screen Mode** (Eye Toggle) will automatically disable Anchored Mode while active to prevent unnecessary tracking calculations during audio-only sessions.
+
 
 ```mermaid
 stateDiagram-v2

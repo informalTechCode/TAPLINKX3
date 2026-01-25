@@ -20,6 +20,7 @@
     <string name="fa_gear">&#xf013;</string>             <!-- Settings -->
     <string name="fa_rotate_right">&#xf2f9;</string>     <!-- Refresh -->
     <string name="fa_xmark">&#xf00d;</string>            <!-- Quit/Close -->
+    <string name="fa_comment">&#xf075;</string>          <!-- Comment/Chat -->
     
     <!-- Font Awesome Brands (400) -->
     <string name="fa_youtube">&#xf167;</string>          <!-- YouTube -->

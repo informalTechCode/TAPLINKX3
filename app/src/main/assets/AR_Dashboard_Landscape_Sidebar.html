@@ -17,6 +17,7 @@
       --brightness: 1;
       --scale: 1;
       --radius: 18px;
+      --icon-size: 22px;
       --shadow: 0 8px 24px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .035);
     }
 
@@ -92,6 +93,7 @@
       transform: scale(var(--scale));
       padding: 0 8px 16px;
       box-sizing: border-box;
+      touch-action: none;
     }
 
     .topbar {
@@ -114,7 +116,10 @@
       padding: 8px 12px;
       border-radius: 10px;
       color: var(--text);
-      cursor: pointer
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none
     }
 
     .search {
@@ -130,7 +135,7 @@
 
     .content {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr;
       gap: 10px;
       padding: 10px;
       box-sizing: border-box;
@@ -237,7 +242,7 @@
     /* Apps 2 columns inside each category */
     .apps {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
       gap: 10px;
       margin-bottom: 6px
     }
@@ -251,16 +256,18 @@
     .app {
       border: 1px solid rgba(255, 255, 255, .1);
       border-radius: 14px;
-      padding: 14px 16px;
+      padding: 10px 8px;
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 8px;
       background: rgba(255, 255, 255, .03);
       cursor: pointer;
       color: var(--text);
       transition: transform .15s ease, box-shadow .2s ease, border-color .2s ease;
       width: 100%;
-      min-height: 56px;
+      box-sizing: border-box;
+      min-width: 0;
+      min-height: 0;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent
     }
@@ -276,8 +283,10 @@
     }
 
     .app img {
-      width: 20px;
-      height: 20px;
+      width: var(--icon-size);
+      height: var(--icon-size);
+      flex: 0 0 var(--icon-size);
+      object-fit: contain;
       border-radius: 4px
     }
 
@@ -292,7 +301,230 @@
     }
 
     .app span {
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .btn {
       color: var(--text)
+    }
+
+    .card,
+    .card * {
+      color: inherit
+    }
+
+    .btn {
+      border: none;
+      background: rgba(255, 255, 255, .08);
+      padding: 8px 12px;
+      border-radius: 10px;
+      color: var(--text);
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none
+    }
+
+    .btn:hover,
+    .btn:focus-visible {
+      background: rgba(255, 255, 255, .16);
+      outline: none;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .search {
+      background: rgba(255, 255, 255, .08);
+      border: 1px solid rgba(255, 255, 255, .15);
+      border-radius: 10px;
+      padding: 8px 10px;
+      color: var(--text);
+      outline: none;
+      min-width: 140px;
+      flex: 1;
+    }
+
+    .content {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      padding: 10px;
+      box-sizing: border-box;
+      min-height: 0
+    }
+
+    @media (max-width:820px) {
+      .content {
+        grid-template-columns: 1fr
+      }
+
+      #rightPane {
+        width: 100%
+      }
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px
+    }
+
+    .card h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .8px
+    }
+
+    /* Sections left column */
+    .section {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 10px 0 8px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--text);
+    }
+
+    .section::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(255, 255, 255, .25), rgba(255, 255, 255, .05));
+      border-radius: 999px
+    }
+
+    .section .label {
+      filter: drop-shadow(0 0 6px var(--sec-glow, rgba(255, 255, 255, .25)));
+      display: inline-flex;
+      align-items: center;
+      gap: 6px
+    }
+
+    .sec-nav {
+      --sec-glow: #7ecbff
+    }
+
+    .sec-social {
+      --sec-glow: #69f0ae
+    }
+
+    .sec-music {
+      --sec-glow: #ffea7f
+    }
+
+    .sec-creative {
+      --sec-glow: #d0a8ff
+    }
+
+    .sec-prod {
+      --sec-glow: #7fffd4
+    }
+
+    .sec-llm {
+      --sec-glow: #7ab8ff
+    }
+
+    .sec-aimusic {
+      --sec-glow: #a9ff7a
+    }
+
+    .sec-aivideo {
+      --sec-glow: #ff7fe8
+    }
+
+    .sec-aivideo {
+      --sec-glow: #ff7fe8
+    }
+
+    .sec-voice {
+      --sec-glow: #ffb97f
+    }
+
+    .sec-util {
+      --sec-glow: #e0e0e0
+    }
+
+    /* Apps 2 columns inside each category */
+    .apps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 6px
+    }
+
+    @media (max-width:600px) {
+      .apps {
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr))
+      }
+    }
+
+    .app {
+      border: 1px solid rgba(255, 255, 255, .1);
+      border-radius: 14px;
+      padding: 10px 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, .03);
+      cursor: pointer;
+      color: var(--text);
+      transition: transform .15s ease, box-shadow .2s ease, border-color .2s ease;
+      width: 100%;
+      box-sizing: border-box;
+      min-width: 0;
+      min-height: 0;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent
+    }
+
+    .app:hover {
+      transform: translateY(-1px) scale(1.03);
+      border-color: rgba(255, 255, 255, .25);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, .35), 0 0 0 1px rgba(255, 255, 255, .06)
+    }
+
+    .app:active {
+      transform: scale(.99)
+    }
+
+    .app img {
+      width: var(--icon-size);
+      height: var(--icon-size);
+      flex: 0 0 var(--icon-size);
+      object-fit: contain;
+      border-radius: 4px
+    }
+
+    [data-theme="light"] {
+      --bg: #f6f8fc;
+      --bg-2: #ffffff;
+      --card: #ffffff;
+      --accent: #0a84ff;
+      --accent-2: #2563eb;
+      --text: #0b0f1a;
+      --muted: #4a5b76
+    }
+
+    .app span {
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .btn {
@@ -308,68 +540,138 @@
       color: #e6f1ff
     }
 
-    /* Right sidebar: tasks + notes */
-    .tasks input[type="text"] {
-      width: 100%;
-      padding: 8px 10px;
-      border-radius: 10px;
-      border: 1px solid rgba(255, 255, 255, .15);
-      background: rgba(255, 255, 255, .06);
-      color: var(--text);
-      outline: none;
-      margin-bottom: 8px
+    .hud {
+      scrollbar-gutter: stable;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, .35) transparent;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
     }
 
-    .task-row {
+    .hud::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    .hud::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .hud::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, .25);
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+
+    .app {
+      position: relative;
+    }
+
+    .app-actions {
+      margin-left: auto;
+      display: none;
+      gap: 6px;
+    }
+
+    .icon-btn {
+      border: 1px solid rgba(255, 255, 255, .2);
+      background: rgba(255, 255, 255, .1);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .icon-btn.danger {
+      border-color: rgba(255, 90, 90, .6);
+      color: #ff9b9b;
+    }
+
+    body[data-editing="true"] .app-actions {
+      display: flex;
+    }
+
+    body[data-editing="true"] .app {
+      cursor: default;
+    }
+
+    body[data-editing="true"] .app:hover {
+      transform: none;
+      border-color: rgba(255, 255, 255, .1);
+      box-shadow: none;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 12, 20, .75);
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin: 6px 0;
-      padding: 6px 8px;
-      border: 1px solid rgba(255, 255, 255, .08);
-      border-radius: 10px;
-      background: rgba(255, 255, 255, .03)
+      justify-content: center;
+      z-index: 20;
     }
 
-    .task-row input[type="checkbox"] {
-      transform: scale(1.2)
+    .modal.hidden {
+      display: none;
     }
 
-    .task-row input[type="text"] {
-      flex: 1;
-      background: transparent;
-      border: none;
-      color: var(--text);
-      outline: none
+    .modal-card {
+      width: min(420px, 92vw);
+      background: var(--card);
+      border: 1px solid rgba(255, 255, 255, .15);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
 
-    .task-row button {
-      border: none;
-      background: rgba(255, 255, 255, .08);
-      color: var(--text);
-      border-radius: 8px;
-      padding: 6px 8px;
-      cursor: pointer
-    }
-
-    .notes-area {
-      width: 100%;
-      min-height: 140px;
-      max-height: 240px;
-      resize: none;
-      background: rgba(255, 255, 255, .05);
-      border: 1px solid rgba(255, 255, 255, .12);
-      color: var(--text);
-      padding: 10px;
-      border-radius: 10px;
-      box-sizing: border-box;
-      overflow: auto
-    }
-
-    .muted {
+    .modal-card h3 {
+      margin: 0;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: .8px;
       color: var(--muted);
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
       font-size: 12px;
-      opacity: .9
+    }
+
+    .field input,
+    .field select {
+      background: rgba(255, 255, 255, .08);
+      border: 1px solid rgba(255, 255, 255, .15);
+      border-radius: 10px;
+      padding: 8px 10px;
+      color: var(--text);
+      outline: none;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .helper {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .error {
+      font-size: 11px;
+      color: #ff9b9b;
+    }
+
+    .sec-custom {
+      --sec-glow: #7aa6ff;
     }
   </style>
 </head>
@@ -382,12 +684,14 @@
     </div>
   </div>
 
-  <div class="hud">
+  <div class="hud" data-taplink-scroll="true">
     <div class="topbar">
       <strong style="color:var(--text)">TapLinkX3 Dashboard</strong>
       <div style="flex:1"></div>
-      <input id="appSearch" class="search" placeholder="Filter apps…" />
-      <button class="btn" id="themeToggle">☀️ Light</button>
+      <button class="btn" id="editToggle" type="button">Edit Links</button>
+      <button class="btn" id="addLink" type="button">Add Link</button>
+      <input id="appSearch" class="search" placeholder="Filter apps." />
+      <button class="btn" id="themeToggle">Theme: Light</button>
     </div>
 
     <div class="content">
@@ -396,20 +700,28 @@
         <h3>Apps</h3>
         <div id="appContainer"></div>
       </div>
+    </div>
+  </div>
 
-      <!-- Right: Tasks + Notes -->
-      <div class="card" id="rightPane">
-        <h3>Tasks & Notes</h3>
-        <div class="tasks">
-          <div class="muted" style="margin-bottom:6px">Checklist</div>
-          <div style="display:flex; gap:8px; margin-bottom:8px">
-            <input id="newTask" type="text" placeholder="New task…" />
-            <button id="addTask" class="btn">Add</button>
-          </div>
-          <div id="taskList"></div>
-        </div>
-        <div class="muted" style="margin:12px 0 6px">Notes</div>
-        <textarea id="notes" class="notes-area" placeholder="Write notes here…"></textarea>
+  <div id="linkModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <h3 id="modalTitle">Add Link</h3>
+      <form id="linkForm">
+        <label class="field">Name
+          <input id="linkName" type="text" autocomplete="off" />
+        </label>
+        <label class="field">URL
+          <input id="linkUrl" type="text" autocomplete="off" />
+        </label>
+        <label class="field">Category
+          <select id="linkGroup"></select>
+        </label>
+      </form>
+      <div id="linkError" class="error"></div>
+      <div class="helper">Tip: If you omit https://, it is added automatically.</div>
+      <div class="modal-actions">
+        <button class="btn" type="button" id="cancelLink">Cancel</button>
+        <button class="btn" type="submit" form="linkForm" id="saveLink">Save</button>
       </div>
     </div>
   </div>
@@ -420,14 +732,29 @@
       if (e.target.closest('button')) { e.preventDefault(); }
     });
 
+    const interactiveSelector = 'button, input, textarea, select, .app, .icon-btn';
+    document.addEventListener('touchmove', (e) => {
+      if (e.target.closest(interactiveSelector)) { return; }
+      e.preventDefault();
+    }, { passive: false });
+
     /* Theme */
     const themeToggle = document.getElementById('themeToggle');
-    function setTheme(t) { document.documentElement.setAttribute('data-theme', t); localStorage.setItem('theme', t); themeToggle.textContent = (t === 'dark') ? '☀️ Light' : '🌙 Dark'; }
-    setTheme(localStorage.getItem('theme') || 'dark');
-    themeToggle.addEventListener('click', () => { const c = document.documentElement.getAttribute('data-theme') || 'dark'; setTheme(c === 'dark' ? 'light' : 'dark'); });
+    function setTheme(t) {
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('theme', t);
+      themeToggle.textContent = (t === 'dark') ? 'Theme: Light' : 'Theme: Dark';
+    }
+    const savedTheme = localStorage.getItem('theme');
+    setTheme(savedTheme === 'light' ? 'light' : 'dark');
+    themeToggle.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      setTheme(current === 'dark' ? 'light' : 'dark');
+    });
 
     /* Apps list */
-    const appsList = {
+    const storageKey = 'dashboardLinksV1';
+    const defaultApps = {
       // Social & Messaging
       gmessages: { name: 'Google Messages', url: 'https://messages.google.com/web/welcome' },
       discord: { name: 'Discord', url: 'https://discord.com/app' },
@@ -490,119 +817,346 @@
 
       // AI Voice / Cloning
       elevenlabs: { name: 'ElevenLabs (Voice)', url: 'https://elevenlabs.io' },
-      playht: { name: 'PlayHT (Voice)', url: 'https://play.ht' },
-
+      playht: { name: 'PlayHT (Voice)', url: 'https://play.ht' }
     };
+
+    const defaultGroups = [
+      { title: 'Navigation / Entertainment', cls: 'sec-nav', keys: ['youtube', 'informaltech', 'gmaps', 'minijuegos', 'tiktok'] },
+      { title: 'AI / Chatbots', cls: 'sec-llm', keys: ['gemini', 'googleaistudio', 'jules', 'perplexity', 'chatgpt', 'claude', 'deepseek', 'grok'] },
+      { title: 'Social / Communication', cls: 'sec-social', keys: ['gmessages', 'discord', 'whatsapp', 'instagram', 'telegram'] },
+      { title: 'Music / Streaming', cls: 'sec-music', keys: ['ytmusic', 'spotify', 'applemusic', 'tidal', 'deezer', 'audiomack', 'soundcloud'] },
+      { title: 'Creativity / Multimedia', cls: 'sec-creative', keys: ['photopea', 'clipchamp', 'bandlab', 'wireframe', 'kleki'] },
+      { title: 'Productivity / Documents', cls: 'sec-prod', keys: ['todoist', 'stackedit', 'sejda'] },
+      { title: 'Utilities / Reference', cls: 'sec-util', keys: ['wikipedia', 'translate', 'wolfram'] },
+      { title: 'AI Music', cls: 'sec-aimusic', keys: ['suno', 'udio', 'stableaudio'] },
+      { title: 'AI Video', cls: 'sec-aivideo', keys: ['runway', 'pika', 'luma'] },
+      { title: 'AI Voice', cls: 'sec-voice', keys: ['elevenlabs', 'playht'] },
+      { title: 'Custom Links', cls: 'sec-custom', keys: [] }
+    ];
+
+    function normalizeTitle(value) {
+      if (!value) return '';
+      const trimmed = String(value).trim();
+      // Strip leading emojis/punctuation that can render as ? on some devices.
+      return trimmed.replace(/^[^\p{L}\p{N}]+/gu, '').trim();
+    }
+
+    function sanitizeGroups(groups) {
+      let changed = false;
+      for (const g of groups) {
+        const normalized = normalizeTitle(g.title);
+        if (normalized && normalized !== g.title) {
+          g.title = normalized;
+          changed = true;
+        }
+      }
+      return changed;
+    }
+
+    function mergeGroups(savedGroups) {
+      const base = JSON.parse(JSON.stringify(defaultGroups));
+      base.forEach(group => {
+        group.title = normalizeTitle(group.title);
+      });
+      if (!Array.isArray(savedGroups)) {
+        return base;
+      }
+      const byTitle = new Map(savedGroups.map(group => [normalizeTitle(group.title), group]));
+      for (const group of base) {
+        const saved = byTitle.get(normalizeTitle(group.title));
+        if (saved && Array.isArray(saved.keys)) {
+          group.keys = saved.keys;
+        }
+      }
+      for (const saved of savedGroups) {
+        const normalizedTitle = normalizeTitle(saved.title);
+        if (!base.some(group => normalizeTitle(group.title) === normalizedTitle)) {
+          base.push({ ...saved, title: normalizedTitle || saved.title });
+        }
+      }
+      return base;
+    }
+
+    function loadState() {
+      const fallbackGroups = JSON.parse(JSON.stringify(defaultGroups));
+      fallbackGroups.forEach(g => {
+        g.title = normalizeTitle(g.title);
+      });
+      const fallback = {
+        apps: { ...defaultApps },
+        groups: fallbackGroups
+      };
+      try {
+        const saved = JSON.parse(localStorage.getItem(storageKey));
+        if (saved && saved.apps) {
+          return {
+            apps: saved.apps,
+            groups: mergeGroups(saved.groups)
+          };
+        }
+      } catch (e) { }
+      return fallback;
+    }
+
+    function persistState() {
+      localStorage.setItem(storageKey, JSON.stringify(state));
+    }
+
+    let state = loadState();
+    if (sanitizeGroups(state.groups)) {
+      persistState();
+    }
 
     const appContainer = document.getElementById('appContainer');
     const search = document.getElementById('appSearch');
+    const editToggle = document.getElementById('editToggle');
+    const addLink = document.getElementById('addLink');
+    const linkModal = document.getElementById('linkModal');
+    const linkForm = document.getElementById('linkForm');
+    const linkName = document.getElementById('linkName');
+    const linkUrl = document.getElementById('linkUrl');
+    const linkGroup = document.getElementById('linkGroup');
+    const modalTitle = document.getElementById('modalTitle');
+    const linkError = document.getElementById('linkError');
+    const cancelLink = document.getElementById('cancelLink');
+
+    let isEditing = false;
+    let editingKey = null;
 
     const specialIcons = {
       whatsapp: 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 256 256%22 width=%2220%22 height=%2220%22><path fill=%22%2325D366%22 d=%22M128 0a128 128 0 0 0-110 190L8 248l60-9A128 128 0 1 0 128 0Z"/><path fill=%22%23fff%22 d=%22M193 178c-9 4-21 9-34 5c-30-9-77-48-91-83c-7-17 2-31 7-36c4-4 9-5 12-5l8 1c3 1 6 9 7 12s5 12 5 12s1 3 0 5c-1 3-7 7-7 9s-1 3 1 6a142 142 0 0 0 25 30c18 16 31 21 35 22s5 0 7-2s8-10 10-13s5-3 8-2l20 9c3 1 5 3 5 5s-9 13-18 19Z"/></svg>'
     };
 
-    function createAppButton(key, meta) {
-      const app = document.createElement('button');
-      app.className = 'app'; app.dataset.app = key; app.title = meta.name;
-      const img = document.createElement('img'); img.width = 20; img.height = 20; img.style.borderRadius = '4px';
-      if (specialIcons[key]) { img.src = specialIcons[key]; }
-      else if (meta.url) { try { const host = (new URL(meta.url)).hostname; img.src = `https://www.google.com/s2/favicons?domain=${host}&sz=64`; } catch (e) { } }
-      const label = document.createElement('span'); label.textContent = meta.name;
-      app.append(img, label);
-      if (meta.url) {
-        app.addEventListener('click', () => {
-          const w = window.open(meta.url, '_blank', 'noopener');
-          if (!w || w.closed) { window.location.href = meta.url; }
-        });
+    function setEditingMode(enabled) {
+      isEditing = enabled;
+      document.body.dataset.editing = enabled ? 'true' : 'false';
+      editToggle.textContent = enabled ? 'Done' : 'Edit Links';
+      renderAll();
+    }
+
+    function normalizeUrl(value) {
+      const trimmed = (value || '').trim();
+      if (!trimmed) return '';
+      if (/^[a-z]+:\/\//i.test(trimmed)) return trimmed;
+      return `https://${trimmed}`;
+    }
+
+    function slugify(value) {
+      return value.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 16) || 'link';
+    }
+
+    function makeKey(name) {
+      const base = slugify(name);
+      let key = base;
+      let idx = 1;
+      while (state.apps[key]) {
+        key = `${base}${idx}`;
+        idx += 1;
       }
+      return key;
+    }
+
+    function removeFromGroups(key) {
+      for (const g of state.groups) {
+        g.keys = (g.keys || []).filter(k => k !== key);
+      }
+    }
+
+    function getGroupTitleForKey(key) {
+      for (const g of state.groups) {
+        if ((g.keys || []).includes(key)) {
+          return g.title;
+        }
+      }
+      return state.groups[0]?.title || 'Custom Links';
+    }
+
+    function updateGroupOptions(selectedTitle) {
+      linkGroup.innerHTML = '';
+      for (const g of state.groups) {
+        const opt = document.createElement('option');
+        opt.value = g.title;
+        opt.textContent = g.title;
+        linkGroup.append(opt);
+      }
+      if (selectedTitle) {
+        linkGroup.value = selectedTitle;
+      }
+    }
+
+    function openModal(mode, key) {
+      linkError.textContent = '';
+      if (mode === 'edit') {
+        editingKey = key;
+        const data = state.apps[key];
+        modalTitle.textContent = 'Edit Link';
+        linkName.value = data?.name || '';
+        linkUrl.value = data?.url || '';
+        updateGroupOptions(getGroupTitleForKey(key));
+      } else {
+        editingKey = null;
+        modalTitle.textContent = 'Add Link';
+        linkName.value = '';
+        linkUrl.value = '';
+        updateGroupOptions('Custom Links');
+      }
+      linkModal.classList.remove('hidden');
+      setTimeout(() => linkName.focus({ preventScroll: true }), 0);
+    }
+
+    function closeModal() {
+      linkModal.classList.add('hidden');
+    }
+
+    function bindActivate(button, handler) {
+      let lastActivate = 0;
+      function activate(event) {
+        const now = Date.now();
+        if (now - lastActivate < 350) { return; }
+        lastActivate = now;
+        event.preventDefault();
+        handler(event);
+      }
+      button.addEventListener('click', activate);
+      button.addEventListener('pointerup', activate);
+      button.addEventListener('touchend', activate);
+    }
+
+    function bindImmediate(button, handler) {
+      let lastActivate = 0;
+      function activate(event) {
+        const now = Date.now();
+        if (now - lastActivate < 350) { return; }
+        lastActivate = now;
+        event.preventDefault();
+        event.stopPropagation();
+        handler(event);
+      }
+      button.addEventListener('pointerdown', activate);
+      button.addEventListener('click', activate);
+    }
+
+    bindImmediate(editToggle, () => setEditingMode(!isEditing));
+    bindImmediate(addLink, () => openModal('add'));
+    bindActivate(cancelLink, () => closeModal());
+    linkModal.addEventListener('click', (e) => { if (e.target === linkModal) closeModal(); });
+    [linkName, linkUrl, linkGroup].forEach((el) => {
+      el.addEventListener('pointerup', () => el.focus({ preventScroll: true }));
+      el.addEventListener('touchend', () => el.focus({ preventScroll: true }));
+    });
+
+    linkForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = (linkName.value || '').trim();
+      const url = normalizeUrl(linkUrl.value);
+      if (!name || !url) {
+        linkError.textContent = 'Name and URL are required.';
+        return;
+      }
+      const targetGroupTitle = linkGroup.value || 'Custom Links';
+      if (editingKey) {
+        state.apps[editingKey] = { name, url };
+        removeFromGroups(editingKey);
+        const group = state.groups.find(g => g.title === targetGroupTitle);
+        if (group) { group.keys.push(editingKey); }
+      } else {
+        const key = makeKey(name);
+        state.apps[key] = { name, url };
+        const group = state.groups.find(g => g.title === targetGroupTitle);
+        if (group) { group.keys.push(key); }
+      }
+      persistState();
+      renderAll();
+      closeModal();
+    });
+
+    function createAppButton(key, meta) {
+      const app = document.createElement('div');
+      app.className = 'app';
+      app.dataset.app = key;
+      app.title = meta.name;
+      app.setAttribute('role', 'button');
+      const img = document.createElement('img');
+      if (specialIcons[key]) {
+        img.src = specialIcons[key];
+      } else if (meta.url) {
+        try {
+          const host = (new URL(meta.url)).hostname;
+          img.src = `https://www.google.com/s2/favicons?domain=${host}&sz=64`;
+        } catch (e) { }
+      }
+      const label = document.createElement('span');
+      label.textContent = meta.name;
+      const actions = document.createElement('div');
+      actions.className = 'app-actions';
+
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'icon-btn';
+      editBtn.textContent = 'Edit';
+      bindActivate(editBtn, (e) => {
+        e.stopPropagation();
+        openModal('edit', key);
+      });
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'icon-btn danger';
+      deleteBtn.textContent = 'Delete';
+      bindActivate(deleteBtn, (e) => {
+        e.stopPropagation();
+        if (!confirm('Delete this link?')) return;
+        delete state.apps[key];
+        removeFromGroups(key);
+        persistState();
+        renderAll();
+      });
+
+      actions.append(editBtn, deleteBtn);
+      app.append(img, label, actions);
+      bindActivate(app, () => {
+        if (isEditing) return;
+        if (!meta.url) return;
+        const w = window.open(meta.url, '_blank', 'noopener');
+        if (!w || w.closed) { window.location.href = meta.url; }
+      });
       return app;
     }
 
     function addSection(title, cls) {
-      const s = document.createElement('div'); s.className = `section ${cls}`;
-      const span = document.createElement('span'); span.className = 'label'; span.textContent = title; s.append(span); appContainer.append(s);
-      const body = document.createElement('div'); body.className = 'apps'; appContainer.append(body);
+      const s = document.createElement('div');
+      s.className = `section ${cls}`;
+      const span = document.createElement('span');
+      span.className = 'label';
+      span.textContent = title;
+      s.append(span);
+      appContainer.append(s);
+      const body = document.createElement('div');
+      body.className = 'apps';
+      appContainer.append(body);
       return body;
     }
-
-    const groups = [
-      { title: '🧭 Navigation / Entertainment', cls: 'sec-nav', keys: ['youtube', 'informaltech', 'gmaps', 'minijuegos', 'tiktok'] },
-      { title: '🧠 AI / Chatbots', cls: 'sec-llm', keys: ['gemini', 'googleaistudio', 'jules', 'perplexity', 'chatgpt', 'claude', 'deepseek', 'grok'] },
-      { title: '💬 Social / Communication', cls: 'sec-social', keys: ['gmessages', 'discord', 'whatsapp', 'instagram', 'telegram'] },
-      { title: '🎧 Music / Streaming', cls: 'sec-music', keys: ['ytmusic', 'spotify', 'applemusic', 'tidal', 'deezer', 'audiomack', 'soundcloud'] },
-      { title: '🎨 Creativity / Multimedia', cls: 'sec-creative', keys: ['photopea', 'clipchamp', 'bandlab', 'wireframe', 'kleki'] },
-      { title: '💼 Productivity / Documents', cls: 'sec-prod', keys: ['todoist', 'stackedit', 'sejda'] },
-      { title: '🛠️ Utilities / Reference', cls: 'sec-util', keys: ['wikipedia', 'translate', 'wolfram'] },
-      { title: '🎹 AI Music', cls: 'sec-aimusic', keys: ['suno', 'udio', 'stableaudio'] },
-      { title: '🎥 AI Video', cls: 'sec-aivideo', keys: ['runway', 'pika', 'luma'] },
-      { title: '🗣️ AI Voice', cls: 'sec-voice', keys: ['elevenlabs', 'playht'] }
-    ];
 
     function renderAll() {
       appContainer.innerHTML = '';
       const q = (search?.value || '').trim().toLowerCase();
-      for (const g of groups) {
+      for (const g of state.groups) {
         const body = addSection(g.title, g.cls);
-        const items = g.keys.map(k => ({ k, m: appsList[k] })).filter(x => x.m);
+        const items = (g.keys || []).map(k => ({ k, m: state.apps[k] })).filter(x => x.m);
         const filtered = q ? items.filter(x => x.m.name.toLowerCase().includes(q) || x.k.toLowerCase().includes(q)) : items;
         if (filtered.length) {
           for (const it of filtered) { body.append(createAppButton(it.k, it.m)); }
         } else {
-          const ph = document.createElement('div'); ph.className = 'muted'; ph.textContent = '— no matches —'; body.append(ph);
+          const ph = document.createElement('div');
+          ph.className = 'muted';
+          ph.textContent = '- no matches -';
+          body.append(ph);
         }
       }
     }
 
-    renderAll();
     if (search) { search.addEventListener('input', renderAll); }
-
-    /* Tasks + Notes: persistent checklist and auto-growing notes */
-    const taskListEl = document.getElementById('taskList');
-    const newTaskEl = document.getElementById('newTask');
-    const addTaskBtn = document.getElementById('addTask');
-    const tasksKey = 'ar_tasks_v1';
-    let tasks = JSON.parse(localStorage.getItem(tasksKey) || '[]'); // [{id, text, done}]
-    function saveTasks() { localStorage.setItem(tasksKey, JSON.stringify(tasks)); }
-    function taskRow(task) {
-      const row = document.createElement('div'); row.className = 'task-row'; row.dataset.id = task.id;
-      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = task.done;
-      const txt = document.createElement('input'); txt.type = 'text'; txt.value = task.text;
-      const del = document.createElement('button'); del.textContent = '✕';
-      cb.addEventListener('change', () => { task.done = cb.checked; saveTasks(); });
-      txt.addEventListener('input', () => { task.text = txt.value; saveTasks(); autoresizeNotesBox(); });
-      del.addEventListener('click', () => { tasks = tasks.filter(t => t.id !== task.id); saveTasks(); renderTasks(); });
-      row.append(cb, txt, del);
-      return row;
-    }
-    function renderTasks() {
-      taskListEl.innerHTML = '';
-      tasks.forEach(t => taskListEl.appendChild(taskRow(t)));
-      autoresizeNotesBox();
-    }
-    function addTaskFromInput() {
-      const val = (newTaskEl.value || '').trim();
-      if (!val) return;
-      tasks.push({ id: Date.now() + Math.random(), text: val, done: false });
-      newTaskEl.value = '';
-      saveTasks();
-      renderTasks();
-    }
-    addTaskBtn.addEventListener('click', addTaskFromInput);
-    newTaskEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTaskFromInput(); } });
-    renderTasks();
-
-    const notesEl = document.getElementById('notes');
-    const notesKey = 'ar_notes_v1';
-    notesEl.value = localStorage.getItem(notesKey) || '';
-    function autosizeTextarea(el) {
-      el.style.height = 'auto';
-      el.style.height = (el.scrollHeight) + 'px';
-    }
-    function autoresizeNotesBox() {
-      autosizeTextarea(notesEl);
-    }
-    notesEl.addEventListener('input', () => { localStorage.setItem(notesKey, notesEl.value); autoresizeNotesBox(); });
-    setTimeout(autoresizeNotesBox, 0);
+    setEditingMode(false);
 
     /* The Android scroll buttons issue scrollBy() calls, but this layout keeps the body fixed
        and scrolls the inner .hud container instead. Bridge those calls so scroll buttons work. */
