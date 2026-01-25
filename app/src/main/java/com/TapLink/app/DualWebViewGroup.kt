@@ -479,7 +479,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val scrollAmount = delta * 15 // Increase sensitivity
             if (shouldUseJsScrollForAxis(isHorizontal = true)) {
                 webView.evaluateJavascript(
-                        "window.scrollBy({ left: $scrollAmount, top: 0 });",
+                        "window.__taplinkScrollBy($scrollAmount, 0);",
                         null
                 )
             } else {
@@ -503,7 +503,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val scrollAmount = delta * 15 // Increase sensitivity
             if (shouldUseJsScrollForAxis(isHorizontal = false)) {
                 webView.evaluateJavascript(
-                        "window.scrollBy({ top: $scrollAmount, left: 0 });",
+                        "window.__taplinkScrollBy(0, $scrollAmount);",
                         null
                 )
             } else {
@@ -1970,11 +1970,27 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             val percent = (clickLeft / trackableWidth).coerceIn(0f, 1f)
 
                             if (isWebViewScrollEnabled()) {
-                                val range = webView.getHorizontalScrollRange()
-                                val extent = webView.getHorizontalScrollExtent()
-                                if (range > extent) {
-                                    val targetX = percent * (range - extent)
-                                    webView.scrollTo(targetX.toInt(), webView.scrollY)
+                                if (shouldUseJsScrollForAxis(isHorizontal = true)) {
+                                    val metrics = getFreshJsScrollMetrics()
+                                    if (metrics != null) {
+                                        val range = metrics.rangeX
+                                        val extent = metrics.extentX
+                                        if (range > extent) {
+                                            val targetX = percent * (range - extent)
+                                            val targetY = metrics.offsetY
+                                            webView.evaluateJavascript(
+                                                    "window.__taplinkScrollTo($targetX, $targetY)",
+                                                    null
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    val range = webView.getHorizontalScrollRange()
+                                    val extent = webView.getHorizontalScrollExtent()
+                                    if (range > extent) {
+                                        val targetX = percent * (range - extent)
+                                        webView.scrollTo(targetX.toInt(), webView.scrollY)
+                                    }
                                 }
                             } else {
                                 val newProgress = (percent * 100).toInt()
@@ -2059,11 +2075,27 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             val percent = (clickTop / trackableHeight).coerceIn(0f, 1f)
 
                             if (isWebViewScrollEnabled()) {
-                                val range = webView.getVerticalScrollRange()
-                                val extent = webView.getVerticalScrollExtent()
-                                if (range > extent) {
-                                    val targetY = percent * (range - extent)
-                                    webView.scrollTo(webView.scrollX, targetY.toInt())
+                                if (shouldUseJsScrollForAxis(isHorizontal = false)) {
+                                    val metrics = getFreshJsScrollMetrics()
+                                    if (metrics != null) {
+                                        val range = metrics.rangeY
+                                        val extent = metrics.extentY
+                                        if (range > extent) {
+                                            val targetY = percent * (range - extent)
+                                            val targetX = metrics.offsetX
+                                            webView.evaluateJavascript(
+                                                    "window.__taplinkScrollTo($targetX, $targetY)",
+                                                    null
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    val range = webView.getVerticalScrollRange()
+                                    val extent = webView.getVerticalScrollExtent()
+                                    if (range > extent) {
+                                        val targetY = percent * (range - extent)
+                                        webView.scrollTo(webView.scrollX, targetY.toInt())
+                                    }
                                 }
                             } else {
                                 val newProgress = (percent * 100).toInt()

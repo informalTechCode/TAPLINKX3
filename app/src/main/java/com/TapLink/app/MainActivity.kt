@@ -3302,6 +3302,18 @@ class MainActivity :
                                 }
 
                                 window.__taplinkReportScrollMetrics = report;
+                                window.__taplinkScrollTo = function(x, y) {
+                                    var el = scrollEl || pickScrollElement();
+                                    if (el) {
+                                        el.scrollTo(x, y);
+                                    }
+                                };
+                                window.__taplinkScrollBy = function(dx, dy) {
+                                    var el = scrollEl || pickScrollElement();
+                                    if (el) {
+                                        el.scrollBy(dx, dy);
+                                    }
+                                };
                                 window.addEventListener('resize', schedule);
                                 setInterval(report, 1000);
                                 report();
