@@ -84,13 +84,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private var webView: InternalWebView
 
-    val webViewsContainer: FrameLayout = FrameLayout(context).apply {
-        setBackgroundColor(Color.BLACK)
-    }
+    val webViewsContainer: FrameLayout =
+            FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
 
     private val rightEyeView: SurfaceView = SurfaceView(context)
-    val keyboardContainer: FrameLayout =
-            FrameLayout(context).apply { setBackgroundColor(Color.TRANSPARENT) }
 
     val dialogContainer: FrameLayout =
             FrameLayout(context).apply {
@@ -121,6 +118,23 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val navBarHeightPx = 32.dp()
     private val toggleBarWidthPx = 32.dp()
     private val toggleButtonSizePx = toggleBarWidthPx
+
+    val keyboardContainer: FrameLayout =
+            FrameLayout(context).apply {
+                val containerWidth = 640 - toggleBarWidthPx
+                val containerHeight = 480 - navBarHeightPx
+                layoutParams =
+                        FrameLayout.LayoutParams(
+                                        containerWidth,
+                                        FrameLayout.LayoutParams.WRAP_CONTENT
+                                )
+                                .apply {
+                                    leftMargin = toggleBarWidthPx
+                                    gravity = Gravity.TOP or Gravity.START
+                                }
+                setBackgroundColor(Color.TRANSPARENT)
+                visibility = View.GONE
+            }
     private val nButtons = 7
     private val buttonHeight = toggleButtonSizePx
     private val buttonFeedbackDuration = 200L
@@ -326,8 +340,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             if (win.webView != webView) {
                 // Pause all media elements
                 win.webView.evaluateJavascript(
-                    "document.querySelectorAll('video, audio').forEach(function(e) { e.pause(); });",
-                    null
+                        "document.querySelectorAll('video, audio').forEach(function(e) { e.pause(); });",
+                        null
                 )
             }
         }
@@ -880,19 +894,45 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                             else itemMargin / 2
                                 }
                         background =
-                                GradientDrawable().apply {
-                                    setColor(
-                                            if (win.id == activeWindowId)
-                                                    Color.parseColor("#444444")
+                                android.graphics.drawable.StateListDrawable().apply {
+                                    val isActive = win.id == activeWindowId
+
+                                    // Colors
+                                    val normalBgColor =
+                                            if (isActive) Color.parseColor("#444444")
                                             else Color.parseColor("#252525")
-                                    )
-                                    setStroke(
-                                            2,
-                                            if (win.id == activeWindowId)
-                                                    Color.parseColor("#4488FF")
+                                    val hoverBgColor =
+                                            if (isActive) Color.parseColor("#555555")
+                                            else Color.parseColor("#353535")
+                                    val normalStrokeColor =
+                                            if (isActive) Color.parseColor("#4488FF")
                                             else Color.parseColor("#404040")
+                                    val hoverStrokeColor =
+                                            if (isActive) Color.parseColor("#4488FF")
+                                            else
+                                                    Color.parseColor(
+                                                            "#505050"
+                                                    ) // Lighter stroke on hover for inactive
+
+                                    val hoveredDrawable =
+                                            GradientDrawable().apply {
+                                                setColor(hoverBgColor)
+                                                setStroke(2, hoverStrokeColor)
+                                                cornerRadius = 12f
+                                            }
+
+                                    val normalDrawable =
+                                            GradientDrawable().apply {
+                                                setColor(normalBgColor)
+                                                setStroke(2, normalStrokeColor)
+                                                cornerRadius = 12f
+                                            }
+
+                                    addState(
+                                            intArrayOf(android.R.attr.state_hovered),
+                                            hoveredDrawable
                                     )
-                                    cornerRadius = 12f
+                                    addState(intArrayOf(), normalDrawable)
                                 }
                         isClickable = true
                         isFocusable = true
@@ -1080,7 +1120,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Add to container but invisible
         newWebView.visibility = View.INVISIBLE
-        webViewsContainer.addView(newWebView, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        webViewsContainer.addView(
+                newWebView,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        )
 
         // Notify MainActivity to configure the new WebView (clients, settings, etc.)
         windowCallback?.onWindowCreated(newWebView)
@@ -1258,7 +1302,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                     // Add to container
                     newWebView.visibility = View.INVISIBLE
-                    webViewsContainer.addView(newWebView, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+                    webViewsContainer.addView(
+                            newWebView,
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                            FrameLayout.LayoutParams.MATCH_PARENT
+                    )
                 }
 
                 if (windows.isNotEmpty()) {
@@ -1313,7 +1361,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         mobileUserAgent = webView.settings.userAgentString
 
         // Add to container
-        webViewsContainer.addView(initialWebView, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        webViewsContainer.addView(
+                initialWebView,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        )
 
         // We can't call windowCallback here as it's not set yet.
         // We assume the initial WebView gets configured by MainActivity in onCreate via
@@ -1470,7 +1522,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Initialize left toggle bar
         leftToggleBar =
                 LayoutInflater.from(context).inflate(R.layout.toggle_bar, this, false).apply {
-                    layoutParams = LayoutParams(toggleBarWidthPx, 592)
+                    layoutParams = LayoutParams(toggleBarWidthPx, 480 - navBarHeightPx)
                     setBackgroundColor(Color.parseColor("#202020"))
                     visibility = View.VISIBLE
                     clipToOutline = true // Add this
@@ -1562,8 +1614,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Add edit fields to view hierarchy
         addView(leftEditField)
         addView(rightEditField)
-
-        // addView(keyboardContainer)
 
         leftSystemInfoView =
                 SystemInfoView(context).apply {
@@ -2726,7 +2776,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             webViewsContainer.layout(
                     toggleBarWidth, // Account for toggle bar
                     0,
-                    toggleBarWidth + webViewsContainer.measuredWidth, // Standard width + toggle bar offset
+                    toggleBarWidth +
+                            webViewsContainer.measuredWidth, // Standard width + toggle bar offset
                     minOf(keyboardLimit, measuredBottom)
             )
         }
