@@ -22,6 +22,11 @@ class GroqAudioService(private val context: Context) {
     private var mediaRecorder: MediaRecorder? = null
     private var outputFile: File? = null
     private var isRecording = false
+    private var lastSoundTime = 0L
+    private val SILENCE_THRESHOLD = 1500
+    private val SILENCE_DURATION_MS = 2000L
+    private val POLL_INTERVAL_MS = 100L
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -29,6 +34,30 @@ class GroqAudioService(private val context: Context) {
         .build()
 
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    private val amplitudeCheckRunnable = object : Runnable {
+        override fun run() {
+            if (!isRecording || mediaRecorder == null) return
+
+            val maxAmplitude = try {
+                mediaRecorder?.maxAmplitude ?: 0
+            } catch (e: Exception) {
+                0
+            }
+
+            if (maxAmplitude < SILENCE_THRESHOLD) {
+                val timeSinceLastSound = System.currentTimeMillis() - lastSoundTime
+                if (timeSinceLastSound > SILENCE_DURATION_MS) {
+                    stopRecording()
+                    return
+                }
+            } else {
+                lastSoundTime = System.currentTimeMillis()
+            }
+
+            mainHandler.postDelayed(this, POLL_INTERVAL_MS)
+        }
+    }
 
     interface TranscriptionListener {
         fun onTranscriptionResult(text: String)
@@ -86,7 +115,9 @@ class GroqAudioService(private val context: Context) {
             }
 
             isRecording = true
+            lastSoundTime = System.currentTimeMillis()
             mainHandler.post { listener?.onRecordingStart() }
+            mainHandler.postDelayed(amplitudeCheckRunnable, POLL_INTERVAL_MS)
             DebugLog.d(TAG, "Recording started")
 
         } catch (e: Exception) {
@@ -98,6 +129,8 @@ class GroqAudioService(private val context: Context) {
 
     fun stopRecording() {
         if (!isRecording) return
+
+        mainHandler.removeCallbacks(amplitudeCheckRunnable)
 
         try {
             mediaRecorder?.stop()

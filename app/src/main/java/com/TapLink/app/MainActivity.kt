@@ -1863,8 +1863,6 @@ class MainActivity :
                 // Stop listening
                 DebugLog.d("SpeechRecognition", "Stopping Groq recording")
                 groqAudioService?.stopRecording()
-                audioManager?.setParameters("audio_source_record=off")
-                dualWebViewGroup.showToast("Processing...")
             } else {
                 // Start listening
                 DebugLog.d("SpeechRecognition", "Starting Groq recording")
@@ -1930,6 +1928,8 @@ class MainActivity :
                                     DebugLog.d("SpeechRecognition", "Groq recording stopped")
                                     runOnUiThread {
                                         isListeningForSpeech = false
+                                        audioManager?.setParameters("audio_source_record=off")
+                                        dualWebViewGroup.showToast("Processing...")
                                         // Don't turn off mic indicator yet, wait for processing
                                         // result
                                     }
