@@ -3643,7 +3643,7 @@ class MainActivity :
                 if (activity.dualWebViewGroup.isActiveWebView(webView)) {
                     activity.dualWebViewGroup.updateMediaState(isPlaying)
                     if (isPlaying) {
-                        activity.dualWebViewGroup.pauseBackgroundMedia()
+                        activity.dualWebViewGroup.pauseBackgroundMedia(webView)
                     }
                 }
             }
