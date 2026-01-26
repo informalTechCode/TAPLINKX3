@@ -128,7 +128,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val maskedRefreshIntervalMs = 100L // ~10fps while the screen is masked
     private var lastCaptureTime = 0L
     private var lastScrollBarCheckTime = 0L
-    private val scrollBarVisibilityThrottleMs = 200L
+    private val scrollBarVisibilityThrottleMs = 50L
     private val MIN_CAPTURE_INTERVAL = 16L // Cap at ~60fps
     private var lastCursorUpdateTime = 0L
     private val CURSOR_UPDATE_INTERVAL = 16L // 60fps cap for cursor updates
@@ -137,7 +137,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var lastHorzScrollableAt = 0L
     private var lastVertScrollableAt = 0L
     private var externalScrollMetrics: ExternalScrollMetrics? = null
-    private val externalScrollMetricsStaleMs = 1500L
+    private val externalScrollMetricsStaleMs = 3500L
     private var isMediaPlaying = false
     private var lastMediaPlayingAt = 0L
     private val mediaScrollFreezeMs = 1500L
