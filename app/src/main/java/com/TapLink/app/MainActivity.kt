@@ -3173,7 +3173,7 @@ class MainActivity :
                                     let isAnyPlaying = false;
                                     
                                     mediaElements.forEach(media => {
-                                        if (!media.paused && !media.ended && media.readyState > 2) {
+                                        if (!media.paused && !media.ended) {
                                             isAnyPlaying = true;
                                         }
                                     });

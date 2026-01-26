@@ -7233,8 +7233,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         // Check if any other media is playing before saying paused
                         const allMedia = document.querySelectorAll('video, audio');
                         let anyPlaying = false;
-                        for(let i=0; i<allMedia.length; i++) {
-                            if(!allMedia[i].paused && !allMedia[i].ended && allMedia[i].readyState > 2) {
+                        for (let i = 0; i < allMedia.length; i++) {
+                            if (!allMedia[i].paused && !allMedia[i].ended) {
                                 anyPlaying = true;
                                 break;
                             }
@@ -7244,10 +7244,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     });
                     
                     media.addEventListener('ended', function() {
-                         const allMedia = document.querySelectorAll('video, audio');
+                        const allMedia = document.querySelectorAll('video, audio');
                         let anyPlaying = false;
-                        for(let i=0; i<allMedia.length; i++) {
-                            if(!allMedia[i].paused && !allMedia[i].ended && allMedia[i].readyState > 2) {
+                        for (let i = 0; i < allMedia.length; i++) {
+                            if (!allMedia[i].paused && !allMedia[i].ended) {
                                 anyPlaying = true;
                                 break;
                             }
