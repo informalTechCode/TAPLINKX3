@@ -1270,7 +1270,7 @@
       window.__taplinkReportScrollMetrics = report;
       hud.addEventListener('scroll', schedule, { passive: true });
       window.addEventListener('resize', schedule);
-      setInterval(report, 1000);
+      setInterval(report, 500);
       report();
     })();
   </script>

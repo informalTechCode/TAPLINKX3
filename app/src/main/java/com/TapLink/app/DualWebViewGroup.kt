@@ -128,7 +128,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val maskedRefreshIntervalMs = 100L // ~10fps while the screen is masked
     private var lastCaptureTime = 0L
     private var lastScrollBarCheckTime = 0L
-    private val scrollBarVisibilityThrottleMs = 200L
+    private val scrollBarVisibilityThrottleMs = 50L
     private val MIN_CAPTURE_INTERVAL = 16L // Cap at ~60fps
     private var lastCursorUpdateTime = 0L
     private val CURSOR_UPDATE_INTERVAL = 16L // 60fps cap for cursor updates
@@ -137,7 +137,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var lastHorzScrollableAt = 0L
     private var lastVertScrollableAt = 0L
     private var externalScrollMetrics: ExternalScrollMetrics? = null
-    private val externalScrollMetricsStaleMs = 1500L
+    private val externalScrollMetricsStaleMs = 3500L
     private var isMediaPlaying = false
     private var lastMediaPlayingAt = 0L
     private val mediaScrollFreezeMs = 1500L
@@ -499,7 +499,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val scrollAmount = delta * 15 // Increase sensitivity
             val metrics = resolveScrollMetrics(SystemClock.uptimeMillis())
             if (shouldUseJsScroll(metrics)) {
-                scrollWebViewByJs(left = scrollAmount, top = null, smooth = false, useScrollTo = false)
+                scrollWebViewByJs(
+                        left = scrollAmount,
+                        top = null,
+                        smooth = false,
+                        useScrollTo = false
+                )
             } else {
                 webView.scrollBy(scrollAmount, 0)
             }
@@ -521,7 +526,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val scrollAmount = delta * 15 // Increase sensitivity
             val metrics = resolveScrollMetrics(SystemClock.uptimeMillis())
             if (shouldUseJsScroll(metrics)) {
-                scrollWebViewByJs(left = null, top = scrollAmount, smooth = false, useScrollTo = false)
+                scrollWebViewByJs(
+                        left = null,
+                        top = scrollAmount,
+                        smooth = false,
+                        useScrollTo = false
+                )
             } else {
                 webView.scrollBy(0, scrollAmount)
             }
@@ -889,33 +899,27 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val webExtentY = webView.getVerticalScrollExtent()
         val webOffsetY = webView.getVerticalScrollOffset()
 
-        val external = externalScrollMetrics?.takeIf {
-            now - it.timestamp <= externalScrollMetricsStaleMs
-        }
+        val external =
+                externalScrollMetrics?.takeIf { now - it.timestamp <= externalScrollMetricsStaleMs }
         val useExternalH =
-                external != null &&
-                        external.rangeX > external.extentX &&
-                        external.extentX > 0
+                external != null && external.rangeX > external.extentX && external.extentX > 0
         val useExternalV =
-                external != null &&
-                        external.rangeY > external.extentY &&
-                        external.extentY > 0
+                external != null && external.rangeY > external.extentY && external.extentY > 0
 
         return ScrollMetrics(
-                rangeX = if (useExternalH) external!!.rangeX else webRangeX,
-                extentX = if (useExternalH) external!!.extentX else webExtentX,
-                offsetX = if (useExternalH) external!!.offsetX else webOffsetX,
-                rangeY = if (useExternalV) external!!.rangeY else webRangeY,
-                extentY = if (useExternalV) external!!.extentY else webExtentY,
-                offsetY = if (useExternalV) external!!.offsetY else webOffsetY
+                rangeX = if (useExternalH) external?.rangeX ?: webRangeX else webRangeX,
+                extentX = if (useExternalH) external?.extentX ?: webExtentX else webExtentX,
+                offsetX = if (useExternalH) external?.offsetX ?: webOffsetX else webOffsetX,
+                rangeY = if (useExternalV) external?.rangeY ?: webRangeY else webRangeY,
+                extentY = if (useExternalV) external?.extentY ?: webExtentY else webExtentY,
+                offsetY = if (useExternalV) external?.offsetY ?: webOffsetY else webOffsetY
         )
     }
 
     private fun shouldUseJsScroll(metrics: ScrollMetrics): Boolean {
         val now = SystemClock.uptimeMillis()
-        val external = externalScrollMetrics?.takeIf {
-            now - it.timestamp <= externalScrollMetricsStaleMs
-        }
+        val external =
+                externalScrollMetrics?.takeIf { now - it.timestamp <= externalScrollMetricsStaleMs }
         return external != null &&
                 (metrics.rangeX > metrics.extentX || metrics.rangeY > metrics.extentY)
     }
@@ -6067,9 +6071,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         menu.findViewById<Button>(R.id.btnResetCursorSensitivity)
                 val resetSensitivityRect = getRect(resetSensitivityButton)
 
-                if (resetSensitivityButton != null &&
-                                contains(resetSensitivityRect, buttonSlop)
-                ) {
+                if (resetSensitivityButton != null && contains(resetSensitivityRect, buttonSlop)) {
                     // Reset to 50%
                     val sensitivitySeekBar =
                             menu.findViewById<SeekBar>(R.id.cursorSensitivitySeekBar)
@@ -6175,9 +6177,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                 // Check if click is on reset screen size button
                 val resetScreenSizeRect = getRect(resetScreenSizeButton)
-                if (resetScreenSizeButton != null &&
-                                contains(resetScreenSizeRect, buttonSlop)
-                ) {
+                if (resetScreenSizeButton != null && contains(resetScreenSizeRect, buttonSlop)) {
 
                     // Reset screen size to 100%
                     screenSizeSeekBar?.progress = 100
@@ -6360,9 +6360,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val resetWebpageZoomButton = menu.findViewById<Button>(R.id.btnResetWebpageZoom)
                 val resetWebpageZoomRect = getRect(resetWebpageZoomButton)
 
-                if (resetWebpageZoomButton != null &&
-                                contains(resetWebpageZoomRect, buttonSlop)
-                ) {
+                if (resetWebpageZoomButton != null && contains(resetWebpageZoomRect, buttonSlop)) {
 
                     // Reset webpage zoom to 1.0
                     currentWebZoom = 1.0f
@@ -6457,9 +6455,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                 // Check if click is on reset text color button
                 val resetTextColorRect = getRect(resetTextColorButton)
-                if (resetTextColorButton != null &&
-                                contains(resetTextColorRect, buttonSlop)
-                ) {
+                if (resetTextColorButton != null && contains(resetTextColorRect, buttonSlop)) {
 
                     // Reset color to white
                     colorWheelView?.setColor(Color.WHITE)

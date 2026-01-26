@@ -2,6 +2,26 @@
 
 The original TapLink builds and documentation were published through the release log hosted at https://pastebin.com/80GGhiEK. To preserve that history inside the repository, the paste contents are reproduced below with light formatting for readability.
 
+### TapLink 1.4.0 (January 26, 2026)
+
+- **Source code**: Repository current
+- **New Features**:
+  - **TapLink AI**: A dedicated, floating AI chat window powered by the Groq API.
+    - **Context-Aware**: Knows it's on RayNeo X3 Pro glasses.
+    - **Persistent Chat**: Toggle on/off without losing context.
+    - **High Performance**: Near-instant responses via Groq.
+    - **Access**: Comment bubble icon in the bottom nav bar.
+  - **Multiple Tabs**: Full browsing support for multiple open tabs.
+  - **Cursor Sensitivity Settings**: Fine-tune cursor responsiveness with a new slider in Settings.
+- **Polished & Documented**:
+  - **Voice Control**: Validated and documented voice input.
+  - **Netflix Support**: Automatic User Agent handling for Widevine DRM.
+  - **Anchor Smoothness**: Adjustable stabilization for anchored mode.
+  - **Manual Screen Positioning**: Re-center or offset the UI when scaled down.
+- **Under the Hood**:
+  - **Major Refactoring**: Over 20k lines reviewed for stability.
+  - **Cleanup**: Legacy code removed.
+
 ### TapLink 1.3.0 (January 16, 2026)
 
 - **Source code**: Repository current
