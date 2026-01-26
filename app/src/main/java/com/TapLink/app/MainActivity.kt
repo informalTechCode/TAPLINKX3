@@ -323,6 +323,27 @@ class MainActivity :
 
     private var pendingTouchHandler: Handler? = null
     private var pendingTouchRunnable: Runnable? = null
+    private val simulatedTouchHandler = Handler(Looper.getMainLooper())
+    private var simulatedTouchReset: Runnable? = null
+    private val simulatedTouchTimeoutMs = 750L
+
+    private fun beginSimulatedTouch(timeoutMs: Long = simulatedTouchTimeoutMs) {
+        isSimulatingTouchEvent = true
+        simulatedTouchReset?.let { simulatedTouchHandler.removeCallbacks(it) }
+        val reset = Runnable {
+            if (isSimulatingTouchEvent) {
+                isSimulatingTouchEvent = false
+            }
+        }
+        simulatedTouchReset = reset
+        simulatedTouchHandler.postDelayed(reset, timeoutMs)
+    }
+
+    private fun endSimulatedTouch() {
+        isSimulatingTouchEvent = false
+        simulatedTouchReset?.let { simulatedTouchHandler.removeCallbacks(it) }
+        simulatedTouchReset = null
+    }
 
     private val notificationReceiver =
             object : BroadcastReceiver() {
@@ -666,7 +687,7 @@ class MainActivity :
                                         if (dualWebViewGroup.isInScrollMode()) {
                                             return false // Don't consume - let tap go to WebView
                                         }
-                                        isSimulatingTouchEvent = true
+                                        beginSimulatedTouch(300L)
                                         toggleCursorVisibility()
                                     }
                                 }
@@ -844,7 +865,7 @@ class MainActivity :
             }
 
             if (isSimulatingTouchEvent) {
-                return@setOnTouchListener false
+                return@setOnTouchListener isCursorVisible
             }
 
             if (isKeyboardVisible) {
@@ -1694,7 +1715,7 @@ class MainActivity :
         dualWebViewGroup.showInfoBars()
 
         // Reset interaction states
-        isSimulatingTouchEvent = false
+        endSimulatedTouch()
         cursorJustAppeared = false
         isToggling = false
 
@@ -2464,7 +2485,7 @@ class MainActivity :
                 dualWebViewGroup.isNavBarVisible() &&
                         dualWebViewGroup.isPointInNavBar(interactionX, interactionY)
         if (toggleHit || navHit) {
-            isSimulatingTouchEvent = false
+            endSimulatedTouch()
             dualWebViewGroup.handleNavigationClick(interactionX, interactionY)
             return
         }
@@ -2482,7 +2503,7 @@ class MainActivity :
         lastClickTime = currentTime
 
         // WebView click path
-        isSimulatingTouchEvent = true
+        beginSimulatedTouch()
         try {
             val webViewLocation = IntArray(2)
             webView.getLocationOnScreen(webViewLocation)
@@ -2584,7 +2605,7 @@ class MainActivity :
                                                                 adjustedX.toInt(),
                                                                 adjustedY.toInt()
                                                         )
-                                                        isSimulatingTouchEvent = false
+                                                        endSimulatedTouch()
                                                         cursorJustAppeared = false
                                                         isToggling = false
                                                     },
@@ -2597,7 +2618,7 @@ class MainActivity :
         } catch (e: Exception) {
             DebugLog.e("ClickDebug", "Error in dispatchTouchEventAtCursor: ${e.message}")
             e.printStackTrace()
-            isSimulatingTouchEvent = false
+            endSimulatedTouch()
         }
     }
 
@@ -2907,7 +2928,7 @@ class MainActivity :
             }
 
             if (isSimulatingTouchEvent) {
-                return@setOnTouchListener false
+                return@setOnTouchListener isCursorVisible
             }
 
             if (isKeyboardVisible) {
@@ -3173,7 +3194,7 @@ class MainActivity :
                                     let isAnyPlaying = false;
                                     
                                     mediaElements.forEach(media => {
-                                        if (!media.paused && !media.ended && media.readyState > 2) {
+                                        if (!media.paused && !media.ended) {
                                             isAnyPlaying = true;
                                         }
                                     });
@@ -3642,9 +3663,6 @@ class MainActivity :
             activity.runOnUiThread {
                 if (activity.dualWebViewGroup.isActiveWebView(webView)) {
                     activity.dualWebViewGroup.updateMediaState(isPlaying)
-                    if (isPlaying) {
-                        activity.dualWebViewGroup.pauseBackgroundMedia()
-                    }
                 }
             }
         }
@@ -4296,12 +4314,12 @@ class MainActivity :
                     cursorJustAppeared = true
                     // Block interactions briefly to prevent stale taps from firing as the cursor
                     // reappears.
-                    isSimulatingTouchEvent = true
+                    beginSimulatedTouch(300L)
                     Handler(Looper.getMainLooper())
                             .postDelayed(
                                     {
                                         cursorJustAppeared = false
-                                        isSimulatingTouchEvent = false
+                                        endSimulatedTouch()
                                     },
                                     300
                             )
