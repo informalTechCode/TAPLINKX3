@@ -7,18 +7,18 @@
   <title>TapLinkX3 Dashboard · Landscape + Sidebar</title>
   <style>
     :root {
-      --bg: #0b0f1a;
-      --bg-2: #0f1629;
-      --card: #121a2e;
-      --accent: #69f0ae;
-      --accent-2: #82b1ff;
-      --text: #e6f1ff;
-      --muted: #9db3d1;
+      --bg: #000000;
+      --bg-2: #000000;
+      --card: #0a0a0a;
+      --accent: #f5f5f5;
+      --accent-2: #bdbdbd;
+      --text: #f5f5f5;
+      --muted: #9a9a9a;
       --brightness: 1;
       --scale: 1;
       --radius: 18px;
       --icon-size: 22px;
-      --shadow: 0 8px 24px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .035);
+      --shadow: 0 8px 24px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .02);
     }
 
     html,
@@ -44,7 +44,7 @@
       align-items: center;
       justify-content: center;
       color: #fff;
-      background: rgba(8, 12, 20, .95);
+      background: rgba(0, 0, 0, .95);
       z-index: 1000;
       text-align: center;
       padding: 24px
@@ -537,7 +537,7 @@
     }
 
     [data-theme="dark"] .card h3 {
-      color: #e6f1ff
+      color: var(--muted)
     }
 
     .hud {
@@ -605,7 +605,7 @@
     .modal {
       position: fixed;
       inset: 0;
-      background: rgba(8, 12, 20, .75);
+      background: rgba(0, 0, 0, .8);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -672,6 +672,26 @@
 
     .sec-custom {
       --sec-glow: #7aa6ff;
+    }
+
+    [data-theme="dark"] {
+      --bg: #000000;
+      --bg-2: #000000;
+      --card: #0a0a0a;
+      --accent: #f5f5f5;
+      --accent-2: #bdbdbd;
+      --text: #f5f5f5;
+      --muted: #9a9a9a;
+      --shadow: 0 8px 24px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .02);
+    }
+
+    [data-theme="dark"] .topbar {
+      background: rgba(0, 0, 0, .7);
+      border-bottom: 1px solid rgba(255, 255, 255, .08);
+    }
+
+    [data-theme="dark"] .section {
+      --sec-glow: rgba(255, 255, 255, .2);
     }
   </style>
 </head>

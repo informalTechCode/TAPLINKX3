@@ -159,13 +159,72 @@ class ChatView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         val localX = screenX - loc[0]
         val localY = screenY - loc[1]
 
+        return updateHoverLocal(localX, localY)
+    }
+
+    fun updateHoverLocal(localX: Float, localY: Float): Boolean {
         if (localX < 0 || localX > width || localY < 0 || localY > height) {
             closeButton.isHovered = false
+            updateWebHover(-1f, -1f, false)
             return false
         }
 
         closeButton.isHovered = isOverView(closeButton, headerView, localX, localY)
+        if (localX >= webView.left &&
+                        localX <= webView.right &&
+                        localY >= webView.top &&
+                        localY <= webView.bottom
+        ) {
+            val webLocalX = localX - webView.left
+            val webLocalY = localY - webView.top
+            updateWebHover(webLocalX, webLocalY, true)
+        } else {
+            updateWebHover(-1f, -1f, false)
+        }
         return true
+    }
+
+    private var lastWebHoverAt = 0L
+    private var lastHoverId: String? = null
+
+    private fun updateWebHover(x: Float, y: Float, isInside: Boolean) {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - lastWebHoverAt < 50) return
+        lastWebHoverAt = now
+
+        val jsX = if (isInside) x else -1f
+        val jsY = if (isInside) y else -1f
+
+        webView.evaluateJavascript(
+                """
+            (function() {
+                var x = $jsX;
+                var y = $jsY;
+                var root = (x >= 0 && y >= 0) ? document.elementFromPoint(x, y) : null;
+                var btn = root && root.closest ? root.closest('#sendBtn, #summarizeBtn') : null;
+                var prev = window.__taplinkHoverBtn || null;
+
+                if (prev && prev !== btn) {
+                    prev.classList.remove('taplink-hover');
+                }
+
+                if (btn) {
+                    if (!btn.classList.contains('taplink-hover')) {
+                        btn.classList.add('taplink-hover');
+                    }
+                    window.__taplinkHoverBtn = btn;
+                    return btn.id || '';
+                }
+
+                window.__taplinkHoverBtn = null;
+                return '';
+            })();
+        """.trimIndent(),
+                { result ->
+                    val trimmed = result?.trim('"')
+                    lastHoverId = if (trimmed.isNullOrBlank()) null else trimmed
+                }
+        )
     }
 
     fun clearHover() {
@@ -297,6 +356,9 @@ class ChatView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
                 if (window.__taplinkChatInputHooked) return;
                 window.__taplinkChatInputHooked = true;
 
+                var lastNotify = 0;
+                var lastFocused = null;
+
                 function isInput(el) {
                     if (!el) return false;
                     if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return true;
@@ -304,22 +366,36 @@ class ChatView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
                 }
 
                 function notify(target) {
+                    var now = Date.now();
+                    if (now - lastNotify < 150) return;
+                    lastNotify = now;
                     if (window.ChatInputBridge && window.ChatInputBridge.onInputFocus) {
                         window.ChatInputBridge.onInputFocus();
                     }
-                    if (target && target.scrollIntoView) {
-                        target.scrollIntoView({ block: 'center', inline: 'nearest' });
+                    if (target && target.scrollIntoView && target.getBoundingClientRect) {
+                        var rect = target.getBoundingClientRect();
+                        var viewH = window.innerHeight || document.documentElement.clientHeight;
+                        if (rect.bottom > viewH - 8 || rect.top < 8) {
+                            target.scrollIntoView({ block: 'center', inline: 'nearest' });
+                        }
                     }
                 }
 
-                function handleEvent(e) {
-                    if (isInput(e.target)) {
-                        notify(e.target);
+                function handleFocusIn(e) {
+                    if (!isInput(e.target)) return;
+                    if (lastFocused === e.target) return;
+                    lastFocused = e.target;
+                    notify(e.target);
+                }
+
+                function handleFocusOut(e) {
+                    if (lastFocused === e.target) {
+                        lastFocused = null;
                     }
                 }
 
-                document.addEventListener('focusin', handleEvent, true);
-                document.addEventListener('click', handleEvent, true);
+                document.addEventListener('focusin', handleFocusIn, true);
+                document.addEventListener('focusout', handleFocusOut, true);
             })();
         """.trimIndent(),
                 null

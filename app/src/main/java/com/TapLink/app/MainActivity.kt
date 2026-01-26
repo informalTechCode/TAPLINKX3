@@ -104,6 +104,12 @@ class MainActivity :
         DualWebViewGroup.AnchorToggleListener,
         DualWebViewGroup.WindowCallback {
 
+    fun updateCursorSensitivity(progress: Int) {
+        cursorSensitivity = progress
+        // Map 0-100 to 0.0f - 0.9f gain. 50 -> 0.45f
+        cursorGain = 0.9f * (progress / 100f)
+    }
+
     private val H2V_GAIN = 1.0f // how strongly horizontal motion affects vertical scroll
     private val X_INVERT = -1.0f // 1 = left -> up (what you want). Use -1 to flip.
     private val Y_INVERT = -1.0f // 1 = drag up -> up. Use -1 to flip if needed.
@@ -174,6 +180,7 @@ class MainActivity :
     private var keyboardView: CustomKeyboardView? = null
     private var isKeyboardVisible = false
     private var wasKeyboardVisibleAtDown = false
+    private var wasTouchOnKeyboard = false
 
     private val prefsName = Constants.BROWSER_PREFS_NAME
     private val keyLastUrl = Constants.KEY_LAST_URL
@@ -201,6 +208,7 @@ class MainActivity :
     private var originalSystemUiVisibility: Int = 0
     private var originalOrientation: Int = 0
     private var wasKeyboardDismissedByEnter = false
+    private var suppressWebClickUntil = 0L
 
     private var preMaskCursorState = false
     private var preMaskCursorX = 0f
@@ -255,6 +263,10 @@ class MainActivity :
     private var smoothnessLevel = 40 // Default: fairly smooth
     private var anchorSmoothingFactor = 0.08f // Calculated from smoothnessLevel
     private var velocitySmoothing = 0.15f // Calculated from smoothnessLevel
+
+    // Cursor sensitivity for non-anchored mode
+    private var cursorSensitivity = 50 // Default 50 corresponds to 0.45f gain
+    private var cursorGain = 0.45f
 
     // Velocity tracking for double exponential smoothing
     private var smoothedDeltaX = 0f
@@ -415,6 +427,11 @@ class MainActivity :
             dualWebViewGroup.stopAnchoring()
         }
 
+        // Load cursor sensitivity
+        cursorSensitivity =
+                getSharedPreferences(prefsName, MODE_PRIVATE).getInt("cursorSensitivity", 50)
+        updateCursorSensitivity(cursorSensitivity)
+
         // Initialize GestureDetector
         gestureDetector =
                 GestureDetector(
@@ -568,7 +585,7 @@ class MainActivity :
                                 }
 
                                 // Not anchored: keep your existing cursor-follow logic
-                                val cursorGain = 0.45f
+                                // val cursorGain = 0.45f // using class member cursorGain instead
                                 val dx = -distanceX * cursorGain
                                 val dy = -distanceY * cursorGain
                                 if (!isAnchored) {
@@ -794,6 +811,7 @@ class MainActivity :
                     }
                 }
 
+        // Cursor views setup
         // Set up the cursor views directly in the main container
         cursorLeftView =
                 ImageView(this).apply {
@@ -1095,6 +1113,9 @@ class MainActivity :
             // Just unregister the sensor listener to save resources
             sensorManager.unregisterListener(sensorEventListener)
         }
+
+        // Save window state on pause (app background/exit)
+        dualWebViewGroup.saveAllWindowsState()
     }
 
     override fun onResume() {
@@ -1159,6 +1180,8 @@ class MainActivity :
     override fun onBookmarkSelected(url: String) {
         val formattedUrl =
                 when {
+                    // Check for file: protocol specifically
+                    url.startsWith("file:", ignoreCase = true) -> url
                     url.startsWith("http://") || url.startsWith("https://") -> url
                     url.contains(".") -> "https://$url"
                     else -> "https://www.google.com/search?q=${Uri.encode(url)}"
@@ -1730,6 +1753,8 @@ class MainActivity :
         // Show cursor if not in URL editing mode
 
         isUrlEditing = false
+
+        dualWebViewGroup.post { dualWebViewGroup.updateScrollBarsVisibility() }
 
         dualWebViewGroup.cleanupResources()
     }
@@ -2330,6 +2355,12 @@ class MainActivity :
             return
         }
 
+        // Suppress any webview click immediately after keyboard dismissal (hide button).
+        val now = SystemClock.uptimeMillis()
+        if (now < suppressWebClickUntil) {
+            return
+        }
+
         val scale = dualWebViewGroup.uiScale
         val interactionX: Float
         val interactionY: Float
@@ -2428,15 +2459,16 @@ class MainActivity :
             }
         }
 
-        // Hit test for custom keyboard first so keyboard stays interactive when bookmarks are open
-        if (isKeyboardVisible && wasKeyboardVisibleAtDown) {
-            // In non-anchored mode, taps are handled directly in DualWebViewGroup.onTouchEvent
-            // to eliminate double-clicks and reduce latency.
-            // Only dispatch from here if we are in anchored mode.
-            if (isAnchored && dualWebViewGroup.isPointInKeyboard(interactionX, interactionY)) {
+        // Hit test for custom keyboard first so clicks never pass through it.
+        if (isKeyboardVisible &&
+                        wasKeyboardVisibleAtDown &&
+                        dualWebViewGroup.isPointInKeyboard(interactionX, interactionY)
+        ) {
+            // Anchored mode needs explicit dispatch; non-anchored is handled by the view itself.
+            if (isAnchored) {
                 dualWebViewGroup.dispatchKeyboardTap(interactionX, interactionY)
-                return
             }
+            return
         }
 
         // Check for bookmarks interaction (prevent click propagation to webview)
@@ -2446,6 +2478,12 @@ class MainActivity :
                 DebugLog.d("ClickDebug", "Click consumed by bookmarks window")
                 return
             }
+        }
+
+        // If the tap started on the keyboard, never let it fall through to the WebView.
+        if (wasTouchOnKeyboard) {
+            DebugLog.d("ClickDebug", "Click consumed by keyboard")
+            return
         }
 
         // Check for windows overview interaction
@@ -2884,8 +2922,8 @@ class MainActivity :
 
     override fun onWindowCreated(webView: WebView) {
         configureWebView(webView)
-        // Load default URL for new window
-        webView.loadUrl("file:///android_asset/AR_Dashboard_Landscape_Sidebar.html")
+        // Default URL loading is now handled in DualWebViewGroup.createNewWindow()
+        // to avoid overriding restored state
     }
 
     override fun onWindowSwitched(webView: WebView) {
@@ -3006,8 +3044,7 @@ class MainActivity :
                 // JavaScript and Content Settings
                 javaScriptEnabled = true
                 domStorageEnabled = true
-                @Suppress("DEPRECATION")
-                databaseEnabled = true
+                @Suppress("DEPRECATION") databaseEnabled = true
                 javaScriptCanOpenWindowsAutomatically = false
                 mediaPlaybackRequiresUserGesture = false
 
@@ -3017,8 +3054,7 @@ class MainActivity :
                 setGeolocationEnabled(true)
 
                 // Display and Layout Settings
-                @Suppress("DEPRECATION")
-                defaultZoom = WebSettings.ZoomDensity.MEDIUM
+                @Suppress("DEPRECATION") defaultZoom = WebSettings.ZoomDensity.MEDIUM
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
@@ -3042,8 +3078,7 @@ class MainActivity :
 
                 // Force Dark Mode
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    @Suppress("DEPRECATION")
-                    forceDark = WebSettings.FORCE_DARK_ON
+                    @Suppress("DEPRECATION") forceDark = WebSettings.FORCE_DARK_ON
                 }
 
                 val wvVersion = getWebViewVersion() ?: "114.0.0.0"
@@ -3082,6 +3117,8 @@ class MainActivity :
                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                             super.onPageStarted(view, url, favicon)
                             DebugLog.d("WebViewDebug", "Page started loading: $url")
+
+                            dualWebViewGroup.clearExternalScrollMetrics()
 
                             // Netflix Fix: Force default User Agent to ensure Widevine CDM works
                             val isNetflix = url?.contains("netflix.com") == true
@@ -3146,6 +3183,10 @@ class MainActivity :
                                 if (lastGpsLat != null && lastGpsLon != null) {
                                     dualWebViewGroup.injectLocation(lastGpsLat!!, lastGpsLon!!)
                                 }
+
+                                // Restore media listeners and scrollbar logic from DualWebViewGroup
+                                view?.let { dualWebViewGroup.injectMediaListeners(it) }
+                                dualWebViewGroup.updateScrollBarsVisibility()
 
                                 // Inject media listeners with enhanced YouTube support
                                 view?.evaluateJavascript(
@@ -3233,7 +3274,6 @@ class MainActivity :
                         """,
                                         null
                                 )
-
                             }
                         }
 
@@ -3545,8 +3585,7 @@ class MainActivity :
             mediaPlaybackRequiresUserGesture = false
             domStorageEnabled = true
             javaScriptEnabled = true
-            @Suppress("DEPRECATION")
-            databaseEnabled = true
+            @Suppress("DEPRECATION") databaseEnabled = true
             useWideViewPort = true
             loadWithOverviewMode = true
             setSupportMultipleWindows(true)
@@ -3554,7 +3593,7 @@ class MainActivity :
 
         logPermissionState() // Log initial permission state
 
-        webView.addJavascriptInterface(AndroidInterface(this), "AndroidInterface")
+        webView.addJavascriptInterface(AndroidInterface(this, webView), "AndroidInterface")
         // Add JavaScript interface for custom media handling if needed
         webView.addJavascriptInterface(
                 object {
@@ -3643,7 +3682,7 @@ class MainActivity :
                 if (activity.dualWebViewGroup.isActiveWebView(webView)) {
                     activity.dualWebViewGroup.updateMediaState(isPlaying)
                     if (isPlaying) {
-                        activity.dualWebViewGroup.pauseBackgroundMedia()
+                        activity.dualWebViewGroup.pauseBackgroundMedia(webView)
                     }
                 }
             }
@@ -3940,6 +3979,14 @@ class MainActivity :
     fun showCustomKeyboard() {
         DebugLog.d("KeyboardDebug", "1. Starting showCustomKeyboard")
 
+        if (isKeyboardVisible &&
+                        keyboardView?.visibility == View.VISIBLE &&
+                        dualWebViewGroup.keyboardContainer.visibility == View.VISIBLE
+        ) {
+            DebugLog.d("KeyboardDebug", "Keyboard already visible; ignoring show request")
+            return
+        }
+
         // Force WebView to lose focus
         webView.clearFocus()
         DebugLog.d("KeyboardDebug", "2. WebView focus cleared")
@@ -4011,8 +4058,10 @@ class MainActivity :
         isKeyboardVisible = true
 
         dualWebViewGroup.post {
+            dualWebViewGroup.updateScrollBarsVisibility()
             dualWebViewGroup.requestLayout()
             dualWebViewGroup.invalidate()
+            refreshCursor()
         }
     }
 
@@ -4482,6 +4531,7 @@ class MainActivity :
     }
 
     override fun onHideKeyboard() {
+        suppressWebClickUntil = SystemClock.uptimeMillis() + 250
         if (dualWebViewGroup.isBookmarkEditing()) {
             dualWebViewGroup.hideBookmarkEditing()
         }
@@ -4528,6 +4578,7 @@ class MainActivity :
         // Track state at start of touch to prevent double-dispatch issues
         if (ev.action == MotionEvent.ACTION_DOWN) {
             wasTouchOnBookmarks = false
+            wasTouchOnKeyboard = false
             wasKeyboardVisibleAtDown = isKeyboardVisible
 
             if (::dualWebViewGroup.isInitialized) {
@@ -4561,6 +4612,9 @@ class MainActivity :
 
                 if (dualWebViewGroup.isPointInBookmarks(checkX, checkY)) {
                     wasTouchOnBookmarks = true
+                }
+                if (dualWebViewGroup.isPointInKeyboard(checkX, checkY)) {
+                    wasTouchOnKeyboard = true
                 }
             }
         }
@@ -4740,7 +4794,31 @@ class MainActivity :
     }
 
     // Add JavaScript interface to reset capturing state
-    class AndroidInterface(private val activity: MainActivity) {
+    class AndroidInterface(private val activity: MainActivity, private val webView: WebView) {
+        @JavascriptInterface
+        fun onScrollMetrics(
+                rangeX: Double,
+                extentX: Double,
+                offsetX: Double,
+                rangeY: Double,
+                extentY: Double,
+                offsetY: Double
+        ) {
+            if (!activity.dualWebViewGroup.isActiveWebView(webView)) {
+                return
+            }
+            activity.runOnUiThread {
+                activity.dualWebViewGroup.updateExternalScrollMetrics(
+                        rangeX.toInt(),
+                        extentX.toInt(),
+                        offsetX.toInt(),
+                        rangeY.toInt(),
+                        extentY.toInt(),
+                        offsetY.toInt()
+                )
+            }
+        }
+
         @JavascriptInterface
         fun onCaptureComplete() {
             activity.runOnUiThread { activity.isCapturing = false }
