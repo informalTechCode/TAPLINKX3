@@ -865,7 +865,7 @@ class MainActivity :
             }
 
             if (isSimulatingTouchEvent) {
-                return@setOnTouchListener true
+                return@setOnTouchListener false
             }
 
             if (isKeyboardVisible) {
@@ -2928,7 +2928,7 @@ class MainActivity :
             }
 
             if (isSimulatingTouchEvent) {
-                return@setOnTouchListener true
+                return@setOnTouchListener false
             }
 
             if (isKeyboardVisible) {
