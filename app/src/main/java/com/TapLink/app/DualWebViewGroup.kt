@@ -351,8 +351,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun pauseBackgroundMedia() {
+        if (activeWindowId == null) return
+
         windows.forEach { win ->
-            if (win.id != activeWindowId) {
+            if (win.id != activeWindowId && win.webView != webView) {
                 // Pause all media elements
                 win.webView.evaluateJavascript(
                         "document.querySelectorAll('video, audio').forEach(function(e) { e.pause(); });",
