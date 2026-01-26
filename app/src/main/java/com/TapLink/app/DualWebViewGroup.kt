@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
 import android.os.Build
@@ -82,6 +83,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val offsetY: Int
     )
 
+    private data class ExternalScrollMetrics(
+            val rangeX: Int,
+            val extentX: Int,
+            val offsetX: Int,
+            val rangeY: Int,
+            val extentY: Int,
+            val offsetY: Int,
+            val timestamp: Long
+    )
+
     private val windows = mutableListOf<BrowserWindow>()
     private var activeWindowId: String? = null
 
@@ -121,11 +132,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val MIN_CAPTURE_INTERVAL = 16L // Cap at ~60fps
     private var lastCursorUpdateTime = 0L
     private val CURSOR_UPDATE_INTERVAL = 16L // 60fps cap for cursor updates
-    private var jsScrollMetrics: ScrollMetrics? = null
-    private var jsScrollMetricsTimestamp = 0L
-    private val jsScrollMetricsTimeoutMs = 2000L
-    private var lastScrollMetricsLogTime = 0L
     private var lastScrollBarInteractionTime = 0L
+    private val scrollBarHoldMs = 1200L
+    private var lastHorzScrollableAt = 0L
+    private var lastVertScrollableAt = 0L
+    private var externalScrollMetrics: ExternalScrollMetrics? = null
+    private val externalScrollMetricsStaleMs = 1500L
+    private var isMediaPlaying = false
+    private var lastMediaPlayingAt = 0L
+    private val mediaScrollFreezeMs = 1500L
+    private val mediaStateByWindowId = mutableMapOf<String, Boolean>()
+    private val mediaLastPlayedAtByWindowId = mutableMapOf<String, Long>()
 
     private var leftSystemInfoView: SystemInfoView
 
@@ -357,9 +374,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return this.webView == webView
     }
 
-    fun pauseBackgroundMedia() {
+    fun pauseBackgroundMedia(sourceWebView: WebView) {
         windows.forEach { win ->
-            if (win.webView != webView) {
+            if (win.webView != sourceWebView) {
                 // Pause all media elements
                 win.webView.evaluateJavascript(
                         "document.querySelectorAll('video, audio').forEach(function(e) { e.pause(); });",
@@ -467,6 +484,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Update scroll bar thumb positions
         updateScrollBarThumbs(xProgress, yProgress)
+        applyScrollbarTransform()
     }
 
     private fun isWebViewScrollEnabled(): Boolean {
@@ -479,8 +497,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (isWebViewScrollEnabled()) {
             // Scroll the WebView content
             val scrollAmount = delta * 15 // Increase sensitivity
-            if (shouldUseJsScrollForAxis(isHorizontal = true)) {
-                evaluateJsScroll("window.__taplinkScrollBy($scrollAmount, 0)")
+            val metrics = resolveScrollMetrics(SystemClock.uptimeMillis())
+            if (shouldUseJsScroll(metrics)) {
+                scrollWebViewByJs(left = scrollAmount, top = null, smooth = false, useScrollTo = false)
             } else {
                 webView.scrollBy(scrollAmount, 0)
             }
@@ -500,8 +519,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (isWebViewScrollEnabled()) {
             // Scroll the WebView content
             val scrollAmount = delta * 15 // Increase sensitivity
-            if (shouldUseJsScrollForAxis(isHorizontal = false)) {
-                evaluateJsScroll("window.__taplinkScrollBy(0, $scrollAmount)")
+            val metrics = resolveScrollMetrics(SystemClock.uptimeMillis())
+            if (shouldUseJsScroll(metrics)) {
+                scrollWebViewByJs(left = null, top = scrollAmount, smooth = false, useScrollTo = false)
             } else {
                 webView.scrollBy(0, scrollAmount)
             }
@@ -517,30 +537,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
-    private fun getFreshJsScrollMetrics(): ScrollMetrics? {
-        val metrics = jsScrollMetrics ?: return null
-        val ageMs = SystemClock.uptimeMillis() - jsScrollMetricsTimestamp
-        return if (ageMs <= jsScrollMetricsTimeoutMs) metrics else null
-    }
-
-    private fun shouldUseJsScrollForAxis(isHorizontal: Boolean): Boolean {
-        val metrics = getFreshJsScrollMetrics() ?: return false
-        val range =
-                if (isHorizontal) webView.getHorizontalScrollRange()
-                else webView.getVerticalScrollRange()
-        val extent =
-                if (isHorizontal) webView.getHorizontalScrollExtent()
-                else webView.getVerticalScrollExtent()
-        val jsRange = if (isHorizontal) metrics.rangeX else metrics.rangeY
-        val jsExtent = if (isHorizontal) metrics.extentX else metrics.extentY
-        return range <= extent && jsRange > jsExtent
-    }
-
-    private fun evaluateJsScroll(script: String) {
-        webView.evaluateJavascript(
-                "(function(){ $script; if (window.__taplinkReportScrollMetrics) { window.__taplinkReportScrollMetrics(); } })();",
-                null
-        )
+    private fun shouldFreezeScrollBars(): Boolean {
+        val now = SystemClock.uptimeMillis()
+        return isMediaPlaying || (now - lastMediaPlayingAt < mediaScrollFreezeMs)
     }
 
     private fun updateScrollBarThumbs(xProgress: Int, yProgress: Int) {
@@ -548,21 +547,20 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (isInteractingWithScrollBar && now - lastScrollBarInteractionTime < 120L) return
 
         if (isWebViewScrollEnabled()) {
-            val metrics = getFreshJsScrollMetrics()
-            val useJsHorizontal = metrics != null && metrics.rangeX > metrics.extentX
-            val useJsVertical = metrics != null && metrics.rangeY > metrics.extentY
-
+            val metrics = resolveScrollMetrics(now)
             // Update Horizontal Thumb based on WebView scroll
             val hTrackContainer = horizontalScrollBar.getChildAt(1) as? FrameLayout
             val hTrackWidth =
                     when {
-                        hTrackContainer != null && hTrackContainer.width > 0 -> hTrackContainer.width
+                        hTrackContainer != null && hTrackContainer.width > 0 ->
+                                hTrackContainer.width
                         hTrackContainer != null && hTrackContainer.measuredWidth > 0 ->
                                 hTrackContainer.measuredWidth
                         horizontalScrollBar.width > 0 -> {
                             val leftBtnWidth = horizontalScrollBar.getChildAt(0)?.width ?: 0
                             val rightBtnWidth = horizontalScrollBar.getChildAt(2)?.width ?: 0
-                            (horizontalScrollBar.width - leftBtnWidth - rightBtnWidth).coerceAtLeast(0)
+                            (horizontalScrollBar.width - leftBtnWidth - rightBtnWidth)
+                                    .coerceAtLeast(0)
                         }
                         else -> 0
                     }
@@ -581,12 +579,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 // Let's defer exact horizontal proportion calculation or use a safe fallback.
 
                 // Using standard view methods available on WebView (which is a View)
-                val webRange = webView.getHorizontalScrollRange()
-                val webExtent = webView.getHorizontalScrollExtent()
-                val webOffset = webView.getHorizontalScrollOffset()
-                val range = if (useJsHorizontal) metrics!!.rangeX else webRange
-                val extent = if (useJsHorizontal) metrics.extentX else webExtent
-                val offset = if (useJsHorizontal) metrics.offsetX else webOffset
+                val range = metrics.rangeX
+                val extent = metrics.extentX
+                val offset = metrics.offsetX
 
                 if (range > extent) {
                     val maxScroll = range - extent
@@ -601,13 +596,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val vTrackContainer = verticalScrollBar.getChildAt(1) as? FrameLayout
             val vTrackHeight =
                     when {
-                        vTrackContainer != null && vTrackContainer.height > 0 -> vTrackContainer.height
+                        vTrackContainer != null && vTrackContainer.height > 0 ->
+                                vTrackContainer.height
                         vTrackContainer != null && vTrackContainer.measuredHeight > 0 ->
                                 vTrackContainer.measuredHeight
                         verticalScrollBar.height > 0 -> {
                             val topBtnHeight = verticalScrollBar.getChildAt(0)?.height ?: 0
                             val bottomBtnHeight = verticalScrollBar.getChildAt(2)?.height ?: 0
-                            (verticalScrollBar.height - topBtnHeight - bottomBtnHeight).coerceAtLeast(0)
+                            (verticalScrollBar.height - topBtnHeight - bottomBtnHeight)
+                                    .coerceAtLeast(0)
                         }
                         else -> 0
                     }
@@ -615,12 +612,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val thumbHeight = 60
                 val maxMargin = vTrackHeight - thumbHeight
 
-                val webRange = webView.getVerticalScrollRange()
-                val webExtent = webView.getVerticalScrollExtent()
-                val webOffset = webView.getVerticalScrollOffset()
-                val range = if (useJsVertical) metrics!!.rangeY else webRange
-                val extent = if (useJsVertical) metrics.extentY else webExtent
-                val offset = if (useJsVertical) metrics.offsetY else webOffset
+                val range = metrics.rangeY
+                val extent = metrics.extentY
+                val offset = metrics.offsetY
 
                 if (range > extent) {
                     val maxScroll = range - extent
@@ -636,13 +630,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val hTrackContainer = horizontalScrollBar.getChildAt(1) as? FrameLayout
             val hTrackWidth =
                     when {
-                        hTrackContainer != null && hTrackContainer.width > 0 -> hTrackContainer.width
+                        hTrackContainer != null && hTrackContainer.width > 0 ->
+                                hTrackContainer.width
                         hTrackContainer != null && hTrackContainer.measuredWidth > 0 ->
                                 hTrackContainer.measuredWidth
                         horizontalScrollBar.width > 0 -> {
                             val leftBtnWidth = horizontalScrollBar.getChildAt(0)?.width ?: 0
                             val rightBtnWidth = horizontalScrollBar.getChildAt(2)?.width ?: 0
-                            (horizontalScrollBar.width - leftBtnWidth - rightBtnWidth).coerceAtLeast(0)
+                            (horizontalScrollBar.width - leftBtnWidth - rightBtnWidth)
+                                    .coerceAtLeast(0)
                         }
                         else -> 0
                     }
@@ -658,13 +654,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val vTrackContainer = verticalScrollBar.getChildAt(1) as? FrameLayout
             val vTrackHeight =
                     when {
-                        vTrackContainer != null && vTrackContainer.height > 0 -> vTrackContainer.height
+                        vTrackContainer != null && vTrackContainer.height > 0 ->
+                                vTrackContainer.height
                         vTrackContainer != null && vTrackContainer.measuredHeight > 0 ->
                                 vTrackContainer.measuredHeight
                         verticalScrollBar.height > 0 -> {
                             val topBtnHeight = verticalScrollBar.getChildAt(0)?.height ?: 0
                             val bottomBtnHeight = verticalScrollBar.getChildAt(2)?.height ?: 0
-                            (verticalScrollBar.height - topBtnHeight - bottomBtnHeight).coerceAtLeast(0)
+                            (verticalScrollBar.height - topBtnHeight - bottomBtnHeight)
+                                    .coerceAtLeast(0)
                         }
                         else -> 0
                     }
@@ -681,6 +679,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun updateScrollBarsVisibility() {
         // Log.d("ScrollDebug", "updateScrollBarsVisibility called. isAnchored=$isAnchored,
         // isInScrollMode=$isInScrollMode, uiScale=$uiScale")
+        val now = SystemClock.uptimeMillis()
+        if (shouldFreezeScrollBars() && !isInteractingWithScrollBar) {
+            return
+        }
 
         // Determine mode-specific base constraints
         val isScrollModeActive = isInScrollMode
@@ -688,10 +690,28 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Base dimensions
         val containerWidth = 640
         val baseLeftMargin = if (isScrollModeActive) 0 else toggleBarWidthPx
-        val baseBottomMargin = if (isScrollModeActive) 0 else navBarHeightPx
+        val rawBottomMargin = if (isScrollModeActive) 0 else navBarHeightPx
+        val keyboardVisible = keyboardContainer.visibility == View.VISIBLE
+        if (keyboardVisible) {
+            val keyboardWidth = 640 - toggleBarWidthPx
+            keyboardContainer.measure(
+                    MeasureSpec.makeMeasureSpec(keyboardWidth, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+            )
+        }
+        val keyboardHeight =
+                if (keyboardVisible) {
+                    val measured = keyboardContainer.measuredHeight
+                    if (measured > 0) measured else 160
+                } else {
+                    0
+                }
+        val baseBottomMargin = if (keyboardVisible) 0 else rawBottomMargin
 
         // If anchored, scrollbars are always hidden
         if (isAnchored) {
+            lastHorzScrollableAt = 0L
+            lastVertScrollableAt = 0L
             horizontalScrollBar.visibility = View.GONE
             verticalScrollBar.visibility = View.GONE
 
@@ -700,10 +720,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 var targetHeight = 0
                 if (isScrollModeActive) {
                     targetWidth = containerWidth
-                    targetHeight = 480
+                    targetHeight = (480 - keyboardHeight).coerceAtLeast(0)
                 } else {
                     targetWidth = containerWidth - baseLeftMargin
-                    targetHeight = FrameLayout.LayoutParams.MATCH_PARENT
+                    targetHeight = (480 - baseBottomMargin - keyboardHeight).coerceAtLeast(0)
                 }
 
                 var changed = false
@@ -728,23 +748,42 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         // Always check WebView scrollability since we disabled viewport panning
-        val webHRange = webView.getHorizontalScrollRange()
-        val webHExtent = webView.getHorizontalScrollExtent()
-        val webVRange = webView.getVerticalScrollRange()
-        val webVExtent = webView.getVerticalScrollExtent()
-        val metrics = getFreshJsScrollMetrics()
-        val showHorz =
-                (webHRange > webHExtent) || (metrics != null && metrics.rangeX > metrics.extentX)
-        val showVert =
-                (webVRange > webVExtent) || (metrics != null && metrics.rangeY > metrics.extentY)
+        val metrics = resolveScrollMetrics(now)
+        val webHRange = metrics.rangeX
+        val webHExtent = metrics.extentX
+        val webVRange = metrics.rangeY
+        val webVExtent = metrics.extentY
+        val scrollDeltaThreshold = 6
+        val webHDelta = webHRange - webHExtent
+        val webVDelta = webVRange - webVExtent
+        val showHorzRaw = webHDelta > scrollDeltaThreshold
+        val showVertRaw = webVDelta > scrollDeltaThreshold
+        if (showHorzRaw) {
+            lastHorzScrollableAt = now
+        }
+        if (showVertRaw) {
+            lastVertScrollableAt = now
+        }
+        val showHorz = showHorzRaw || (now - lastHorzScrollableAt < scrollBarHoldMs)
+        val showVert = showVertRaw || (now - lastVertScrollableAt < scrollBarHoldMs)
 
-        horizontalScrollBar.visibility = if (showHorz) View.VISIBLE else View.GONE
-        verticalScrollBar.visibility = if (showVert) View.VISIBLE else View.GONE
+        horizontalScrollBar.apply {
+            visibility = if (showHorz) View.VISIBLE else View.INVISIBLE
+            isClickable = showHorz
+            isFocusable = false
+        }
+
+        verticalScrollBar.apply {
+            visibility = if (showVert) View.VISIBLE else View.INVISIBLE
+            isClickable = showVert
+            isFocusable = false
+        }
 
         // Apply layout adjustments
         (webViewsContainer.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
-            val rightMarginShift = if (showVert) 20 else 0
-            val bottomMarginShift = if (showHorz) 20 else 0
+            // Keep WebView sizing stable to avoid layout churn (prevents media pauses/flicker).
+            val rightMarginShift = if (verticalScrollBar.visibility == View.VISIBLE) 20 else 0
+            val bottomMarginShift = if (horizontalScrollBar.visibility == View.VISIBLE) 20 else 0
 
             var targetWidth = 0
             var targetHeight = 0
@@ -755,7 +794,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             if (isScrollModeActive) {
                 // Scroll Mode: 640 total width
                 targetWidth = 640 - rightMarginShift
-                targetHeight = 480 - bottomMarginShift
+                targetHeight = (480 - bottomMarginShift - keyboardHeight).coerceAtLeast(0)
                 targetLeftMargin = 0
                 targetRightMargin = rightMarginShift
                 targetBottomMargin = bottomMarginShift
@@ -766,7 +805,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                 // Height: 480 total - nav bar - margin
                 // We must be explicit here so onMeasure picks it up
-                targetHeight = (480 - baseBottomMargin) - bottomMarginShift
+                targetHeight =
+                        (480 - baseBottomMargin - bottomMarginShift - keyboardHeight).coerceAtLeast(
+                                0
+                        )
 
                 targetLeftMargin = baseLeftMargin
                 targetRightMargin = rightMarginShift
@@ -807,24 +849,127 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
+    fun updateExternalScrollMetrics(
+            rangeX: Int,
+            extentX: Int,
+            offsetX: Int,
+            rangeY: Int,
+            extentY: Int,
+            offsetY: Int
+    ) {
+        val now = SystemClock.uptimeMillis()
+        externalScrollMetrics =
+                ExternalScrollMetrics(
+                        rangeX = rangeX.coerceAtLeast(0),
+                        extentX = extentX.coerceAtLeast(0),
+                        offsetX = offsetX.coerceAtLeast(0),
+                        rangeY = rangeY.coerceAtLeast(0),
+                        extentY = extentY.coerceAtLeast(0),
+                        offsetY = offsetY.coerceAtLeast(0),
+                        timestamp = now
+                )
+
+        if (!isAnchored && now - lastScrollBarCheckTime > scrollBarVisibilityThrottleMs) {
+            updateScrollBarsVisibility()
+            lastScrollBarCheckTime = now
+        } else {
+            updateScrollBarThumbs(0, 0)
+        }
+    }
+
+    fun clearExternalScrollMetrics() {
+        externalScrollMetrics = null
+    }
+
+    private fun resolveScrollMetrics(now: Long): ScrollMetrics {
+        val webRangeX = webView.getHorizontalScrollRange()
+        val webExtentX = webView.getHorizontalScrollExtent()
+        val webOffsetX = webView.getHorizontalScrollOffset()
+        val webRangeY = webView.getVerticalScrollRange()
+        val webExtentY = webView.getVerticalScrollExtent()
+        val webOffsetY = webView.getVerticalScrollOffset()
+
+        val external = externalScrollMetrics?.takeIf {
+            now - it.timestamp <= externalScrollMetricsStaleMs
+        }
+        val useExternalH =
+                external != null &&
+                        external.rangeX > external.extentX &&
+                        external.extentX > 0
+        val useExternalV =
+                external != null &&
+                        external.rangeY > external.extentY &&
+                        external.extentY > 0
+
+        return ScrollMetrics(
+                rangeX = if (useExternalH) external!!.rangeX else webRangeX,
+                extentX = if (useExternalH) external!!.extentX else webExtentX,
+                offsetX = if (useExternalH) external!!.offsetX else webOffsetX,
+                rangeY = if (useExternalV) external!!.rangeY else webRangeY,
+                extentY = if (useExternalV) external!!.extentY else webExtentY,
+                offsetY = if (useExternalV) external!!.offsetY else webOffsetY
+        )
+    }
+
+    private fun shouldUseJsScroll(metrics: ScrollMetrics): Boolean {
+        val now = SystemClock.uptimeMillis()
+        val external = externalScrollMetrics?.takeIf {
+            now - it.timestamp <= externalScrollMetricsStaleMs
+        }
+        return external != null &&
+                (metrics.rangeX > metrics.extentX || metrics.rangeY > metrics.extentY)
+    }
+
+    private fun scrollWebViewByJs(left: Int?, top: Int?, smooth: Boolean, useScrollTo: Boolean) {
+        val leftValue = left?.toString() ?: "undefined"
+        val topValue = top?.toString() ?: "undefined"
+        val behavior = if (smooth) "'smooth'" else "'auto'"
+        val useScrollToJs = if (useScrollTo) "true" else "false"
+        webView.evaluateJavascript(
+                """
+            (function() {
+                if ($useScrollToJs && typeof window.scrollTo === 'function') {
+                    window.scrollTo({ left: $leftValue, top: $topValue, behavior: $behavior });
+                } else if (!$useScrollToJs && typeof window.scrollBy === 'function') {
+                    window.scrollBy({ left: $leftValue, top: $topValue, behavior: $behavior });
+                } else if (typeof window.scrollTo === 'function') {
+                    window.scrollTo({ left: $leftValue, top: $topValue, behavior: $behavior });
+                }
+            })();
+        """,
+                null
+        )
+    }
+
+    private fun applyScrollbarTransform() {
+        val scale = if (uiScale <= 0f) 1f else 1f / uiScale
+        val transX = -leftEyeUIContainer.translationX
+        val transY = -leftEyeUIContainer.translationY
+        listOf(horizontalScrollBar, verticalScrollBar).forEach { bar ->
+            bar.pivotX = 0f
+            bar.pivotY = 0f
+            bar.scaleX = scale
+            bar.scaleY = scale
+            bar.translationX = transX
+            bar.translationY = transY
+        }
+    }
+
     private fun updateHorizontalScroll(percent: Float) {
         if (isWebViewScrollEnabled()) {
-            if (shouldUseJsScrollForAxis(isHorizontal = true)) {
-                val metrics = getFreshJsScrollMetrics()
-                if (metrics != null) {
-                    val range = metrics.rangeX
-                    val extent = metrics.extentX
-                    if (range > extent) {
-                        val targetX = percent * (range - extent)
-                        val targetY = metrics.offsetY.toFloat() // Use metrics directly
-                        evaluateJsScroll("window.__taplinkScrollTo($targetX, ${targetY})")
-                    }
-                }
-            } else {
-                val range = webView.getHorizontalScrollRange()
-                val extent = webView.getHorizontalScrollExtent()
-                if (range > extent) {
-                    val targetX = percent * (range - extent)
+            val metrics = resolveScrollMetrics(SystemClock.uptimeMillis())
+            val range = metrics.rangeX
+            val extent = metrics.extentX
+            if (range > extent) {
+                val targetX = percent * (range - extent)
+                if (shouldUseJsScroll(metrics)) {
+                    scrollWebViewByJs(
+                            left = targetX.toInt(),
+                            top = null,
+                            smooth = false,
+                            useScrollTo = true
+                    )
+                } else {
                     webView.scrollTo(targetX.toInt(), webView.scrollY)
                 }
             }
@@ -838,22 +983,19 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private fun updateVerticalScroll(percent: Float) {
         if (isWebViewScrollEnabled()) {
-            if (shouldUseJsScrollForAxis(isHorizontal = false)) {
-                val metrics = getFreshJsScrollMetrics()
-                if (metrics != null) {
-                    val range = metrics.rangeY
-                    val extent = metrics.extentY
-                    if (range > extent) {
-                        val targetY = percent * (range - extent)
-                        val targetX = metrics.offsetX.toFloat()
-                        evaluateJsScroll("window.__taplinkScrollTo($targetX, ${targetY})")
-                    }
-                }
-            } else {
-                val range = webView.getVerticalScrollRange()
-                val extent = webView.getVerticalScrollExtent()
-                if (range > extent) {
-                    val targetY = percent * (range - extent)
+            val metrics = resolveScrollMetrics(SystemClock.uptimeMillis())
+            val range = metrics.rangeY
+            val extent = metrics.extentY
+            if (range > extent) {
+                val targetY = percent * (range - extent)
+                if (shouldUseJsScroll(metrics)) {
+                    scrollWebViewByJs(
+                            left = null,
+                            top = targetY.toInt(),
+                            smooth = false,
+                            useScrollTo = true
+                    )
+                } else {
                     webView.scrollTo(webView.scrollX, targetY.toInt())
                 }
             }
@@ -863,32 +1005,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             prefs.edit().putInt("uiTransYProgress", newProgress).apply()
             updateUiTranslation()
         }
-    }
-
-    fun updateScrollMetricsFromJs(
-            rangeX: Int,
-            extentX: Int,
-            offsetX: Int,
-            rangeY: Int,
-            extentY: Int,
-            offsetY: Int
-    ) {
-        jsScrollMetrics = ScrollMetrics(rangeX, extentX, offsetX, rangeY, extentY, offsetY)
-        jsScrollMetricsTimestamp = SystemClock.uptimeMillis()
-        if (jsScrollMetricsTimestamp - lastScrollMetricsLogTime > 500L) {
-            lastScrollMetricsLogTime = jsScrollMetricsTimestamp
-            Log.d(
-                    "ScrollMetricsDebug",
-                    "rangeX=$rangeX extentX=$extentX offsetX=$offsetX rangeY=$rangeY extentY=$extentY offsetY=$offsetY"
-            )
-        }
-        updateScrollBarsVisibility()
-        updateScrollBarThumbs(0, 0)
-    }
-
-    fun clearJsScrollMetrics() {
-        jsScrollMetrics = null
-        jsScrollMetricsTimestamp = 0L
     }
 
     // Function to update the cursor positions and visibility
@@ -1322,6 +1438,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun createNewWindow() {
         val newWebView = InternalWebView(context)
         configureWebView(newWebView)
+        // Load default URL for fresh windows
+        newWebView.loadUrl(Constants.DEFAULT_URL)
         val newWindow = BrowserWindow(webView = newWebView, title = "New Tab")
 
         // Add to container but invisible
@@ -1379,6 +1497,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val wasActive = activeWindowId == id
 
         windows.remove(windowToRemove)
+        mediaStateByWindowId.remove(id)
+        mediaLastPlayedAtByWindowId.remove(id)
         webViewsContainer.removeView(windowToRemove.webView)
         windowToRemove.webView.destroy()
         windowToRemove.thumbnail?.recycle()
@@ -1399,6 +1519,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             }
         }
         saveAllWindowsState()
+        if (mediaStateByWindowId.isNotEmpty()) {
+            updateMediaState(mediaStateByWindowId.values.any { it })
+        } else {
+            isMediaPlaying = false
+            hideMediaControls()
+        }
     }
 
     fun saveAllWindowsState() {
@@ -1547,6 +1673,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         settings.displayZoomControls = false
         settings.mediaPlaybackRequiresUserGesture = false
 
+        webView.addJavascriptInterface(MediaInterface(this, webView), "MediaInterface")
+
         // Keep WebAppInterface for referencing context/logic if needed, but primary comms via URL
         // scheme
         // Enable Native Bridge for Chat
@@ -1595,6 +1723,29 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         }
                         return false
                     }
+
+                    override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                        super.onPageFinished(view, url)
+                        try {
+                            val mediaInterfaceClass =
+                                    Class.forName(
+                                            "com.TapLinkX3.app.DualWebViewGroup\$MediaInterface"
+                                    )
+                            // Actually we are inside DualWebViewGroup, so can call method directly?
+                            // Yes, injectMediaListeners() is a private method of DualWebViewGroup.
+                            // But WebViewClient is an anonymous inner class.
+                            // So we need to call DualWebViewGroup.this.injectMediaListeners()
+                            // But in Kotlin inner class, we can just call it if it's visible.
+                            // injectMediaListeners is private in DualWebViewGroup.
+                            // Kotlin anonymous object inside a method (configureWebView)
+                            // configureWebView is a method of DualWebViewGroup.
+                            // So yes, we can call injectMediaListeners() directly.
+                            view?.let { injectMediaListeners(it) }
+                            updateScrollBarsVisibility()
+                        } catch (e: Exception) {
+                            android.util.Log.e("TapLink", "Error in onPageFinished", e)
+                        }
+                    }
                 }
 
         webView.apply {
@@ -1622,25 +1773,22 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     init {
         // Initialize the first WebView
+        // Initial WebView configuration
         val initialWebView = InternalWebView(context)
         webView = initialWebView
         configureWebView(webView) // Local basic config
         mobileUserAgent = webView.settings.userAgentString
 
-        // Add to container
-        webViewsContainer.addView(
-                initialWebView,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-        )
+        // CRITICAL FIX: Do NOT add the initial webview to the container or windows list yet.
+        // This prevents the "Dashboard flash" on startup.
+        // The container starts empty.
+        // restoreState() will either:
+        // 1. Restore saved windows (and set active one)
+        // 2. Or call createNewWindow() calls which will add a window and load the default URL.
 
-        // We can't call windowCallback here as it's not set yet.
-        // We assume the initial WebView gets configured by MainActivity in onCreate via
-        // getWebView().
-
-        val initialWindow = BrowserWindow(webView = initialWebView, title = "Home")
-        windows.add(initialWindow)
-        activeWindowId = initialWindow.id
+        // webViewsContainer.addView(...) -> Removed
+        // windows.add(...) -> Removed
+        // activeWindowId = ... -> Removed (remains null initially)
 
         val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
         isDesktopMode = prefs.getBoolean("isDesktopMode", false)
@@ -1921,9 +2069,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         post {
             // Ensure bookmarks views are always on top when added to view hierarchy
-            if (::leftBookmarksView.isInitialized) {
-                leftBookmarksView.bringToFront()
-            }
+            if (::leftBookmarksView.isInitialized) {}
             if (::chatView.isInitialized) {
                 chatView.bringToFront()
             }
@@ -2014,11 +2160,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         horizontalScrollBar =
                 LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
-                    setBackgroundColor(Color.BLACK) // Black background
+                    setBackgroundColor(Color.TRANSPARENT) // Transparent background
                     visibility = View.GONE
                     elevation = 150f
                     isClickable = true // Prevent click propagation
-                    isFocusable = true
+                    isFocusable = false
+                    isFocusableInTouchMode = false
 
                     // Left arrow button
                     // Left arrow button
@@ -2118,11 +2265,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         verticalScrollBar =
                 LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
-                    setBackgroundColor(Color.BLACK) // Black background
+                    setBackgroundColor(Color.TRANSPARENT) // Transparent background
                     visibility = View.GONE
                     elevation = 150f
                     isClickable = true // Prevent click propagation
-                    isFocusable = true
+                    isFocusable = false
+                    isFocusableInTouchMode = false
 
                     // Up arrow button
                     // Up arrow button
@@ -2234,14 +2382,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, 30).apply {
                     gravity = Gravity.BOTTOM
                     leftMargin = 0
-                    bottomMargin = 30 // Sit on top of the 30px nav bar
+                    rightMargin = 30 // Prevent overlap with vertical scroll bar
+                    bottomMargin = navBarHeightPx // Sit on top of the nav bar
                 }
         )
         leftEyeUIContainer.addView(
                 verticalScrollBar,
                 FrameLayout.LayoutParams(30, FrameLayout.LayoutParams.MATCH_PARENT).apply {
                     gravity = Gravity.END
-                    bottomMargin = 30 // End at the nav bar
+                    bottomMargin = navBarHeightPx // End at the nav bar
                 }
         )
 
@@ -2694,11 +2843,36 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         } else {
             chatView.visibility = View.VISIBLE
             chatView.bringToFront()
+            maybePromptForGroqApiKey()
         }
         post {
             requestLayout()
             invalidate()
         }
+    }
+
+    private fun maybePromptForGroqApiKey() {
+        if (dialogContainer.visibility == View.VISIBLE) return
+        val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+        val currentKey = prefs.getString("groq_api_key", null)?.trim()
+        if (!currentKey.isNullOrBlank()) return
+
+        showPromptDialog(
+                "Enter Groq API Key",
+                currentKey,
+                { key ->
+                    val trimmed = key.trim()
+                    if (trimmed.isBlank()) {
+                        showToast("API Key Required")
+                        post { maybePromptForGroqApiKey() }
+                        return@showPromptDialog
+                    }
+                    prefs.edit().putString("groq_api_key", trimmed).apply()
+                    showToast("API Key Saved")
+                    keyboardListener?.onHideKeyboard()
+                },
+                { showToast("API Key Required") }
+        )
     }
 
     private fun toggleBookmarks() {
@@ -2943,7 +3117,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val isFullScreen = fullScreenOverlayContainer.visibility == View.VISIBLE
 
                 if (!isFullScreen && currentTime - lastScrollBarCheckTime > 1000) {
-                    updateScrollBarsVisibility()
+                    if (!shouldFreezeScrollBars()) {
+                        updateScrollBarsVisibility()
+                    }
                     lastScrollBarCheckTime = currentTime
                 }
 
@@ -3276,13 +3452,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     translationY = (keyboardY - editFieldHeight).toFloat()
                     visibility = View.VISIBLE
                     elevation = 1001f
-                    bringToFront()
                 }
             }
 
             // Ensure keyboard containers are on top but below edit fields
             keyboardContainer.elevation = 1000f
-            keyboardContainer.bringToFront()
         } else {
             // Log.d("EditFieldDebug", "Skipping edit field positioning - conditions not met")
 
@@ -3474,7 +3648,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val top = bottom - chatView.measuredHeight
                 chatView.layout(left, top, left + targetWidth, bottom)
             }
-            chatView.bringToFront()
         }
     }
 
@@ -4086,23 +4259,58 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun isPointInChat(screenX: Float, screenY: Float): Boolean {
         if (!isChatVisible()) return false
 
-        val chatLocation = IntArray(2)
-        chatView.getLocationOnScreen(chatLocation)
+        val uiLocation = IntArray(2)
+        leftEyeUIContainer.getLocationOnScreen(uiLocation)
 
-        return screenX >= chatLocation[0] &&
-                screenX <= chatLocation[0] + chatView.width &&
-                screenY >= chatLocation[1] &&
-                screenY <= chatLocation[1] + chatView.height
+        val translatedX = screenX - uiLocation[0]
+        val translatedY = screenY - uiLocation[1]
+
+        val localX: Float
+        val localY: Float
+
+        if (isAnchored) {
+            val rotationRad = Math.toRadians(leftEyeUIContainer.rotation.toDouble())
+            val cos = Math.cos(rotationRad).toFloat()
+            val sin = Math.sin(rotationRad).toFloat()
+            localX = (translatedX * cos + translatedY * sin) / uiScale
+            localY = (-translatedX * sin + translatedY * cos) / uiScale
+        } else {
+            localX = translatedX / uiScale
+            localY = translatedY / uiScale
+        }
+
+        return localX >= chatView.left &&
+                localX <= chatView.right &&
+                localY >= chatView.top &&
+                localY <= chatView.bottom
     }
 
     fun dispatchChatTouchEvent(screenX: Float, screenY: Float) {
         if (!isChatVisible()) return
 
-        val chatLocation = IntArray(2)
-        chatView.getLocationOnScreen(chatLocation)
-        val localX = screenX - chatLocation[0]
-        val localY = screenY - chatLocation[1]
-        chatView.handleAnchoredTap(localX, localY)
+        val uiLocation = IntArray(2)
+        leftEyeUIContainer.getLocationOnScreen(uiLocation)
+
+        val translatedX = screenX - uiLocation[0]
+        val translatedY = screenY - uiLocation[1]
+
+        val localX: Float
+        val localY: Float
+
+        if (isAnchored) {
+            val rotationRad = Math.toRadians(leftEyeUIContainer.rotation.toDouble())
+            val cos = Math.cos(rotationRad).toFloat()
+            val sin = Math.sin(rotationRad).toFloat()
+            localX = (translatedX * cos + translatedY * sin) / uiScale
+            localY = (-translatedX * sin + translatedY * cos) / uiScale
+        } else {
+            localX = translatedX / uiScale
+            localY = translatedY / uiScale
+        }
+
+        val finalX = localX - chatView.left
+        val finalY = localY - chatView.top
+        chatView.handleAnchoredTap(finalX, finalY)
     }
 
     fun isPointInKeyboard(screenX: Float, screenY: Float): Boolean {
@@ -4429,6 +4637,36 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private fun updateButtonHoverStates(screenX: Float, screenY: Float) {
         // Clear all states initially
         clearAllHoverStates()
+
+        if (::chatView.isInitialized && chatView.visibility == View.VISIBLE) {
+            val uiLocation = IntArray(2)
+            leftEyeUIContainer.getLocationOnScreen(uiLocation)
+
+            val translatedX = screenX - uiLocation[0]
+            val translatedY = screenY - uiLocation[1]
+
+            val localX: Float
+            val localY: Float
+
+            if (isAnchored) {
+                val rotationRad = Math.toRadians(leftEyeUIContainer.rotation.toDouble())
+                val cos = Math.cos(rotationRad).toFloat()
+                val sin = Math.sin(rotationRad).toFloat()
+                localX = (translatedX * cos + translatedY * sin) / uiScale
+                localY = (-translatedX * sin + translatedY * cos) / uiScale
+            } else {
+                localX = translatedX / uiScale
+                localY = translatedY / uiScale
+            }
+
+            val chatLocalX = localX - chatView.left
+            val chatLocalY = localY - chatView.top
+
+            if (chatView.updateHoverLocal(chatLocalX, chatLocalY)) {
+                customKeyboard?.updateHover(-1f, -1f)
+                return
+            }
+        }
 
         // Check bottom navigation bar buttons ONLY if nav bar is visible
         if (leftNavigationBar.visibility == View.VISIBLE) {
@@ -5623,6 +5861,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
                                 .getString("webTextColor", null)
                 applyWebFontSettings(savedFontSize, savedTextColor)
+
+                // Initialize cursor sensitivity seekbar
+                val sensitivitySeekBar = menu.findViewById<SeekBar>(R.id.cursorSensitivitySeekBar)
+                // Default 50 corresponds to 50%
+                val savedSensitivity =
+                        context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                                .getInt("cursorSensitivity", 50)
+                sensitivitySeekBar?.progress = savedSensitivity
             }
         }
 
@@ -5681,57 +5927,32 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val colorWheelView = menu.findViewById<ColorWheelView>(R.id.colorWheelView)
             val resetTextColorButton = menu.findViewById<Button>(R.id.btnResetTextColor)
             val groqKeyButton = menu.findViewById<Button>(R.id.btnGroqApiKey)
-            // Get screen locations
-            val volumeLocation = IntArray(2)
-            val brightnessLocation = IntArray(2)
-            val smoothnessLocation = IntArray(2)
-            val screenSizeLocation = IntArray(2)
-            val horzPosLocation = IntArray(2)
-            val vertPosLocation = IntArray(2)
-            val closeLocation = IntArray(2)
-            val helpLocation = IntArray(2)
-            val resetLocation = IntArray(2)
-            val resetScreenSizeLocation = IntArray(2)
-            val fontSizeLocation = IntArray(2)
-            val colorWheelLocation = IntArray(2)
-            val resetTextColorLocation = IntArray(2)
-            val groqKeyLocation = IntArray(2)
 
-            val menuLocation = IntArray(2)
-            menu.getLocationOnScreen(menuLocation)
+            fun getRect(view: View?): Rect? {
+                if (view == null || view.visibility != View.VISIBLE) return null
+                val rect = Rect()
+                return if (view.getGlobalVisibleRect(rect)) rect else null
+            }
 
-            volumeSeekBar?.getLocationOnScreen(volumeLocation)
-            brightnessSeekBar?.getLocationOnScreen(brightnessLocation)
-            smoothnessSeekBar?.getLocationOnScreen(smoothnessLocation)
-            screenSizeSeekBar?.getLocationOnScreen(screenSizeLocation)
-            horizontalPosSeekBar?.getLocationOnScreen(horzPosLocation)
-            verticalPosSeekBar?.getLocationOnScreen(vertPosLocation)
-            closeButton?.getLocationOnScreen(closeLocation)
-            helpButton?.getLocationOnScreen(helpLocation)
-            resetButton?.getLocationOnScreen(resetLocation)
-            resetScreenSizeButton?.getLocationOnScreen(resetScreenSizeLocation)
-            fontSizeSeekBar?.getLocationOnScreen(fontSizeLocation)
-            colorWheelView?.getLocationOnScreen(colorWheelLocation)
-            resetTextColorButton?.getLocationOnScreen(resetTextColorLocation)
-            groqKeyButton?.getLocationOnScreen(groqKeyLocation)
+            fun contains(rect: Rect?, slopPx: Int): Boolean {
+                if (rect == null) return false
+                return x >= rect.left - slopPx &&
+                        x <= rect.right + slopPx &&
+                        y >= rect.top - slopPx &&
+                        y <= rect.bottom + slopPx
+            }
 
-            val slop = 5 // Reduced from 40 to 5 to prevent overlapping touch targets
+            val menuSlop = (2f * uiScale).roundToInt()
+            val sliderSlop = (1f * uiScale).roundToInt()
+            val buttonSlop = (3f * uiScale).roundToInt()
 
-            if (x >= menuLocation[0] - slop &&
-                            x <= menuLocation[0] + (menu.width * uiScale) + slop &&
-                            y >= menuLocation[1] - slop &&
-                            y <= menuLocation[1] + (menu.height * uiScale) + slop
-            ) {
+            if (contains(getRect(menu), menuSlop)) {
                 // Check if click is on volume seekbar
-                if (volumeSeekBar != null &&
-                                x >= volumeLocation[0] - slop &&
-                                x <= volumeLocation[0] + (volumeSeekBar.width * uiScale) + slop &&
-                                y >= volumeLocation[1] - slop &&
-                                y <= volumeLocation[1] + (volumeSeekBar.height * uiScale) + slop
-                ) {
+                val volumeRect = getRect(volumeSeekBar)
+                if (volumeSeekBar != null && contains(volumeRect, sliderSlop)) {
 
                     // Calculate relative position on seekbar
-                    val relativeX = (x - volumeLocation[0]) / uiScale
+                    val relativeX = (x - volumeRect!!.left) / uiScale
                     val percentage =
                             relativeX.coerceIn(0f, volumeSeekBar.width.toFloat()) /
                                     volumeSeekBar.width
@@ -5758,21 +5979,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on brightness seekbar
-                if (brightnessSeekBar != null &&
-                                x >= brightnessLocation[0] - slop &&
-                                x <=
-                                        brightnessLocation[0] +
-                                                (brightnessSeekBar.width * uiScale) +
-                                                slop &&
-                                y >= brightnessLocation[1] - slop &&
-                                y <=
-                                        brightnessLocation[1] +
-                                                (brightnessSeekBar.height * uiScale) +
-                                                slop
-                ) {
+                val brightnessRect = getRect(brightnessSeekBar)
+                if (brightnessSeekBar != null && contains(brightnessRect, sliderSlop)) {
 
                     // Calculate relative position on seekbar
-                    val relativeX = (x - brightnessLocation[0]) / uiScale
+                    val relativeX = (x - brightnessRect!!.left) / uiScale
                     val percentage =
                             relativeX.coerceIn(0f, brightnessSeekBar.width.toFloat()) /
                                     brightnessSeekBar.width
@@ -5793,21 +6004,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on smoothness seekbar
-                if (smoothnessSeekBar != null &&
-                                x >= smoothnessLocation[0] - slop &&
-                                x <=
-                                        smoothnessLocation[0] +
-                                                (smoothnessSeekBar.width * uiScale) +
-                                                slop &&
-                                y >= smoothnessLocation[1] - slop &&
-                                y <=
-                                        smoothnessLocation[1] +
-                                                (smoothnessSeekBar.height * uiScale) +
-                                                slop
-                ) {
+                val smoothnessRect = getRect(smoothnessSeekBar)
+                if (smoothnessSeekBar != null && contains(smoothnessRect, sliderSlop)) {
 
                     // Calculate relative position on seekbar
-                    val relativeX = (x - smoothnessLocation[0]) / uiScale
+                    val relativeX = (x - smoothnessRect!!.left) / uiScale
                     val percentage =
                             relativeX.coerceIn(0f, smoothnessSeekBar.width.toFloat()) /
                                     smoothnessSeekBar.width
@@ -5832,22 +6033,68 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     return
                 }
 
-                // Check if click is on screen size seekbar
-                if (screenSizeSeekBar != null &&
-                                x >= screenSizeLocation[0] - slop &&
-                                x <=
-                                        screenSizeLocation[0] +
-                                                (screenSizeSeekBar.width * uiScale) +
-                                                slop &&
-                                y >= screenSizeLocation[1] - slop &&
-                                y <=
-                                        screenSizeLocation[1] +
-                                                (screenSizeSeekBar.height * uiScale) +
-                                                slop
+                // Check if click is on cursor sensitivity seekbar
+                val sensitivitySeekBar = menu.findViewById<SeekBar>(R.id.cursorSensitivitySeekBar)
+                val sensitivityRect = getRect(sensitivitySeekBar)
+
+                if (sensitivitySeekBar != null && contains(sensitivityRect, sliderSlop)) {
+                    // Calculate relative position on seekbar
+                    val relativeX = (x - sensitivityRect!!.left) / uiScale
+                    val percentage =
+                            relativeX.coerceIn(0f, sensitivitySeekBar.width.toFloat()) /
+                                    sensitivitySeekBar.width
+                    val newProgress = (percentage * sensitivitySeekBar.max).toInt()
+
+                    // Update sensitivity and save preference
+                    sensitivitySeekBar.progress = newProgress
+                    context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                            .edit()
+                            .putInt("cursorSensitivity", newProgress)
+                            .apply()
+
+                    // Notify MainActivity
+                    (context as? MainActivity)?.updateCursorSensitivity(newProgress)
+
+                    // Visual feedback
+                    sensitivitySeekBar.isPressed = true
+                    Handler(Looper.getMainLooper())
+                            .postDelayed({ sensitivitySeekBar.isPressed = false }, 100)
+                    return
+                }
+
+                // Check if click is on reset sensitivity button
+                val resetSensitivityButton =
+                        menu.findViewById<Button>(R.id.btnResetCursorSensitivity)
+                val resetSensitivityRect = getRect(resetSensitivityButton)
+
+                if (resetSensitivityButton != null &&
+                                contains(resetSensitivityRect, buttonSlop)
                 ) {
+                    // Reset to 50%
+                    val sensitivitySeekBar =
+                            menu.findViewById<SeekBar>(R.id.cursorSensitivitySeekBar)
+                    sensitivitySeekBar?.progress = 50
+
+                    context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                            .edit()
+                            .putInt("cursorSensitivity", 50)
+                            .apply()
+
+                    (context as? MainActivity)?.updateCursorSensitivity(50)
+
+                    // Visual feedback
+                    resetSensitivityButton.isPressed = true
+                    Handler(Looper.getMainLooper())
+                            .postDelayed({ resetSensitivityButton.isPressed = false }, 100)
+                    return
+                }
+
+                // Check if click is on screen size seekbar
+                val screenSizeRect = getRect(screenSizeSeekBar)
+                if (screenSizeSeekBar != null && contains(screenSizeRect, sliderSlop)) {
 
                     // Calculate relative position on seekbar
-                    val relativeX = (x - screenSizeLocation[0]) / uiScale
+                    val relativeX = (x - screenSizeRect!!.left) / uiScale
                     val percentage =
                             relativeX.coerceIn(0f, screenSizeSeekBar.width.toFloat()) /
                                     screenSizeSeekBar.width
@@ -5909,12 +6156,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on Groq API Key button
-                if (groqKeyButton != null &&
-                                x >= groqKeyLocation[0] - slop &&
-                                x <= groqKeyLocation[0] + (groqKeyButton.width * uiScale) + slop &&
-                                y >= groqKeyLocation[1] - slop &&
-                                y <= groqKeyLocation[1] + (groqKeyButton.height * uiScale) + slop
-                ) {
+                val groqKeyRect = getRect(groqKeyButton)
+                if (groqKeyButton != null && contains(groqKeyRect, buttonSlop)) {
 
                     // Visual feedback
                     groqKeyButton.isPressed = true
@@ -5931,17 +6174,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on reset screen size button
+                val resetScreenSizeRect = getRect(resetScreenSizeButton)
                 if (resetScreenSizeButton != null &&
-                                x >= resetScreenSizeLocation[0] - slop &&
-                                x <=
-                                        resetScreenSizeLocation[0] +
-                                                (resetScreenSizeButton.width * uiScale) +
-                                                slop &&
-                                y >= resetScreenSizeLocation[1] - slop &&
-                                y <=
-                                        resetScreenSizeLocation[1] +
-                                                (resetScreenSizeButton.height * uiScale) +
-                                                slop
+                                contains(resetScreenSizeRect, buttonSlop)
                 ) {
 
                     // Reset screen size to 100%
@@ -5994,21 +6229,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on horizontal pos seekbar
+                val horizontalPosRect = getRect(horizontalPosSeekBar)
                 if (horizontalPosSeekBar != null &&
                                 horizontalPosSeekBar.visibility == View.VISIBLE &&
-                                x >= horzPosLocation[0] - slop &&
-                                x <=
-                                        horzPosLocation[0] +
-                                                (horizontalPosSeekBar.width * uiScale) +
-                                                slop &&
-                                y >= horzPosLocation[1] - slop &&
-                                y <=
-                                        horzPosLocation[1] +
-                                                (horizontalPosSeekBar.height * uiScale) +
-                                                slop
+                                contains(horizontalPosRect, sliderSlop)
                 ) {
 
-                    val relativeX = (x - horzPosLocation[0]) / uiScale
+                    val relativeX = (x - horizontalPosRect!!.left) / uiScale
                     val percentage =
                             relativeX.coerceIn(0f, horizontalPosSeekBar.width.toFloat()) /
                                     horizontalPosSeekBar.width
@@ -6030,21 +6257,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on vertical pos seekbar
+                val verticalPosRect = getRect(verticalPosSeekBar)
                 if (verticalPosSeekBar != null &&
                                 verticalPosSeekBar.visibility == View.VISIBLE &&
-                                x >= vertPosLocation[0] - slop &&
-                                x <=
-                                        vertPosLocation[0] +
-                                                (verticalPosSeekBar.width * uiScale) +
-                                                slop &&
-                                y >= vertPosLocation[1] - slop &&
-                                y <=
-                                        vertPosLocation[1] +
-                                                (verticalPosSeekBar.height * uiScale) +
-                                                slop
+                                contains(verticalPosRect, sliderSlop)
                 ) {
 
-                    val relativeX = (x - vertPosLocation[0]) / uiScale
+                    val relativeX = (x - verticalPosRect!!.left) / uiScale
                     val percentage =
                             relativeX.coerceIn(0f, verticalPosSeekBar.width.toFloat()) /
                                     verticalPosSeekBar.width
@@ -6066,12 +6285,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on reset button
+                val resetRect = getRect(resetButton)
                 if (resetButton != null &&
                                 resetButton.visibility == View.VISIBLE &&
-                                x >= resetLocation[0] - slop &&
-                                x <= resetLocation[0] + (resetButton.width * uiScale) + slop &&
-                                y >= resetLocation[1] - slop &&
-                                y <= resetLocation[1] + (resetButton.height * uiScale) + slop
+                                contains(resetRect, buttonSlop)
                 ) {
 
                     // Reset position progress to 50 (center)
@@ -6094,12 +6311,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on help button
-                if (helpButton != null &&
-                                x >= helpLocation[0] - slop &&
-                                x <= helpLocation[0] + (helpButton.width * uiScale) + slop &&
-                                y >= helpLocation[1] - slop &&
-                                y <= helpLocation[1] + (helpButton.height * uiScale) + slop
-                ) {
+                val helpRect = getRect(helpButton)
+                if (helpButton != null && contains(helpRect, buttonSlop)) {
 
                     // Visual feedback
                     helpButton.isPressed = true
@@ -6117,21 +6330,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                 // Check if click is on Reset Zoom button
                 val resetZoomButton = menu.findViewById<Button>(R.id.btnResetFontSize)
-                val resetZoomLocation = IntArray(2)
-                resetZoomButton?.getLocationOnScreen(resetZoomLocation)
+                val resetZoomRect = getRect(resetZoomButton)
 
-                if (resetZoomButton != null &&
-                                x >= resetZoomLocation[0] - slop &&
-                                x <=
-                                        resetZoomLocation[0] +
-                                                (resetZoomButton.width * uiScale) +
-                                                slop &&
-                                y >= resetZoomLocation[1] - slop &&
-                                y <=
-                                        resetZoomLocation[1] +
-                                                (resetZoomButton.height * uiScale) +
-                                                slop
-                ) {
+                if (resetZoomButton != null && contains(resetZoomRect, buttonSlop)) {
 
                     // Reset font size to 100% (progress 50)
                     fontSizeSeekBar?.progress = 50
@@ -6157,20 +6358,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                 // Check if click is on Reset Webpage Zoom button
                 val resetWebpageZoomButton = menu.findViewById<Button>(R.id.btnResetWebpageZoom)
-                val resetWebpageZoomLocation = IntArray(2)
-                resetWebpageZoomButton?.getLocationOnScreen(resetWebpageZoomLocation)
+                val resetWebpageZoomRect = getRect(resetWebpageZoomButton)
 
                 if (resetWebpageZoomButton != null &&
-                                x >= resetWebpageZoomLocation[0] - slop &&
-                                x <=
-                                        resetWebpageZoomLocation[0] +
-                                                (resetWebpageZoomButton.width * uiScale) +
-                                                slop &&
-                                y >= resetWebpageZoomLocation[1] - slop &&
-                                y <=
-                                        resetWebpageZoomLocation[1] +
-                                                (resetWebpageZoomButton.height * uiScale) +
-                                                slop
+                                contains(resetWebpageZoomRect, buttonSlop)
                 ) {
 
                     // Reset webpage zoom to 1.0
@@ -6207,18 +6398,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on font size seekbar
-                if (fontSizeSeekBar != null &&
-                                x >= fontSizeLocation[0] - slop &&
-                                x <=
-                                        fontSizeLocation[0] +
-                                                (fontSizeSeekBar.width * uiScale) +
-                                                slop &&
-                                y >= fontSizeLocation[1] - slop &&
-                                y <= fontSizeLocation[1] + (fontSizeSeekBar.height * uiScale) + slop
-                ) {
+                val fontSizeRect = getRect(fontSizeSeekBar)
+                if (fontSizeSeekBar != null && contains(fontSizeRect, sliderSlop)) {
 
                     // Calculate relative position on seekbar
-                    val relativeX = (x - fontSizeLocation[0]) / uiScale
+                    val relativeX = (x - fontSizeRect!!.left) / uiScale
                     val percentage =
                             relativeX.coerceIn(0f, fontSizeSeekBar.width.toFloat()) /
                                     fontSizeSeekBar.width
@@ -6247,22 +6431,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on color wheel
-                if (colorWheelView != null &&
-                                x >= colorWheelLocation[0] - slop &&
-                                x <=
-                                        colorWheelLocation[0] +
-                                                (colorWheelView.width * uiScale) +
-                                                slop &&
-                                y >= colorWheelLocation[1] - slop &&
-                                y <=
-                                        colorWheelLocation[1] +
-                                                (colorWheelView.height * uiScale) +
-                                                slop
-                ) {
+                val colorWheelRect = getRect(colorWheelView)
+                if (colorWheelView != null && contains(colorWheelRect, sliderSlop)) {
 
                     // Calculate relative position
-                    val relativeX = (x - colorWheelLocation[0]) / uiScale
-                    val relativeY = (y - colorWheelLocation[1]) / uiScale
+                    val relativeX = (x - colorWheelRect!!.left) / uiScale
+                    val relativeY = (y - colorWheelRect.top) / uiScale
 
                     val selectedColor =
                             colorWheelView.calculateColorFromCoordinates(relativeX, relativeY)
@@ -6282,17 +6456,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on reset text color button
+                val resetTextColorRect = getRect(resetTextColorButton)
                 if (resetTextColorButton != null &&
-                                x >= resetTextColorLocation[0] - slop &&
-                                x <=
-                                        resetTextColorLocation[0] +
-                                                (resetTextColorButton.width * uiScale) +
-                                                slop &&
-                                y >= resetTextColorLocation[1] - slop &&
-                                y <=
-                                        resetTextColorLocation[1] +
-                                                (resetTextColorButton.height * uiScale) +
-                                                slop
+                                contains(resetTextColorRect, buttonSlop)
                 ) {
 
                     // Reset color to white
@@ -6309,12 +6475,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on close button
-                if (closeButton != null &&
-                                x >= closeLocation[0] - slop &&
-                                x <= closeLocation[0] + (closeButton.width * uiScale) + slop &&
-                                y >= closeLocation[1] - slop &&
-                                y <= closeLocation[1] + (closeButton.height * uiScale) + slop
-                ) {
+                val closeRect = getRect(closeButton)
+                if (closeButton != null && contains(closeRect, buttonSlop)) {
 
                     // Visual feedback
                     closeButton.isPressed = true
@@ -6999,7 +7161,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun isDialogAction(x: Float, y: Float): Boolean {
-        if (dialogContainer.visibility != View.VISIBLE) return false
+        if (dialogContainer.visibility != View.VISIBLE || !dialogContainer.isClickable) return false
         val loc = IntArray(2)
         dialogContainer.getLocationOnScreen(loc)
         return x >= loc[0] &&
@@ -7054,8 +7216,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         btnMaskPrevTrack =
                 createMediaButton(R.string.fa_backward_step) {
                     // Try to click previous track button (works on YouTube, Spotify, etc.)
-                    webView.evaluateJavascript(
-                            """
+                    getMediaControlWebView()
+                            .evaluateJavascript(
+                                    """
                 (function() {
                     // Try common previous track selectors
                     var prevBtn = document.querySelector('.ytp-prev-button') || 
@@ -7068,48 +7231,53 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     if (media) media.currentTime = 0;
                 })();
             """.trimIndent(),
-                            null
-                    )
+                                    null
+                            )
                 }
         btnMaskPrev =
                 createMediaButton(R.string.fa_backward) {
-                    webView.evaluateJavascript(
-                            "document.querySelector('video, audio').currentTime -= 10;",
-                            null
-                    )
+                    getMediaControlWebView()
+                            .evaluateJavascript(
+                                    "document.querySelector('video, audio').currentTime -= 10;",
+                                    null
+                            )
                 }
         btnMaskPlay =
                 createMediaButton(R.string.fa_play) {
-                    webView.evaluateJavascript(
-                            "document.querySelector('video, audio').play();",
-                            null
-                    )
+                    getMediaControlWebView()
+                            .evaluateJavascript(
+                                    "document.querySelector('video, audio').play();",
+                                    null
+                            )
                     // Immediately update button visibility for responsive UI
                     btnMaskPlay.visibility = View.GONE
                     btnMaskPause.visibility = View.VISIBLE
                 }
         btnMaskPause =
                 createMediaButton(R.string.fa_pause) {
-                    webView.evaluateJavascript(
-                            "document.querySelector('video, audio').pause();",
-                            null
-                    )
+                    getMediaControlWebView()
+                            .evaluateJavascript(
+                                    "document.querySelector('video, audio').pause();",
+                                    null
+                            )
                     // Immediately update button visibility for responsive UI
                     btnMaskPause.visibility = View.GONE
                     btnMaskPlay.visibility = View.VISIBLE
                 }
         btnMaskNext =
                 createMediaButton(R.string.fa_forward) {
-                    webView.evaluateJavascript(
-                            "document.querySelector('video, audio').currentTime += 10;",
-                            null
-                    )
+                    getMediaControlWebView()
+                            .evaluateJavascript(
+                                    "document.querySelector('video, audio').currentTime += 10;",
+                                    null
+                            )
                 }
         btnMaskNextTrack =
                 createMediaButton(R.string.fa_forward_step) {
                     // Try to click next track button (works on YouTube, Spotify, etc.)
-                    webView.evaluateJavascript(
-                            """
+                    getMediaControlWebView()
+                            .evaluateJavascript(
+                                    """
                 (function() {
                     // Try common next track selectors
                     var nextBtn = document.querySelector('.ytp-next-button') || 
@@ -7122,8 +7290,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     if (media) media.currentTime = media.duration;
                 })();
             """.trimIndent(),
-                            null
-                    )
+                                    null
+                            )
                 }
 
         btnMaskPause.visibility = View.GONE // Initially show Play
@@ -7158,6 +7326,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun updateMediaState(isPlaying: Boolean) {
         // Log.d("MediaControls", "updateMediaState called: isPlaying=$isPlaying,
         // isScreenMasked=$isScreenMasked")
+        isMediaPlaying = isPlaying
+        if (isPlaying) {
+            lastMediaPlayingAt = SystemClock.uptimeMillis()
+        }
         post {
             if (isPlaying) {
                 // Log.d("MediaControls", "Setting to playing state")
@@ -7179,8 +7351,42 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
+    fun isMediaPlaying(): Boolean {
+        return isMediaPlaying
+    }
+
     fun hideMediaControls() {
         post { maskMediaControlsContainer.visibility = View.GONE }
+    }
+
+    private fun handleMediaStateChanged(sourceWebView: WebView, isPlaying: Boolean) {
+        val windowId = windows.firstOrNull { it.webView == sourceWebView }?.id
+        if (windowId == null) {
+            updateMediaState(isPlaying)
+            return
+        }
+
+        mediaStateByWindowId[windowId] = isPlaying
+        if (isPlaying) {
+            mediaLastPlayedAtByWindowId[windowId] = SystemClock.uptimeMillis()
+        }
+
+        val anyPlaying = mediaStateByWindowId.values.any { it }
+        updateMediaState(anyPlaying)
+    }
+
+    private fun getMediaControlWebView(): WebView {
+        val playingIds = mediaStateByWindowId.filterValues { it }.keys
+        val targetId =
+                if (playingIds.isNotEmpty()) {
+                    playingIds.maxByOrNull { mediaLastPlayedAtByWindowId[it] ?: 0L }
+                } else {
+                    mediaLastPlayedAtByWindowId.keys.maxByOrNull {
+                        mediaLastPlayedAtByWindowId[it] ?: 0L
+                    }
+                }
+
+        return windows.firstOrNull { it.id == targetId }?.webView ?: webView
     }
 
     fun injectLocation(latitude: Double, longitude: Double) {
@@ -7249,5 +7455,84 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         """.trimIndent()
 
         post { webView.evaluateJavascript(script, null) }
+    }
+
+    fun injectMediaListeners(targetWebView: WebView) {
+        val script =
+                """
+            (function() {
+                if (window.__mediaListenersInjected) return;
+                window.__mediaListenersInjected = true;
+
+                function attachListeners(media) {
+                    if (media.__listenersAttached) return;
+                    media.__listenersAttached = true;
+                    
+                    media.addEventListener('play', function() {
+                        console.log('MediaInterface: play detected');
+                        window.MediaInterface.onMediaStateChanged(true);
+                    });
+                    
+                    media.addEventListener('pause', function() {
+                        // Check if any other media is playing before saying paused
+                        const allMedia = document.querySelectorAll('video, audio');
+                        let anyPlaying = false;
+                        for(let i=0; i<allMedia.length; i++) {
+                            if(!allMedia[i].paused && !allMedia[i].ended && allMedia[i].readyState > 2) {
+                                anyPlaying = true;
+                                break;
+                            }
+                        }
+                        console.log('MediaInterface: pause detected. Any playing? ' + anyPlaying);
+                        window.MediaInterface.onMediaStateChanged(anyPlaying);
+                    });
+                    
+                    media.addEventListener('ended', function() {
+                         const allMedia = document.querySelectorAll('video, audio');
+                        let anyPlaying = false;
+                        for(let i=0; i<allMedia.length; i++) {
+                            if(!allMedia[i].paused && !allMedia[i].ended && allMedia[i].readyState > 2) {
+                                anyPlaying = true;
+                                break;
+                            }
+                        }
+                        console.log('MediaInterface: ended detected. Any playing? ' + anyPlaying);
+                        window.MediaInterface.onMediaStateChanged(anyPlaying);
+                    });
+                }
+
+                // Attach to existing media
+                const existingMedia = document.querySelectorAll('video, audio');
+                existingMedia.forEach(attachListeners);
+
+                // Observe for new media
+                const observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        mutation.addedNodes.forEach(function(node) {
+                            if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO') {
+                                attachListeners(node);
+                            } else if (node.querySelectorAll) {
+                                node.querySelectorAll('video, audio').forEach(attachListeners);
+                            }
+                        });
+                    });
+                });
+                
+                observer.observe(document.body, { childList: true, subtree: true });
+            })();
+        """.trimIndent()
+
+        targetWebView.evaluateJavascript(script, null)
+    }
+
+    private class MediaInterface(
+            private val parent: DualWebViewGroup,
+            private val sourceWebView: WebView
+    ) {
+        @android.webkit.JavascriptInterface
+        fun onMediaStateChanged(isPlaying: Boolean) {
+            // Run on UI thread to update UI
+            parent.post { parent.handleMediaStateChanged(sourceWebView, isPlaying) }
+        }
     }
 }
