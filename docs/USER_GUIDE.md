@@ -131,6 +131,7 @@ When Scroll Mode is active, a small transparent **Show** button appears in the b
 
 ### Switch Tabs
 1. Tap a window thumbnail in the grid to switch to it.
+2. **Background Playback**: Audio and video from other tabs will continue playing in the background.
 
 ### Close a Tab
 1. Tap the **X** in the top-right of a window thumbnail.

@@ -17,6 +17,7 @@ You can now fine-tune the responsiveness of the cursor to match your preference.
 
 ## ✨ Polished & Documented Features
 This update also solidifies and officially documents several key features:
+-   **Background Media Playback**: Audio and video continue to play even when you switch to a different tab or minimize the window.
 -   **Voice Control**: Use the microphone button to input text using your voice (powered by Groq).
 -   **Netflix Support**: Automatic handling of User Agent strings to ensure Widevine DRM compatibility for Netflix playback.
 -   **Anchor Smoothness**: Adjust the smoothing factor for anchored mode to balance stability and responsiveness.
