@@ -220,7 +220,6 @@ class MainActivity :
     private val onBackPressedCallback =
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    // DebugLog.d("MainActivity", "Back key pressed")
                     when {
                         fullScreenCustomView != null -> {
                             hideFullScreenCustomView()
@@ -659,7 +658,6 @@ class MainActivity :
                                     isCursorVisible -> {
                                         // Check if this is a long press
                                         if (e.eventTime - e.downTime > longPressTimeout) {
-                                            // DebugLog.d("TouchDebug", "Long press detected,
                                             // ignoring input interaction")
                                             return true
                                         }
@@ -843,7 +841,6 @@ class MainActivity :
         }
 
         webView = dualWebViewGroup.getWebView()
-        // DebugLog.d("WebViewDebug", "Initial WebView state - URL: ${webView.url}")
 
         webView.setOnTouchListener { _, event ->
 
@@ -959,9 +956,7 @@ class MainActivity :
 
                         wasKeyboardDismissedByEnter = false
 
-                        wasKeyboardDismissedByEnter = false
                         // Log focus state
-                        // DebugLog.d("WebViewDebug", "WebView focus state: ${view?.isFocused}")
 
                         // Update scrollbar visibility based on new content
                         dualWebViewGroup.updateScrollBarsVisibility()
@@ -992,7 +987,6 @@ class MainActivity :
                             isReload: Boolean
                     ) {
                         super.doUpdateVisitedHistory(view, url, isReload)
-                        // DebugLog.d("WebDebug", "History updated - url: $url, canGoBack:
                         // ${view?.canGoBack()}")
                     }
                 }
@@ -1014,7 +1008,6 @@ class MainActivity :
 
         // Set up the listener
         dualWebViewGroup.linkEditingListener = this
-        // DebugLog.d("LinkEditing", "Set MainActivity as linkEditingListener")
 
         // Add after other listener assignments
         dualWebViewGroup.anchorToggleListener = this
@@ -3512,7 +3505,6 @@ class MainActivity :
                                 message: String?,
                                 result: android.webkit.JsResult?
                         ): Boolean {
-                            // DebugLog.d("DialogDebug", "onJsAlert: $message")
                             dualWebViewGroup.showAlertDialog(message ?: "") { result?.confirm() }
                             return true
                         }
@@ -3523,7 +3515,6 @@ class MainActivity :
                                 message: String?,
                                 result: android.webkit.JsResult?
                         ): Boolean {
-                            // DebugLog.d("DialogDebug", "onJsConfirm: $message")
                             dualWebViewGroup.showConfirmDialog(
                                     message ?: "",
                                     { result?.confirm() },
@@ -3539,7 +3530,6 @@ class MainActivity :
                                 defaultValue: String?,
                                 result: android.webkit.JsPromptResult?
                         ): Boolean {
-                            // DebugLog.d("DialogDebug", "onJsPrompt: $message")
                             dualWebViewGroup.showPromptDialog(
                                     message ?: "",
                                     defaultValue,
@@ -3555,7 +3545,6 @@ class MainActivity :
                                 message: String?,
                                 result: android.webkit.JsResult?
                         ): Boolean {
-                            // DebugLog.d("DialogDebug", "onJsBeforeUnload: $message")
                             dualWebViewGroup.showConfirmDialog(
                                     message ?: "Are you sure you want to leave this page?",
                                     { result?.confirm() },
@@ -4017,8 +4006,6 @@ class MainActivity :
         // Hide info bars when keyboard shows
         dualWebViewGroup.hideInfoBars()
 
-        // Hide info bars when keyboard shows
-        dualWebViewGroup.hideInfoBars()
 
         keyboardView?.let { keyboard ->
             // Log state before setting keyboard
@@ -4539,7 +4526,6 @@ class MainActivity :
     }
 
     override fun onRefreshPressed() {
-        // DebugLog.d("Navigation", "Refresh pressed")
         val currentUrl = webView.url
         webView.evaluateJavascript(
                 """
