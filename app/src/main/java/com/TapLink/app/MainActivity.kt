@@ -268,6 +268,7 @@ class MainActivity :
     private var sensorEventListener = createSensorEventListener()
     private var shouldResetInitialQuaternion = false
     private var pendingDoubleTapAction = false
+    private var isSyntheticTapDispatching = false
 
     private val SCROLL_MODE_TIMEOUT = 60000L // 60 seconds in milliseconds
     private var scrollModeHandler = Handler(Looper.getMainLooper())
@@ -864,6 +865,9 @@ class MainActivity :
                 return@setOnTouchListener false
             }
 
+            if (isSyntheticTapDispatching) {
+                return@setOnTouchListener true
+            }
             if (isSimulatingTouchEvent) {
                 return@setOnTouchListener false
             }
@@ -1716,6 +1720,7 @@ class MainActivity :
 
         // Reset interaction states
         endSimulatedTouch()
+        isSyntheticTapDispatching = false
         cursorJustAppeared = false
         isToggling = false
 
@@ -2504,6 +2509,7 @@ class MainActivity :
 
         // WebView click path
         beginSimulatedTouch()
+        isSyntheticTapDispatching = true
         try {
             val webViewLocation = IntArray(2)
             webView.getLocationOnScreen(webViewLocation)
@@ -2606,6 +2612,7 @@ class MainActivity :
                                                                 adjustedY.toInt()
                                                         )
                                                         endSimulatedTouch()
+                                                        isSyntheticTapDispatching = false
                                                         cursorJustAppeared = false
                                                         isToggling = false
                                                     },
@@ -2619,6 +2626,7 @@ class MainActivity :
             DebugLog.e("ClickDebug", "Error in dispatchTouchEventAtCursor: ${e.message}")
             e.printStackTrace()
             endSimulatedTouch()
+            isSyntheticTapDispatching = false
         }
     }
 
@@ -2927,6 +2935,9 @@ class MainActivity :
                 return@setOnTouchListener false
             }
 
+            if (isSyntheticTapDispatching) {
+                return@setOnTouchListener true
+            }
             if (isSimulatingTouchEvent) {
                 return@setOnTouchListener false
             }
