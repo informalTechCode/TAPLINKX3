@@ -124,6 +124,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var jsScrollMetrics: ScrollMetrics? = null
     private var jsScrollMetricsTimestamp = 0L
     private val jsScrollMetricsTimeoutMs = 2000L
+    private var lastScrollMetricsLogTime = 0L
+    private var lastScrollBarInteractionTime = 0L
 
     private var leftSystemInfoView: SystemInfoView
 
@@ -478,10 +480,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             // Scroll the WebView content
             val scrollAmount = delta * 15 // Increase sensitivity
             if (shouldUseJsScrollForAxis(isHorizontal = true)) {
-                webView.evaluateJavascript(
-                        "window.__taplinkScrollBy($scrollAmount, 0);",
-                        null
-                )
+                evaluateJsScroll("window.__taplinkScrollBy($scrollAmount, 0)")
             } else {
                 webView.scrollBy(scrollAmount, 0)
             }
@@ -502,10 +501,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             // Scroll the WebView content
             val scrollAmount = delta * 15 // Increase sensitivity
             if (shouldUseJsScrollForAxis(isHorizontal = false)) {
-                webView.evaluateJavascript(
-                        "window.__taplinkScrollBy(0, $scrollAmount);",
-                        null
-                )
+                evaluateJsScroll("window.__taplinkScrollBy(0, $scrollAmount)")
             } else {
                 webView.scrollBy(0, scrollAmount)
             }
@@ -540,12 +536,36 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return range <= extent && jsRange > jsExtent
     }
 
+    private fun evaluateJsScroll(script: String) {
+        webView.evaluateJavascript(
+                "(function(){ $script; if (window.__taplinkReportScrollMetrics) { window.__taplinkReportScrollMetrics(); } })();",
+                null
+        )
+    }
+
     private fun updateScrollBarThumbs(xProgress: Int, yProgress: Int) {
+        val now = SystemClock.uptimeMillis()
+        if (isInteractingWithScrollBar && now - lastScrollBarInteractionTime < 120L) return
+
         if (isWebViewScrollEnabled()) {
             val metrics = getFreshJsScrollMetrics()
+            val useJsHorizontal = metrics != null && metrics.rangeX > metrics.extentX
+            val useJsVertical = metrics != null && metrics.rangeY > metrics.extentY
 
             // Update Horizontal Thumb based on WebView scroll
-            val hTrackWidth = (horizontalScrollBar.getChildAt(1) as? FrameLayout)?.width ?: 0
+            val hTrackContainer = horizontalScrollBar.getChildAt(1) as? FrameLayout
+            val hTrackWidth =
+                    when {
+                        hTrackContainer != null && hTrackContainer.width > 0 -> hTrackContainer.width
+                        hTrackContainer != null && hTrackContainer.measuredWidth > 0 ->
+                                hTrackContainer.measuredWidth
+                        horizontalScrollBar.width > 0 -> {
+                            val leftBtnWidth = horizontalScrollBar.getChildAt(0)?.width ?: 0
+                            val rightBtnWidth = horizontalScrollBar.getChildAt(2)?.width ?: 0
+                            (horizontalScrollBar.width - leftBtnWidth - rightBtnWidth).coerceAtLeast(0)
+                        }
+                        else -> 0
+                    }
             if (hTrackWidth > 0) {
                 val thumbWidth = 60
                 val maxMargin = hTrackWidth - thumbWidth
@@ -564,26 +584,33 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val webRange = webView.getHorizontalScrollRange()
                 val webExtent = webView.getHorizontalScrollExtent()
                 val webOffset = webView.getHorizontalScrollOffset()
-                val useJs =
-                        metrics != null && webRange <= webExtent && metrics.rangeX > metrics.extentX
-                val range = if (useJs) metrics!!.rangeX else webRange
-                val extent = if (useJs) metrics.extentX else webExtent
-                val offset = if (useJs) metrics.offsetX else webOffset
+                val range = if (useJsHorizontal) metrics!!.rangeX else webRange
+                val extent = if (useJsHorizontal) metrics.extentX else webExtent
+                val offset = if (useJsHorizontal) metrics.offsetX else webOffset
 
                 if (range > extent) {
                     val maxScroll = range - extent
                     val ratio = offset.coerceIn(0, maxScroll).toFloat() / maxScroll
                     val hMargin = (ratio * maxMargin).toInt().coerceIn(0, maxMargin)
-
-                    (hScrollThumb.layoutParams as? FrameLayout.LayoutParams)?.let {
-                        it.leftMargin = hMargin
-                        hScrollThumb.layoutParams = it
-                    }
+                    hScrollThumb.translationX = hMargin.toFloat()
+                    hScrollThumb.invalidate()
                 }
             }
 
             // Update Vertical Thumb based on WebView scroll
-            val vTrackHeight = (verticalScrollBar.getChildAt(1) as? FrameLayout)?.height ?: 0
+            val vTrackContainer = verticalScrollBar.getChildAt(1) as? FrameLayout
+            val vTrackHeight =
+                    when {
+                        vTrackContainer != null && vTrackContainer.height > 0 -> vTrackContainer.height
+                        vTrackContainer != null && vTrackContainer.measuredHeight > 0 ->
+                                vTrackContainer.measuredHeight
+                        verticalScrollBar.height > 0 -> {
+                            val topBtnHeight = verticalScrollBar.getChildAt(0)?.height ?: 0
+                            val bottomBtnHeight = verticalScrollBar.getChildAt(2)?.height ?: 0
+                            (verticalScrollBar.height - topBtnHeight - bottomBtnHeight).coerceAtLeast(0)
+                        }
+                        else -> 0
+                    }
             if (vTrackHeight > 0) {
                 val thumbHeight = 60
                 val maxMargin = vTrackHeight - thumbHeight
@@ -591,47 +618,62 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val webRange = webView.getVerticalScrollRange()
                 val webExtent = webView.getVerticalScrollExtent()
                 val webOffset = webView.getVerticalScrollOffset()
-                val useJs =
-                        metrics != null && webRange <= webExtent && metrics.rangeY > metrics.extentY
-                val range = if (useJs) metrics!!.rangeY else webRange
-                val extent = if (useJs) metrics.extentY else webExtent
-                val offset = if (useJs) metrics.offsetY else webOffset
+                val range = if (useJsVertical) metrics!!.rangeY else webRange
+                val extent = if (useJsVertical) metrics.extentY else webExtent
+                val offset = if (useJsVertical) metrics.offsetY else webOffset
 
                 if (range > extent) {
                     val maxScroll = range - extent
                     val ratio = offset.coerceIn(0, maxScroll).toFloat() / maxScroll
                     val vMargin = (ratio * maxMargin).toInt().coerceIn(0, maxMargin)
-
-                    (vScrollThumb.layoutParams as? FrameLayout.LayoutParams)?.let {
-                        it.topMargin = vMargin
-                        vScrollThumb.layoutParams = it
-                    }
+                    vScrollThumb.translationY = vMargin.toFloat()
+                    vScrollThumb.invalidate()
                 }
             }
         } else {
             // Existing logic for non-anchored (viewport pan)
             // Update horizontal thumb position
-            val hTrackWidth = (horizontalScrollBar.getChildAt(1) as? FrameLayout)?.width ?: 0
+            val hTrackContainer = horizontalScrollBar.getChildAt(1) as? FrameLayout
+            val hTrackWidth =
+                    when {
+                        hTrackContainer != null && hTrackContainer.width > 0 -> hTrackContainer.width
+                        hTrackContainer != null && hTrackContainer.measuredWidth > 0 ->
+                                hTrackContainer.measuredWidth
+                        horizontalScrollBar.width > 0 -> {
+                            val leftBtnWidth = horizontalScrollBar.getChildAt(0)?.width ?: 0
+                            val rightBtnWidth = horizontalScrollBar.getChildAt(2)?.width ?: 0
+                            (horizontalScrollBar.width - leftBtnWidth - rightBtnWidth).coerceAtLeast(0)
+                        }
+                        else -> 0
+                    }
             if (hTrackWidth > 0) {
                 val thumbWidth = 60
                 val maxMargin = hTrackWidth - thumbWidth
                 val hMargin = (xProgress / 100f * maxMargin).toInt()
-                (hScrollThumb.layoutParams as? FrameLayout.LayoutParams)?.let {
-                    it.leftMargin = hMargin
-                    hScrollThumb.layoutParams = it
-                }
+                hScrollThumb.translationX = hMargin.toFloat()
+                hScrollThumb.invalidate()
             }
 
             // Update vertical thumb position
-            val vTrackHeight = (verticalScrollBar.getChildAt(1) as? FrameLayout)?.height ?: 0
+            val vTrackContainer = verticalScrollBar.getChildAt(1) as? FrameLayout
+            val vTrackHeight =
+                    when {
+                        vTrackContainer != null && vTrackContainer.height > 0 -> vTrackContainer.height
+                        vTrackContainer != null && vTrackContainer.measuredHeight > 0 ->
+                                vTrackContainer.measuredHeight
+                        verticalScrollBar.height > 0 -> {
+                            val topBtnHeight = verticalScrollBar.getChildAt(0)?.height ?: 0
+                            val bottomBtnHeight = verticalScrollBar.getChildAt(2)?.height ?: 0
+                            (verticalScrollBar.height - topBtnHeight - bottomBtnHeight).coerceAtLeast(0)
+                        }
+                        else -> 0
+                    }
             if (vTrackHeight > 0) {
                 val thumbHeight = 60
                 val maxMargin = vTrackHeight - thumbHeight
                 val vMargin = (yProgress / 100f * maxMargin).toInt()
-                (vScrollThumb.layoutParams as? FrameLayout.LayoutParams)?.let {
-                    it.topMargin = vMargin
-                    vScrollThumb.layoutParams = it
-                }
+                vScrollThumb.translationY = vMargin.toFloat()
+                vScrollThumb.invalidate()
             }
         }
     }
@@ -765,6 +807,64 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
+    private fun updateHorizontalScroll(percent: Float) {
+        if (isWebViewScrollEnabled()) {
+            if (shouldUseJsScrollForAxis(isHorizontal = true)) {
+                val metrics = getFreshJsScrollMetrics()
+                if (metrics != null) {
+                    val range = metrics.rangeX
+                    val extent = metrics.extentX
+                    if (range > extent) {
+                        val targetX = percent * (range - extent)
+                        val targetY = metrics.offsetY.toFloat() // Use metrics directly
+                        evaluateJsScroll("window.__taplinkScrollTo($targetX, ${targetY})")
+                    }
+                }
+            } else {
+                val range = webView.getHorizontalScrollRange()
+                val extent = webView.getHorizontalScrollExtent()
+                if (range > extent) {
+                    val targetX = percent * (range - extent)
+                    webView.scrollTo(targetX.toInt(), webView.scrollY)
+                }
+            }
+        } else {
+            val newProgress = (percent * 100).toInt()
+            val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+            prefs.edit().putInt("uiTransXProgress", newProgress).apply()
+            updateUiTranslation()
+        }
+    }
+
+    private fun updateVerticalScroll(percent: Float) {
+        if (isWebViewScrollEnabled()) {
+            if (shouldUseJsScrollForAxis(isHorizontal = false)) {
+                val metrics = getFreshJsScrollMetrics()
+                if (metrics != null) {
+                    val range = metrics.rangeY
+                    val extent = metrics.extentY
+                    if (range > extent) {
+                        val targetY = percent * (range - extent)
+                        val targetX = metrics.offsetX.toFloat()
+                        evaluateJsScroll("window.__taplinkScrollTo($targetX, ${targetY})")
+                    }
+                }
+            } else {
+                val range = webView.getVerticalScrollRange()
+                val extent = webView.getVerticalScrollExtent()
+                if (range > extent) {
+                    val targetY = percent * (range - extent)
+                    webView.scrollTo(webView.scrollX, targetY.toInt())
+                }
+            }
+        } else {
+            val newProgress = (percent * 100).toInt()
+            val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+            prefs.edit().putInt("uiTransYProgress", newProgress).apply()
+            updateUiTranslation()
+        }
+    }
+
     fun updateScrollMetricsFromJs(
             rangeX: Int,
             extentX: Int,
@@ -775,6 +875,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     ) {
         jsScrollMetrics = ScrollMetrics(rangeX, extentX, offsetX, rangeY, extentY, offsetY)
         jsScrollMetricsTimestamp = SystemClock.uptimeMillis()
+        if (jsScrollMetricsTimestamp - lastScrollMetricsLogTime > 500L) {
+            lastScrollMetricsLogTime = jsScrollMetricsTimestamp
+            Log.d(
+                    "ScrollMetricsDebug",
+                    "rangeX=$rangeX extentX=$extentX offsetX=$offsetX rangeY=$rangeY extentY=$extentY offsetY=$offsetY"
+            )
+        }
         updateScrollBarsVisibility()
         updateScrollBarThumbs(0, 0)
     }
@@ -862,6 +969,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var verticalScrollBar: LinearLayout
     private var hScrollThumb: View
     private var vScrollThumb: View
+    private var isInteractingWithScrollBar = false
 
     private var windowsOverviewContainer: android.widget.ScrollView? = null
     private var hoveredWindowsOverviewItem: View? = null
@@ -1960,50 +2068,49 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     btnLeft.setOnClickListener { scrollPageHorizontal(-10) }
                     btnRight.setOnClickListener { scrollPageHorizontal(10) }
                     trackContainer.setOnTouchListener { v, event ->
-                        if (event.action == MotionEvent.ACTION_UP) {
-                            val fullWidth = v.width
-                            val thumbWidth = hScrollThumb.width
-                            val clickX = event.x
-                            // Center the thumb on the click
-                            val clickLeft = clickX - thumbWidth / 2
-                            val trackableWidth = fullWidth - thumbWidth
-                            val percent = (clickLeft / trackableWidth).coerceIn(0f, 1f)
+                        val fullWidth = v.width
+                        val thumbWidth = hScrollThumb.width
+                        val trackableWidth = fullWidth - thumbWidth
 
-                            if (isWebViewScrollEnabled()) {
-                                if (shouldUseJsScrollForAxis(isHorizontal = true)) {
-                                    val metrics = getFreshJsScrollMetrics()
-                                    if (metrics != null) {
-                                        val range = metrics.rangeX
-                                        val extent = metrics.extentX
-                                        if (range > extent) {
-                                            val targetX = percent * (range - extent)
-                                            val targetY = metrics.offsetY
-                                            webView.evaluateJavascript(
-                                                    "window.__taplinkScrollTo($targetX, $targetY)",
-                                                    null
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    val range = webView.getHorizontalScrollRange()
-                                    val extent = webView.getHorizontalScrollExtent()
-                                    if (range > extent) {
-                                        val targetX = percent * (range - extent)
-                                        webView.scrollTo(targetX.toInt(), webView.scrollY)
-                                    }
-                                }
-                            } else {
-                                val newProgress = (percent * 100).toInt()
-                                val prefs =
-                                        context.getSharedPreferences(
-                                                "TapLinkPrefs",
-                                                Context.MODE_PRIVATE
-                                        )
-                                prefs.edit().putInt("uiTransXProgress", newProgress).apply()
-                                updateUiTranslation()
+                        when (event.action) {
+                            MotionEvent.ACTION_DOWN -> {
+                                isInteractingWithScrollBar = true
+                                lastScrollBarInteractionTime = SystemClock.uptimeMillis()
+                                v.parent.requestDisallowInterceptTouchEvent(true)
+                                // Immediate jump on touch down
+                                val clickX = event.x
+                                val clickLeft = clickX - thumbWidth / 2
+                                val percent = (clickLeft / trackableWidth).coerceIn(0f, 1f)
+                                updateHorizontalScroll(percent)
+
+                                // Optimistic visual update
+                                val hMargin = (percent * trackableWidth).toInt()
+                                hScrollThumb.translationX = hMargin.toFloat()
+                                hScrollThumb.invalidate()
+                                true
                             }
+                            MotionEvent.ACTION_MOVE -> {
+                                lastScrollBarInteractionTime = SystemClock.uptimeMillis()
+                                val clickX = event.x
+                                val clickLeft = clickX - thumbWidth / 2
+                                val percent = (clickLeft / trackableWidth).coerceIn(0f, 1f)
+                                updateHorizontalScroll(percent)
+
+                                // Optimistic visual update
+                                val hMargin = (percent * trackableWidth).toInt()
+                                hScrollThumb.translationX = hMargin.toFloat()
+                                hScrollThumb.invalidate()
+                                true
+                            }
+                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                isInteractingWithScrollBar = false
+                                lastScrollBarInteractionTime = SystemClock.uptimeMillis()
+                                v.parent.requestDisallowInterceptTouchEvent(false)
+                                updateScrollBarThumbs(0, 0)
+                                true
+                            }
+                            else -> false
                         }
-                        true
                     }
                 }
 
@@ -2065,50 +2172,59 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     btnUp.setOnClickListener { scrollPageVertical(-10) }
                     btnDown.setOnClickListener { scrollPageVertical(10) }
                     trackContainer.setOnTouchListener { v, event ->
-                        if (event.action == MotionEvent.ACTION_UP) {
-                            val fullHeight = v.height
-                            val thumbHeight = vScrollThumb.height
-                            val clickY = event.y
-                            // Center the thumb on the click
-                            val clickTop = clickY - thumbHeight / 2
-                            val trackableHeight = fullHeight - thumbHeight
-                            val percent = (clickTop / trackableHeight).coerceIn(0f, 1f)
+                        val fullHeight = v.height
+                        val thumbHeight = vScrollThumb.height
+                        val trackableHeight = fullHeight - thumbHeight
 
-                            if (isWebViewScrollEnabled()) {
-                                if (shouldUseJsScrollForAxis(isHorizontal = false)) {
-                                    val metrics = getFreshJsScrollMetrics()
-                                    if (metrics != null) {
-                                        val range = metrics.rangeY
-                                        val extent = metrics.extentY
-                                        if (range > extent) {
-                                            val targetY = percent * (range - extent)
-                                            val targetX = metrics.offsetX
-                                            webView.evaluateJavascript(
-                                                    "window.__taplinkScrollTo($targetX, $targetY)",
-                                                    null
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    val range = webView.getVerticalScrollRange()
-                                    val extent = webView.getVerticalScrollExtent()
-                                    if (range > extent) {
-                                        val targetY = percent * (range - extent)
-                                        webView.scrollTo(webView.scrollX, targetY.toInt())
-                                    }
-                                }
-                            } else {
-                                val newProgress = (percent * 100).toInt()
-                                val prefs =
-                                        context.getSharedPreferences(
-                                                "TapLinkPrefs",
-                                                Context.MODE_PRIVATE
-                                        )
-                                prefs.edit().putInt("uiTransYProgress", newProgress).apply()
-                                updateUiTranslation()
+                        when (event.action) {
+                            MotionEvent.ACTION_DOWN -> {
+                                isInteractingWithScrollBar = true
+                                lastScrollBarInteractionTime = SystemClock.uptimeMillis()
+                                v.parent.requestDisallowInterceptTouchEvent(true)
+                                // Immediate jump on touch down
+                                val clickY = event.y
+                                val clickTop = clickY - thumbHeight / 2
+                                val percent = (clickTop / trackableHeight).coerceIn(0f, 1f)
+
+                                Log.d(
+                                        "ScrollDebug",
+                                        "Vertical Down: y=$clickY, height=$fullHeight, percent=$percent"
+                                )
+
+                                updateVerticalScroll(percent)
+
+                                // Optimistic visual update
+                                val vMargin = (percent * trackableHeight).toInt()
+                                vScrollThumb.translationY = vMargin.toFloat()
+                                vScrollThumb.invalidate()
+                                true
                             }
+                            MotionEvent.ACTION_MOVE -> {
+                                lastScrollBarInteractionTime = SystemClock.uptimeMillis()
+                                val clickY = event.y
+                                val clickTop = clickY - thumbHeight / 2
+                                val percent = (clickTop / trackableHeight).coerceIn(0f, 1f)
+
+                                // Log.d("ScrollDebug", "Vertical Move: y=$clickY,
+                                // percent=$percent")
+
+                                updateVerticalScroll(percent)
+
+                                // Optimistic visual update
+                                val vMargin = (percent * trackableHeight).toInt()
+                                vScrollThumb.translationY = vMargin.toFloat()
+                                vScrollThumb.invalidate()
+                                true
+                            }
+                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                isInteractingWithScrollBar = false
+                                lastScrollBarInteractionTime = SystemClock.uptimeMillis()
+                                v.parent.requestDisallowInterceptTouchEvent(false)
+                                updateScrollBarThumbs(0, 0)
+                                true
+                            }
+                            else -> false
                         }
-                        true
                     }
                 }
 
