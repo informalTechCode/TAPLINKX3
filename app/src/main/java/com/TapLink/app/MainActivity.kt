@@ -272,7 +272,7 @@ class MainActivity :
     private val SCROLL_MODE_TIMEOUT = 60000L // 60 seconds in milliseconds
     private var scrollModeHandler = Handler(Looper.getMainLooper())
     private var scrollModeRunnable = Runnable {
-        if (isCursorVisible && !isKeyboardVisible) {
+        if (isCursorVisible && !isKeyboardVisible && !dualWebViewGroup.isMediaPlaying()) {
             // Switch to scroll mode
             // Cursor remains visible
             dualWebViewGroup.setScrollMode(true)
@@ -3111,11 +3111,9 @@ class MainActivity :
 
                             // Show loading bar immediately
                             dualWebViewGroup.updateLoadingProgress(0)
-                            dualWebViewGroup.clearJsScrollMetrics()
 
                             if (url != null && !url.startsWith("about:blank")) {
                                 lastValidUrl = url
-                                view?.visibility = View.INVISIBLE
 
                                 // Inject location early so it's available before page JS runs
                                 if (lastGpsLat != null && lastGpsLon != null) {
@@ -3160,10 +3158,11 @@ class MainActivity :
                                     if (lastPlayingState !== isPlaying) {
                                         console.log('[TapLink] Media state changed:', isPlaying);
                                         lastPlayingState = isPlaying;
-                                        if (window.Android) {
-                                            window.Android.onMediaPlaying(isPlaying);
+                                        var bridge = window.GroqBridge || window.Android;
+                                        if (bridge && typeof bridge.onMediaPlaying === 'function') {
+                                            bridge.onMediaPlaying(isPlaying);
                                         } else {
-                                            console.error('[TapLink] Android interface not available!');
+                                            console.error('[TapLink] Media bridge not available!');
                                         }
                                     }
                                 }
@@ -3235,152 +3234,6 @@ class MainActivity :
                                         null
                                 )
 
-                                view?.evaluateJavascript(
-                                        """
-                            (function() {
-                                if (window.__taplinkScrollReporterInstalled) {
-                                    if (window.__taplinkReportScrollMetrics) {
-                                        window.__taplinkReportScrollMetrics();
-                                    }
-                                    return;
-                                }
-                                window.__taplinkScrollReporterInstalled = true;
-
-                                var scrollEl = null;
-                                var scheduled = false;
-                                var cachedScrollEl = null;
-
-                                function isScrollable(el) {
-                                    if (!el) return false;
-                                    var sh = el.scrollHeight || 0;
-                                    var ch = el.clientHeight || 0;
-                                    var sw = el.scrollWidth || 0;
-                                    var cw = el.clientWidth || 0;
-                                    return (sh - ch) > 1 || (sw - cw) > 1;
-                                }
-
-                                function findLargestScrollable() {
-                                    var best = null;
-                                    var bestScore = 0;
-                                    var elements = document.querySelectorAll('body *');
-                                    for (var i = 0; i < elements.length; i++) {
-                                        var el = elements[i];
-                                        var sh = el.scrollHeight || 0;
-                                        var ch = el.clientHeight || 0;
-                                        var sw = el.scrollWidth || 0;
-                                        var cw = el.clientWidth || 0;
-                                        var dy = sh - ch;
-                                        var dx = sw - cw;
-                                        if (dy > 1 || dx > 1) {
-                                            var score = Math.max(dy, dx);
-                                            if (score > bestScore) {
-                                                bestScore = score;
-                                                best = el;
-                                            }
-                                        }
-                                    }
-                                    return best;
-                                }
-
-                                function pickScrollElement(force) {
-                                    if (!force && cachedScrollEl && isScrollable(cachedScrollEl)) {
-                                        return cachedScrollEl;
-                                    }
-                                    var marked = document.querySelector('[data-taplink-scroll]');
-                                    if (marked && isScrollable(marked)) {
-                                        cachedScrollEl = marked;
-                                        return cachedScrollEl;
-                                    }
-                                    var root = document.scrollingElement || document.documentElement || document.body;
-                                    if (isScrollable(root)) {
-                                        cachedScrollEl = root;
-                                        return cachedScrollEl;
-                                    }
-                                    var best = findLargestScrollable();
-                                    if (best) {
-                                        cachedScrollEl = best;
-                                        return cachedScrollEl;
-                                    }
-                                    cachedScrollEl = root || document.body;
-                                    return cachedScrollEl;
-                                }
-
-                                function schedule() {
-                                    if (scheduled) return;
-                                    scheduled = true;
-                                    requestAnimationFrame(function() {
-                                        scheduled = false;
-                                        report();
-                                    });
-                                }
-
-                                function attachScrollListener(el) {
-                                    if (scrollEl && scrollEl !== el) {
-                                        scrollEl.removeEventListener('scroll', schedule);
-                                    }
-                                    scrollEl = el;
-                                    if (scrollEl) {
-                                        scrollEl.addEventListener('scroll', schedule, { passive: true });
-                                    }
-                                }
-
-                                function report() {
-                                    var el = pickScrollElement(false);
-                                    if (!el) return;
-                                    if (el !== scrollEl) {
-                                        attachScrollListener(el);
-                                    }
-                                    var rangeX = Math.max(el.scrollWidth || 0, el.clientWidth || 0);
-                                    var extentX = el.clientWidth || 0;
-                                    var offsetX = el.scrollLeft || 0;
-                                    var rangeY = Math.max(el.scrollHeight || 0, el.clientHeight || 0);
-                                    var extentY = el.clientHeight || 0;
-                                    var offsetY = el.scrollTop || 0;
-                                    if (rangeX <= extentX && rangeY <= extentY) {
-                                        el = pickScrollElement(true);
-                                        if (el && el !== scrollEl) {
-                                            attachScrollListener(el);
-                                        }
-                                        rangeX = Math.max(el.scrollWidth || 0, el.clientWidth || 0);
-                                        extentX = el.clientWidth || 0;
-                                        offsetX = el.scrollLeft || 0;
-                                        rangeY = Math.max(el.scrollHeight || 0, el.clientHeight || 0);
-                                        extentY = el.clientHeight || 0;
-                                        offsetY = el.scrollTop || 0;
-                                    }
-                                    if (window.AndroidInterface &&
-                                            typeof window.AndroidInterface.onScrollMetrics === 'function') {
-                                        window.AndroidInterface.onScrollMetrics(
-                                                rangeX,
-                                                extentX,
-                                                offsetX,
-                                                rangeY,
-                                                extentY,
-                                                offsetY
-                                        );
-                                    }
-                                }
-
-                                window.__taplinkReportScrollMetrics = report;
-                                window.__taplinkScrollTo = function(x, y) {
-                                    var el = scrollEl || pickScrollElement(true);
-                                    if (el) {
-                                        el.scrollTo(x, y);
-                                    }
-                                };
-                                window.__taplinkScrollBy = function(dx, dy) {
-                                    var el = scrollEl || pickScrollElement(true);
-                                    if (el) {
-                                        el.scrollBy(dx, dy);
-                                    }
-                                };
-                                window.addEventListener('resize', schedule);
-                                setInterval(report, 1000);
-                                report();
-                            })();
-                        """,
-                                        null
-                                )
                             }
                         }
 
@@ -3388,15 +3241,18 @@ class MainActivity :
                                 view: WebView?,
                                 request: WebResourceRequest?
                         ): Boolean {
-                            val url = request?.url?.toString() ?: return false
+                            val uri = request?.url ?: return false
+                            val url = uri.toString()
 
                             // Block about:blank navigations
                             if (url.startsWith("about:blank")) {
                                 return true
                             }
 
+                            val scheme = uri.scheme?.lowercase()
+
                             // Handle app intents
-                            if (url.startsWith("intent://") || url.startsWith("market://")) {
+                            if (scheme == "intent" || scheme == "market") {
                                 val fallbackUrl =
                                         url.substringAfter("fallback_url=", "")
                                                 .substringBefore("#", "")
@@ -3412,7 +3268,32 @@ class MainActivity :
                                 return true
                             }
 
-                            return false // Let WebView handle normal URLs
+                            // Let WebView handle schemes it natively understands
+                            if (scheme == null ||
+                                            scheme == "http" ||
+                                            scheme == "https" ||
+                                            scheme == "file" ||
+                                            scheme == "about" ||
+                                            scheme == "data" ||
+                                            scheme == "blob" ||
+                                            scheme == "javascript"
+                            ) {
+                                return false
+                            }
+
+                            // For app/deep-link schemes (e.g., TikTok snssdk1233://), try external
+                            return try {
+                                val intent = Intent(Intent.ACTION_VIEW, uri)
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                startActivity(intent)
+                                true
+                            } catch (e: ActivityNotFoundException) {
+                                DebugLog.w("WebView", "No handler for URL scheme: $scheme ($url)")
+                                true
+                            } catch (e: Exception) {
+                                DebugLog.w("WebView", "Failed to open external URL: $url")
+                                true
+                            }
                         }
                     }
             // Add more detailed logging to track input field interactions
@@ -4860,27 +4741,6 @@ class MainActivity :
 
     // Add JavaScript interface to reset capturing state
     class AndroidInterface(private val activity: MainActivity) {
-        @JavascriptInterface
-        fun onScrollMetrics(
-                rangeX: Int,
-                extentX: Int,
-                offsetX: Int,
-                rangeY: Int,
-                extentY: Int,
-                offsetY: Int
-        ) {
-            activity.runOnUiThread {
-                activity.dualWebViewGroup.updateScrollMetricsFromJs(
-                        rangeX,
-                        extentX,
-                        offsetX,
-                        rangeY,
-                        extentY,
-                        offsetY
-                )
-            }
-        }
-
         @JavascriptInterface
         fun onCaptureComplete() {
             activity.runOnUiThread { activity.isCapturing = false }

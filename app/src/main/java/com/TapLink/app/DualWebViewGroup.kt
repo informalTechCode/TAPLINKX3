@@ -73,15 +73,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             var title: String = "New Tab"
     )
 
-    private data class ScrollMetrics(
-            val rangeX: Int,
-            val extentX: Int,
-            val offsetX: Int,
-            val rangeY: Int,
-            val extentY: Int,
-            val offsetY: Int
-    )
-
     private val windows = mutableListOf<BrowserWindow>()
     private var activeWindowId: String? = null
 
@@ -121,11 +112,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val MIN_CAPTURE_INTERVAL = 16L // Cap at ~60fps
     private var lastCursorUpdateTime = 0L
     private val CURSOR_UPDATE_INTERVAL = 16L // 60fps cap for cursor updates
-    private var jsScrollMetrics: ScrollMetrics? = null
-    private var jsScrollMetricsTimestamp = 0L
-    private val jsScrollMetricsTimeoutMs = 2000L
-    private var lastScrollMetricsLogTime = 0L
     private var lastScrollBarInteractionTime = 0L
+    private val scrollBarHoldMs = 1200L
+    private var lastHorzScrollableAt = 0L
+    private var lastVertScrollableAt = 0L
+    private var isMediaPlaying = false
+    private var lastMediaPlayingAt = 0L
+    private val mediaScrollFreezeMs = 1500L
 
     private var leftSystemInfoView: SystemInfoView
 
@@ -479,11 +472,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (isWebViewScrollEnabled()) {
             // Scroll the WebView content
             val scrollAmount = delta * 15 // Increase sensitivity
-            if (shouldUseJsScrollForAxis(isHorizontal = true)) {
-                evaluateJsScroll("window.__taplinkScrollBy($scrollAmount, 0)")
-            } else {
-                webView.scrollBy(scrollAmount, 0)
-            }
+            webView.scrollBy(scrollAmount, 0)
             updateScrollBarThumbs(0, 0) // Update thumbs immediately
         } else {
             // Pan the viewport
@@ -500,11 +489,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (isWebViewScrollEnabled()) {
             // Scroll the WebView content
             val scrollAmount = delta * 15 // Increase sensitivity
-            if (shouldUseJsScrollForAxis(isHorizontal = false)) {
-                evaluateJsScroll("window.__taplinkScrollBy(0, $scrollAmount)")
-            } else {
-                webView.scrollBy(0, scrollAmount)
-            }
+            webView.scrollBy(0, scrollAmount)
             updateScrollBarThumbs(0, 0) // Update thumbs immediately
         } else {
             // Pan the viewport
@@ -517,30 +502,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
-    private fun getFreshJsScrollMetrics(): ScrollMetrics? {
-        val metrics = jsScrollMetrics ?: return null
-        val ageMs = SystemClock.uptimeMillis() - jsScrollMetricsTimestamp
-        return if (ageMs <= jsScrollMetricsTimeoutMs) metrics else null
-    }
-
-    private fun shouldUseJsScrollForAxis(isHorizontal: Boolean): Boolean {
-        val metrics = getFreshJsScrollMetrics() ?: return false
-        val range =
-                if (isHorizontal) webView.getHorizontalScrollRange()
-                else webView.getVerticalScrollRange()
-        val extent =
-                if (isHorizontal) webView.getHorizontalScrollExtent()
-                else webView.getVerticalScrollExtent()
-        val jsRange = if (isHorizontal) metrics.rangeX else metrics.rangeY
-        val jsExtent = if (isHorizontal) metrics.extentX else metrics.extentY
-        return range <= extent && jsRange > jsExtent
-    }
-
-    private fun evaluateJsScroll(script: String) {
-        webView.evaluateJavascript(
-                "(function(){ $script; if (window.__taplinkReportScrollMetrics) { window.__taplinkReportScrollMetrics(); } })();",
-                null
-        )
+    private fun shouldFreezeScrollBars(): Boolean {
+        val now = SystemClock.uptimeMillis()
+        return isMediaPlaying || (now - lastMediaPlayingAt < mediaScrollFreezeMs)
     }
 
     private fun updateScrollBarThumbs(xProgress: Int, yProgress: Int) {
@@ -548,21 +512,19 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (isInteractingWithScrollBar && now - lastScrollBarInteractionTime < 120L) return
 
         if (isWebViewScrollEnabled()) {
-            val metrics = getFreshJsScrollMetrics()
-            val useJsHorizontal = metrics != null && metrics.rangeX > metrics.extentX
-            val useJsVertical = metrics != null && metrics.rangeY > metrics.extentY
-
             // Update Horizontal Thumb based on WebView scroll
             val hTrackContainer = horizontalScrollBar.getChildAt(1) as? FrameLayout
             val hTrackWidth =
                     when {
-                        hTrackContainer != null && hTrackContainer.width > 0 -> hTrackContainer.width
+                        hTrackContainer != null && hTrackContainer.width > 0 ->
+                                hTrackContainer.width
                         hTrackContainer != null && hTrackContainer.measuredWidth > 0 ->
                                 hTrackContainer.measuredWidth
                         horizontalScrollBar.width > 0 -> {
                             val leftBtnWidth = horizontalScrollBar.getChildAt(0)?.width ?: 0
                             val rightBtnWidth = horizontalScrollBar.getChildAt(2)?.width ?: 0
-                            (horizontalScrollBar.width - leftBtnWidth - rightBtnWidth).coerceAtLeast(0)
+                            (horizontalScrollBar.width - leftBtnWidth - rightBtnWidth)
+                                    .coerceAtLeast(0)
                         }
                         else -> 0
                     }
@@ -581,12 +543,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 // Let's defer exact horizontal proportion calculation or use a safe fallback.
 
                 // Using standard view methods available on WebView (which is a View)
-                val webRange = webView.getHorizontalScrollRange()
-                val webExtent = webView.getHorizontalScrollExtent()
-                val webOffset = webView.getHorizontalScrollOffset()
-                val range = if (useJsHorizontal) metrics!!.rangeX else webRange
-                val extent = if (useJsHorizontal) metrics.extentX else webExtent
-                val offset = if (useJsHorizontal) metrics.offsetX else webOffset
+                val range = webView.getHorizontalScrollRange()
+                val extent = webView.getHorizontalScrollExtent()
+                val offset = webView.getHorizontalScrollOffset()
 
                 if (range > extent) {
                     val maxScroll = range - extent
@@ -601,13 +560,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val vTrackContainer = verticalScrollBar.getChildAt(1) as? FrameLayout
             val vTrackHeight =
                     when {
-                        vTrackContainer != null && vTrackContainer.height > 0 -> vTrackContainer.height
+                        vTrackContainer != null && vTrackContainer.height > 0 ->
+                                vTrackContainer.height
                         vTrackContainer != null && vTrackContainer.measuredHeight > 0 ->
                                 vTrackContainer.measuredHeight
                         verticalScrollBar.height > 0 -> {
                             val topBtnHeight = verticalScrollBar.getChildAt(0)?.height ?: 0
                             val bottomBtnHeight = verticalScrollBar.getChildAt(2)?.height ?: 0
-                            (verticalScrollBar.height - topBtnHeight - bottomBtnHeight).coerceAtLeast(0)
+                            (verticalScrollBar.height - topBtnHeight - bottomBtnHeight)
+                                    .coerceAtLeast(0)
                         }
                         else -> 0
                     }
@@ -615,12 +576,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val thumbHeight = 60
                 val maxMargin = vTrackHeight - thumbHeight
 
-                val webRange = webView.getVerticalScrollRange()
-                val webExtent = webView.getVerticalScrollExtent()
-                val webOffset = webView.getVerticalScrollOffset()
-                val range = if (useJsVertical) metrics!!.rangeY else webRange
-                val extent = if (useJsVertical) metrics.extentY else webExtent
-                val offset = if (useJsVertical) metrics.offsetY else webOffset
+                val range = webView.getVerticalScrollRange()
+                val extent = webView.getVerticalScrollExtent()
+                val offset = webView.getVerticalScrollOffset()
 
                 if (range > extent) {
                     val maxScroll = range - extent
@@ -636,13 +594,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val hTrackContainer = horizontalScrollBar.getChildAt(1) as? FrameLayout
             val hTrackWidth =
                     when {
-                        hTrackContainer != null && hTrackContainer.width > 0 -> hTrackContainer.width
+                        hTrackContainer != null && hTrackContainer.width > 0 ->
+                                hTrackContainer.width
                         hTrackContainer != null && hTrackContainer.measuredWidth > 0 ->
                                 hTrackContainer.measuredWidth
                         horizontalScrollBar.width > 0 -> {
                             val leftBtnWidth = horizontalScrollBar.getChildAt(0)?.width ?: 0
                             val rightBtnWidth = horizontalScrollBar.getChildAt(2)?.width ?: 0
-                            (horizontalScrollBar.width - leftBtnWidth - rightBtnWidth).coerceAtLeast(0)
+                            (horizontalScrollBar.width - leftBtnWidth - rightBtnWidth)
+                                    .coerceAtLeast(0)
                         }
                         else -> 0
                     }
@@ -658,13 +618,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val vTrackContainer = verticalScrollBar.getChildAt(1) as? FrameLayout
             val vTrackHeight =
                     when {
-                        vTrackContainer != null && vTrackContainer.height > 0 -> vTrackContainer.height
+                        vTrackContainer != null && vTrackContainer.height > 0 ->
+                                vTrackContainer.height
                         vTrackContainer != null && vTrackContainer.measuredHeight > 0 ->
                                 vTrackContainer.measuredHeight
                         verticalScrollBar.height > 0 -> {
                             val topBtnHeight = verticalScrollBar.getChildAt(0)?.height ?: 0
                             val bottomBtnHeight = verticalScrollBar.getChildAt(2)?.height ?: 0
-                            (verticalScrollBar.height - topBtnHeight - bottomBtnHeight).coerceAtLeast(0)
+                            (verticalScrollBar.height - topBtnHeight - bottomBtnHeight)
+                                    .coerceAtLeast(0)
                         }
                         else -> 0
                     }
@@ -681,6 +643,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun updateScrollBarsVisibility() {
         // Log.d("ScrollDebug", "updateScrollBarsVisibility called. isAnchored=$isAnchored,
         // isInScrollMode=$isInScrollMode, uiScale=$uiScale")
+        val now = SystemClock.uptimeMillis()
+        if (shouldFreezeScrollBars() && !isInteractingWithScrollBar) {
+            return
+        }
 
         // Determine mode-specific base constraints
         val isScrollModeActive = isInScrollMode
@@ -692,6 +658,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // If anchored, scrollbars are always hidden
         if (isAnchored) {
+            lastHorzScrollableAt = 0L
+            lastVertScrollableAt = 0L
             horizontalScrollBar.visibility = View.GONE
             verticalScrollBar.visibility = View.GONE
 
@@ -732,19 +700,28 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val webHExtent = webView.getHorizontalScrollExtent()
         val webVRange = webView.getVerticalScrollRange()
         val webVExtent = webView.getVerticalScrollExtent()
-        val metrics = getFreshJsScrollMetrics()
-        val showHorz =
-                (webHRange > webHExtent) || (metrics != null && metrics.rangeX > metrics.extentX)
-        val showVert =
-                (webVRange > webVExtent) || (metrics != null && metrics.rangeY > metrics.extentY)
+        val scrollDeltaThreshold = 6
+        val webHDelta = webHRange - webHExtent
+        val webVDelta = webVRange - webVExtent
+        val showHorzRaw = webHDelta > scrollDeltaThreshold
+        val showVertRaw = webVDelta > scrollDeltaThreshold
+        if (showHorzRaw) {
+            lastHorzScrollableAt = now
+        }
+        if (showVertRaw) {
+            lastVertScrollableAt = now
+        }
+        val showHorz = showHorzRaw || (now - lastHorzScrollableAt < scrollBarHoldMs)
+        val showVert = showVertRaw || (now - lastVertScrollableAt < scrollBarHoldMs)
 
         horizontalScrollBar.visibility = if (showHorz) View.VISIBLE else View.GONE
         verticalScrollBar.visibility = if (showVert) View.VISIBLE else View.GONE
 
         // Apply layout adjustments
         (webViewsContainer.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
-            val rightMarginShift = if (showVert) 20 else 0
-            val bottomMarginShift = if (showHorz) 20 else 0
+            // Keep WebView sizing stable to avoid layout churn (prevents media pauses/flicker).
+            val rightMarginShift = 0
+            val bottomMarginShift = 0
 
             var targetWidth = 0
             var targetHeight = 0
@@ -809,24 +786,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private fun updateHorizontalScroll(percent: Float) {
         if (isWebViewScrollEnabled()) {
-            if (shouldUseJsScrollForAxis(isHorizontal = true)) {
-                val metrics = getFreshJsScrollMetrics()
-                if (metrics != null) {
-                    val range = metrics.rangeX
-                    val extent = metrics.extentX
-                    if (range > extent) {
-                        val targetX = percent * (range - extent)
-                        val targetY = metrics.offsetY.toFloat() // Use metrics directly
-                        evaluateJsScroll("window.__taplinkScrollTo($targetX, ${targetY})")
-                    }
-                }
-            } else {
-                val range = webView.getHorizontalScrollRange()
-                val extent = webView.getHorizontalScrollExtent()
-                if (range > extent) {
-                    val targetX = percent * (range - extent)
-                    webView.scrollTo(targetX.toInt(), webView.scrollY)
-                }
+            val range = webView.getHorizontalScrollRange()
+            val extent = webView.getHorizontalScrollExtent()
+            if (range > extent) {
+                val targetX = percent * (range - extent)
+                webView.scrollTo(targetX.toInt(), webView.scrollY)
             }
         } else {
             val newProgress = (percent * 100).toInt()
@@ -838,24 +802,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private fun updateVerticalScroll(percent: Float) {
         if (isWebViewScrollEnabled()) {
-            if (shouldUseJsScrollForAxis(isHorizontal = false)) {
-                val metrics = getFreshJsScrollMetrics()
-                if (metrics != null) {
-                    val range = metrics.rangeY
-                    val extent = metrics.extentY
-                    if (range > extent) {
-                        val targetY = percent * (range - extent)
-                        val targetX = metrics.offsetX.toFloat()
-                        evaluateJsScroll("window.__taplinkScrollTo($targetX, ${targetY})")
-                    }
-                }
-            } else {
-                val range = webView.getVerticalScrollRange()
-                val extent = webView.getVerticalScrollExtent()
-                if (range > extent) {
-                    val targetY = percent * (range - extent)
-                    webView.scrollTo(webView.scrollX, targetY.toInt())
-                }
+            val range = webView.getVerticalScrollRange()
+            val extent = webView.getVerticalScrollExtent()
+            if (range > extent) {
+                val targetY = percent * (range - extent)
+                webView.scrollTo(webView.scrollX, targetY.toInt())
             }
         } else {
             val newProgress = (percent * 100).toInt()
@@ -863,32 +814,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             prefs.edit().putInt("uiTransYProgress", newProgress).apply()
             updateUiTranslation()
         }
-    }
-
-    fun updateScrollMetricsFromJs(
-            rangeX: Int,
-            extentX: Int,
-            offsetX: Int,
-            rangeY: Int,
-            extentY: Int,
-            offsetY: Int
-    ) {
-        jsScrollMetrics = ScrollMetrics(rangeX, extentX, offsetX, rangeY, extentY, offsetY)
-        jsScrollMetricsTimestamp = SystemClock.uptimeMillis()
-        if (jsScrollMetricsTimestamp - lastScrollMetricsLogTime > 500L) {
-            lastScrollMetricsLogTime = jsScrollMetricsTimestamp
-            Log.d(
-                    "ScrollMetricsDebug",
-                    "rangeX=$rangeX extentX=$extentX offsetX=$offsetX rangeY=$rangeY extentY=$extentY offsetY=$offsetY"
-            )
-        }
-        updateScrollBarsVisibility()
-        updateScrollBarThumbs(0, 0)
-    }
-
-    fun clearJsScrollMetrics() {
-        jsScrollMetrics = null
-        jsScrollMetricsTimestamp = 0L
     }
 
     // Function to update the cursor positions and visibility
@@ -1547,6 +1472,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         settings.displayZoomControls = false
         settings.mediaPlaybackRequiresUserGesture = false
 
+        webView.addJavascriptInterface(MediaInterface(this), "MediaInterface")
+
         // Keep WebAppInterface for referencing context/logic if needed, but primary comms via URL
         // scheme
         // Enable Native Bridge for Chat
@@ -1594,6 +1521,29 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             return true
                         }
                         return false
+                    }
+
+                    override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                        super.onPageFinished(view, url)
+                        try {
+                            val mediaInterfaceClass =
+                                    Class.forName(
+                                            "com.TapLinkX3.app.DualWebViewGroup\$MediaInterface"
+                                    )
+                            // Actually we are inside DualWebViewGroup, so can call method directly?
+                            // Yes, injectMediaListeners() is a private method of DualWebViewGroup.
+                            // But WebViewClient is an anonymous inner class.
+                            // So we need to call DualWebViewGroup.this.injectMediaListeners()
+                            // But in Kotlin inner class, we can just call it if it's visible.
+                            // injectMediaListeners is private in DualWebViewGroup.
+                            // Kotlin anonymous object inside a method (configureWebView)
+                            // configureWebView is a method of DualWebViewGroup.
+                            // So yes, we can call injectMediaListeners() directly.
+                            injectMediaListeners()
+                            updateScrollBarsVisibility()
+                        } catch (e: Exception) {
+                            android.util.Log.e("TapLink", "Error in onPageFinished", e)
+                        }
                     }
                 }
 
@@ -2018,7 +1968,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     visibility = View.GONE
                     elevation = 150f
                     isClickable = true // Prevent click propagation
-                    isFocusable = true
+                    isFocusable = false
+                    isFocusableInTouchMode = false
 
                     // Left arrow button
                     // Left arrow button
@@ -2122,7 +2073,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     visibility = View.GONE
                     elevation = 150f
                     isClickable = true // Prevent click propagation
-                    isFocusable = true
+                    isFocusable = false
+                    isFocusableInTouchMode = false
 
                     // Up arrow button
                     // Up arrow button
@@ -2943,7 +2895,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val isFullScreen = fullScreenOverlayContainer.visibility == View.VISIBLE
 
                 if (!isFullScreen && currentTime - lastScrollBarCheckTime > 1000) {
-                    updateScrollBarsVisibility()
+                    if (!shouldFreezeScrollBars()) {
+                        updateScrollBarsVisibility()
+                    }
                     lastScrollBarCheckTime = currentTime
                 }
 
@@ -7158,6 +7112,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun updateMediaState(isPlaying: Boolean) {
         // Log.d("MediaControls", "updateMediaState called: isPlaying=$isPlaying,
         // isScreenMasked=$isScreenMasked")
+        isMediaPlaying = isPlaying
+        if (isPlaying) {
+            lastMediaPlayingAt = SystemClock.uptimeMillis()
+        }
         post {
             if (isPlaying) {
                 // Log.d("MediaControls", "Setting to playing state")
@@ -7177,6 +7135,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 // ${maskMediaControlsContainer.visibility}")
             }
         }
+    }
+
+    fun isMediaPlaying(): Boolean {
+        return isMediaPlaying
     }
 
     fun hideMediaControls() {
@@ -7249,5 +7211,81 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         """.trimIndent()
 
         post { webView.evaluateJavascript(script, null) }
+    }
+
+    private fun injectMediaListeners() {
+        val script =
+                """
+            (function() {
+                if (window.__mediaListenersInjected) return;
+                window.__mediaListenersInjected = true;
+
+                function attachListeners(media) {
+                    if (media.__listenersAttached) return;
+                    media.__listenersAttached = true;
+                    
+                    media.addEventListener('play', function() {
+                        console.log('MediaInterface: play detected');
+                        window.MediaInterface.onMediaStateChanged(true);
+                    });
+                    
+                    media.addEventListener('pause', function() {
+                        // Check if any other media is playing before saying paused
+                        const allMedia = document.querySelectorAll('video, audio');
+                        let anyPlaying = false;
+                        for(let i=0; i<allMedia.length; i++) {
+                            if(!allMedia[i].paused && !allMedia[i].ended && allMedia[i].readyState > 2) {
+                                anyPlaying = true;
+                                break;
+                            }
+                        }
+                        console.log('MediaInterface: pause detected. Any playing? ' + anyPlaying);
+                        window.MediaInterface.onMediaStateChanged(anyPlaying);
+                    });
+                    
+                    media.addEventListener('ended', function() {
+                         const allMedia = document.querySelectorAll('video, audio');
+                        let anyPlaying = false;
+                        for(let i=0; i<allMedia.length; i++) {
+                            if(!allMedia[i].paused && !allMedia[i].ended && allMedia[i].readyState > 2) {
+                                anyPlaying = true;
+                                break;
+                            }
+                        }
+                        console.log('MediaInterface: ended detected. Any playing? ' + anyPlaying);
+                        window.MediaInterface.onMediaStateChanged(anyPlaying);
+                    });
+                }
+
+                // Attach to existing media
+                const existingMedia = document.querySelectorAll('video, audio');
+                existingMedia.forEach(attachListeners);
+
+                // Observe for new media
+                const observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        mutation.addedNodes.forEach(function(node) {
+                            if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO') {
+                                attachListeners(node);
+                            } else if (node.querySelectorAll) {
+                                node.querySelectorAll('video, audio').forEach(attachListeners);
+                            }
+                        });
+                    });
+                });
+                
+                observer.observe(document.body, { childList: true, subtree: true });
+            })();
+        """.trimIndent()
+
+        webView.evaluateJavascript(script, null)
+    }
+
+    private class MediaInterface(private val parent: DualWebViewGroup) {
+        @android.webkit.JavascriptInterface
+        fun onMediaStateChanged(isPlaying: Boolean) {
+            // Run on UI thread to update UI
+            parent.post { parent.updateMediaState(isPlaying) }
+        }
     }
 }
