@@ -714,8 +714,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val showHorz = showHorzRaw || (now - lastHorzScrollableAt < scrollBarHoldMs)
         val showVert = showVertRaw || (now - lastVertScrollableAt < scrollBarHoldMs)
 
-        horizontalScrollBar.visibility = if (showHorz) View.VISIBLE else View.GONE
-        verticalScrollBar.visibility = if (showVert) View.VISIBLE else View.GONE
+        horizontalScrollBar.apply {
+            visibility = if (showHorz) View.VISIBLE else View.INVISIBLE
+            isClickable = showHorz
+            isFocusable = false
+        }
+
+        verticalScrollBar.apply {
+            visibility = if (showVert) View.VISIBLE else View.INVISIBLE
+            isClickable = showVert
+            isFocusable = false
+        }
 
         // Apply layout adjustments
         (webViewsContainer.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
