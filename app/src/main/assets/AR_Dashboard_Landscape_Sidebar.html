@@ -1215,6 +1215,44 @@
         return originalScrollTo(arg0, arg1);
       };
     })();
+
+    (function taplinkHudScrollReporter() {
+      if (window.__taplinkNativeScrollReporterInstalled) { return; }
+      window.__taplinkNativeScrollReporterInstalled = true;
+
+      const hud = document.querySelector('.hud');
+      if (!hud) { return; }
+
+      let scheduled = false;
+      function report() {
+        const rangeX = Math.max(hud.scrollWidth || 0, hud.clientWidth || 0);
+        const extentX = hud.clientWidth || 0;
+        const offsetX = hud.scrollLeft || 0;
+        const rangeY = Math.max(hud.scrollHeight || 0, hud.clientHeight || 0);
+        const extentY = hud.clientHeight || 0;
+        const offsetY = hud.scrollTop || 0;
+        if (window.AndroidInterface && typeof window.AndroidInterface.onScrollMetrics === 'function') {
+          window.AndroidInterface.onScrollMetrics(
+            rangeX, extentX, offsetX, rangeY, extentY, offsetY
+          );
+        }
+      }
+
+      function schedule() {
+        if (scheduled) { return; }
+        scheduled = true;
+        requestAnimationFrame(() => {
+          scheduled = false;
+          report();
+        });
+      }
+
+      window.__taplinkReportScrollMetrics = report;
+      hud.addEventListener('scroll', schedule, { passive: true });
+      window.addEventListener('resize', schedule);
+      setInterval(report, 1000);
+      report();
+    })();
   </script>
 </body>
 

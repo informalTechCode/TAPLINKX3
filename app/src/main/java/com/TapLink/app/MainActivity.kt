@@ -3248,13 +3248,61 @@ class MainActivity :
 
                                 var scrollEl = null;
                                 var scheduled = false;
+                                var cachedScrollEl = null;
 
-                                function pickScrollElement() {
-                                    var marked = document.querySelector('[data-taplink-scroll]');
-                                    if (marked) {
-                                        return marked;
+                                function isScrollable(el) {
+                                    if (!el) return false;
+                                    var sh = el.scrollHeight || 0;
+                                    var ch = el.clientHeight || 0;
+                                    var sw = el.scrollWidth || 0;
+                                    var cw = el.clientWidth || 0;
+                                    return (sh - ch) > 1 || (sw - cw) > 1;
+                                }
+
+                                function findLargestScrollable() {
+                                    var best = null;
+                                    var bestScore = 0;
+                                    var elements = document.querySelectorAll('body *');
+                                    for (var i = 0; i < elements.length; i++) {
+                                        var el = elements[i];
+                                        var sh = el.scrollHeight || 0;
+                                        var ch = el.clientHeight || 0;
+                                        var sw = el.scrollWidth || 0;
+                                        var cw = el.clientWidth || 0;
+                                        var dy = sh - ch;
+                                        var dx = sw - cw;
+                                        if (dy > 1 || dx > 1) {
+                                            var score = Math.max(dy, dx);
+                                            if (score > bestScore) {
+                                                bestScore = score;
+                                                best = el;
+                                            }
+                                        }
                                     }
-                                    return document.scrollingElement || document.documentElement || document.body;
+                                    return best;
+                                }
+
+                                function pickScrollElement(force) {
+                                    if (!force && cachedScrollEl && isScrollable(cachedScrollEl)) {
+                                        return cachedScrollEl;
+                                    }
+                                    var marked = document.querySelector('[data-taplink-scroll]');
+                                    if (marked && isScrollable(marked)) {
+                                        cachedScrollEl = marked;
+                                        return cachedScrollEl;
+                                    }
+                                    var root = document.scrollingElement || document.documentElement || document.body;
+                                    if (isScrollable(root)) {
+                                        cachedScrollEl = root;
+                                        return cachedScrollEl;
+                                    }
+                                    var best = findLargestScrollable();
+                                    if (best) {
+                                        cachedScrollEl = best;
+                                        return cachedScrollEl;
+                                    }
+                                    cachedScrollEl = root || document.body;
+                                    return cachedScrollEl;
                                 }
 
                                 function schedule() {
@@ -3277,7 +3325,7 @@ class MainActivity :
                                 }
 
                                 function report() {
-                                    var el = pickScrollElement();
+                                    var el = pickScrollElement(false);
                                     if (!el) return;
                                     if (el !== scrollEl) {
                                         attachScrollListener(el);
@@ -3288,6 +3336,18 @@ class MainActivity :
                                     var rangeY = Math.max(el.scrollHeight || 0, el.clientHeight || 0);
                                     var extentY = el.clientHeight || 0;
                                     var offsetY = el.scrollTop || 0;
+                                    if (rangeX <= extentX && rangeY <= extentY) {
+                                        el = pickScrollElement(true);
+                                        if (el && el !== scrollEl) {
+                                            attachScrollListener(el);
+                                        }
+                                        rangeX = Math.max(el.scrollWidth || 0, el.clientWidth || 0);
+                                        extentX = el.clientWidth || 0;
+                                        offsetX = el.scrollLeft || 0;
+                                        rangeY = Math.max(el.scrollHeight || 0, el.clientHeight || 0);
+                                        extentY = el.clientHeight || 0;
+                                        offsetY = el.scrollTop || 0;
+                                    }
                                     if (window.AndroidInterface &&
                                             typeof window.AndroidInterface.onScrollMetrics === 'function') {
                                         window.AndroidInterface.onScrollMetrics(
@@ -3302,6 +3362,18 @@ class MainActivity :
                                 }
 
                                 window.__taplinkReportScrollMetrics = report;
+                                window.__taplinkScrollTo = function(x, y) {
+                                    var el = scrollEl || pickScrollElement(true);
+                                    if (el) {
+                                        el.scrollTo(x, y);
+                                    }
+                                };
+                                window.__taplinkScrollBy = function(dx, dy) {
+                                    var el = scrollEl || pickScrollElement(true);
+                                    if (el) {
+                                        el.scrollBy(dx, dy);
+                                    }
+                                };
                                 window.addEventListener('resize', schedule);
                                 setInterval(report, 1000);
                                 report();
