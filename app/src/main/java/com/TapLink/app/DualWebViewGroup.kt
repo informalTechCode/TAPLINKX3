@@ -1488,6 +1488,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Notify callback
         windowCallback?.onWindowSwitched(webView)
 
+        // Ensure refresh loop is running (it might have died if previous webview was detached)
+        startRefreshing()
+
         hideWindowsOverview()
         saveAllWindowsState()
     }
@@ -1576,7 +1579,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val jsonString = prefs.getString(KEY_WINDOWS_STATE, null)
 
-            if (jsonString.isNullOrEmpty()) return
+            if (jsonString.isNullOrEmpty()) {
+                if (windows.isEmpty()) {
+                    createNewWindow()
+                }
+                return
+            }
 
             val root = org.json.JSONObject(jsonString)
             val savedActiveId = if (root.has("activeId")) root.getString("activeId") else null
@@ -1655,6 +1663,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     // Fallback if parsing failed
                     createNewWindow()
                 }
+            } else if (windows.isEmpty()) {
+                createNewWindow()
             }
         } catch (e: Exception) {
             Log.e("Persistence", "Error restoring window state", e)
@@ -1788,7 +1798,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // restoreState() will either:
         // 1. Restore saved windows (and set active one)
         // 2. Or call createNewWindow() calls which will add a window and load the default URL.
-
 
         val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
         isDesktopMode = prefs.getBoolean("isDesktopMode", false)
@@ -1984,7 +1993,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Initialize URL EditTexts
         urlEditText = setupUrlEditText(true)
-
 
         // Bring urlEditTextLeft to front
         urlEditText.bringToFront()
@@ -2404,7 +2412,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val viewHashCode = view.hashCode()
         val isSameView = viewHashCode == lastFullscreenViewHashCode
         lastFullscreenViewHashCode = viewHashCode
-
 
         // Remove from current parent if any
         if (view.parent is ViewGroup) {
@@ -3187,14 +3194,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         lastRefreshLogTime = now
                     }
 
-                    if (isRefreshing && webView.isAttachedToWindow) {
-                        captureLeftEyeContent()
+                    if (isRefreshing) {
+                        if (webView.isAttachedToWindow) {
+                            captureLeftEyeContent()
+                        }
                         refreshHandler.postDelayed(this, refreshInterval)
                     } else {
-                        Log.w(
-                                "MirrorDebug",
-                                "RefreshLoop STOPPING! isRefreshing=$isRefreshing, webViewAttached=${webView.isAttachedToWindow}"
-                        )
+                        Log.w("MirrorDebug", "RefreshLoop STOPPING! isRefreshing=$isRefreshing")
+                        // No need to call stopRefreshing() here as we just stop posting callbacks
                     }
                 }
             }
@@ -3782,7 +3789,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         val localX = localXContainer - kbView.x
         val localY = localYContainer - kbView.y
-
 
         return Pair(localX, localY)
     }
@@ -5648,7 +5654,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         val parentLocation = IntArray(2)
                         leftToggleBar.getLocationOnScreen(parentLocation)
 
-
                         false
                     }
                 }
@@ -6439,7 +6444,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             )
                     return
                 }
-
             } else {
                 return
             }
