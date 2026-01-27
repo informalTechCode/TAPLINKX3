@@ -1004,7 +1004,7 @@ class MainActivity :
         }
 
         webView.setBackgroundColor(Color.BLACK)
-        dualWebViewGroup.updateBrowsingMode(false)
+        dualWebViewGroup.updateBrowsingMode(dualWebViewGroup.isDesktopMode())
 
         // Set up the listener
         dualWebViewGroup.linkEditingListener = this
@@ -2969,6 +2969,9 @@ class MainActivity :
 
             handled
         }
+
+        // Persist the newly active window so reopen returns to the correct tab/page.
+        persistActiveWebViewState("onWindowSwitched", webView)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -3153,6 +3156,13 @@ class MainActivity :
                             if (url != null && !url.startsWith("about:blank")) {
                                 lastValidUrl = url
 
+                                // Persist the URL as soon as navigation starts so app relaunch
+                                // returns to the newest page even if load doesn't finish.
+                                persistActiveUrl("onPageStarted", url, view)
+
+                                // Start observers early so scrollbars can appear before full load.
+                                view?.let { dualWebViewGroup.injectPageObservers(it) }
+
                                 // Inject location early so it's available before page JS runs
                                 if (lastGpsLat != null && lastGpsLon != null) {
                                     dualWebViewGroup.injectLocation(lastGpsLat!!, lastGpsLon!!)
@@ -3172,6 +3182,11 @@ class MainActivity :
 
                             // Ensure loading bar is hidden when finished
                             dualWebViewGroup.updateLoadingProgress(100)
+
+                            // Persist state on page changes for crash/exit recovery.
+                            persistActiveWebViewState("onPageFinished", view)
+                            // Keep window snapshots in sync with navigation history.
+                            dualWebViewGroup.saveAllWindowsState()
 
                             if (url != null && !url.startsWith("about:blank")) {
                                 view?.visibility = View.VISIBLE
@@ -3621,6 +3636,7 @@ class MainActivity :
         DebugLog.d("WebViewDebug", "Attempting to restore previous session")
 
         try {
+            dualWebViewGroup.updateBrowsingMode(dualWebViewGroup.isDesktopMode())
             val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
             val savedState = prefs.getString(Constants.KEY_WEBVIEW_STATE, null)
             val lastUrl = prefs.getString(keyLastUrl, null)
@@ -4759,44 +4775,77 @@ class MainActivity :
     override fun onStop() {
         super.onStop()
 
-        // Get the current URL from the WebView
-        val currentUrl = webView.url
-        DebugLog.d("WebViewDebug", "Saving current URL: $currentUrl")
-
         // Save all windows state
         if (::dualWebViewGroup.isInitialized) {
             dualWebViewGroup.saveAllWindowsState()
         }
 
-        if (currentUrl != null && !currentUrl.startsWith("about:blank")) {
-            // Save the URL to SharedPreferences
-            getSharedPreferences(prefsName, MODE_PRIVATE)
-                    .edit()
-                    .putString(keyLastUrl, currentUrl)
-                    .apply()
+        // Persist active state on stop as a final snapshot.
+        persistActiveWebViewState("onStop", webView)
+    }
 
-            // Store it in our property for reference
-            lastUrl = currentUrl
-
-            // Save WebView state
-            val webViewState = Bundle()
-            webView.saveState(webViewState)
-
-            try {
-                val parcel = Parcel.obtain()
-                webViewState.writeToParcel(parcel, 0)
-                val serializedState = Base64.encodeToString(parcel.marshall(), Base64.DEFAULT)
-                parcel.recycle()
-
-                getSharedPreferences(prefsName, MODE_PRIVATE).edit {
-                    putString(Constants.KEY_WEBVIEW_STATE, serializedState)
-                }
-
-                DebugLog.d("WebViewDebug", "WebView state saved successfully")
-            } catch (e: Exception) {
-                DebugLog.e("WebViewDebug", "Error saving WebView state", e)
-            }
+    private fun persistActiveWebViewState(reason: String, activeView: WebView? = webView) {
+        if (!::dualWebViewGroup.isInitialized) {
+            return
         }
+
+        val targetView = activeView ?: return
+        if (!dualWebViewGroup.isActiveWebView(targetView)) {
+            return
+        }
+
+        val currentUrl = targetView.url
+        if (currentUrl.isNullOrBlank() || currentUrl.startsWith("about:blank")) {
+            return
+        }
+
+        DebugLog.d("WebViewDebug", "Persisting active state ($reason): $currentUrl")
+
+        getSharedPreferences(prefsName, MODE_PRIVATE)
+                .edit()
+                .putString(keyLastUrl, currentUrl)
+                .apply()
+        lastUrl = currentUrl
+
+        try {
+            val webViewState = Bundle()
+            targetView.saveState(webViewState)
+
+            val parcel = Parcel.obtain()
+            webViewState.writeToParcel(parcel, 0)
+            val serializedState = Base64.encodeToString(parcel.marshall(), Base64.DEFAULT)
+            parcel.recycle()
+
+            getSharedPreferences(prefsName, MODE_PRIVATE).edit {
+                putString(Constants.KEY_WEBVIEW_STATE, serializedState)
+            }
+
+            DebugLog.d("WebViewDebug", "WebView state persisted successfully ($reason)")
+        } catch (e: Exception) {
+            DebugLog.e("WebViewDebug", "Error persisting WebView state ($reason)", e)
+        }
+    }
+
+    private fun persistActiveUrl(reason: String, url: String, activeView: WebView? = webView) {
+        if (!::dualWebViewGroup.isInitialized) {
+            return
+        }
+
+        val targetView = activeView ?: return
+        if (!dualWebViewGroup.isActiveWebView(targetView)) {
+            return
+        }
+
+        if (url.startsWith("about:blank")) {
+            return
+        }
+
+        DebugLog.d("WebViewDebug", "Persisting last URL ($reason): $url")
+        getSharedPreferences(prefsName, MODE_PRIVATE)
+                .edit()
+                .putString(keyLastUrl, url)
+                .apply()
+        lastUrl = url
     }
 
     // Add JavaScript interface to reset capturing state

@@ -1515,6 +1515,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun createNewWindow() {
         val newWebView = InternalWebView(context)
         configureWebView(newWebView)
+        applyBrowsingModeToWebView(newWebView, isDesktopMode)
         // Load default URL for fresh windows
         newWebView.loadUrl(Constants.DEFAULT_URL)
         val newWindow = BrowserWindow(webView = newWebView, title = "New Tab")
@@ -1613,6 +1614,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         try {
             val root = org.json.JSONObject()
             root.put("activeId", activeWindowId)
+            root.put("isDesktopMode", isDesktopMode)
 
             val windowsArray = org.json.JSONArray()
             windows.forEach { win ->
@@ -1665,6 +1667,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
             val root = org.json.JSONObject(jsonString)
             val savedActiveId = if (root.has("activeId")) root.getString("activeId") else null
+            val restoredDesktopMode = root.optBoolean("isDesktopMode", isDesktopMode)
+            isDesktopMode = restoredDesktopMode
+            prefs.edit().putBoolean("isDesktopMode", isDesktopMode).apply()
             val windowsArray = root.optJSONArray("windows")
 
             if (windowsArray != null && windowsArray.length() > 0) {
@@ -1686,6 +1691,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                     val newWebView = InternalWebView(context)
                     configureWebView(newWebView)
+                    applyBrowsingModeToWebView(newWebView, isDesktopMode)
                     // Important: notify MainActivity to attach its logic
                     windowCallback?.onWindowCreated(newWebView)
 
@@ -1736,6 +1742,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                 windows.last().id
                             }
                     switchToWindow(targetId)
+                    syncBrowsingModeUi()
                 } else {
                     // Fallback if parsing failed
                     createNewWindow()
@@ -2457,7 +2464,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 horizontalScrollBar,
                 FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, 20).apply {
                     gravity = Gravity.BOTTOM
-                    leftMargin = 0
+                    leftMargin = toggleBarWidthPx
                     rightMargin = 20 // Prevent overlap with vertical scroll bar
                     bottomMargin = navBarHeightPx // Sit on top of the nav bar
                 }
@@ -3341,6 +3348,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Shrink the WebView when keyboard is visible so content isn't blocked
         val isKeyboardVisible = keyboardContainer.visibility == View.VISIBLE
 
+        val horizontalReserve = if (horizontalScrollBar.visibility == View.VISIBLE) 20 else 0
+
         if (isInScrollMode) {
             val keyboardLimit =
                     if (isKeyboardVisible) {
@@ -3350,12 +3359,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     }
             // Respect proper measurement which accounts for margins (scrollbars)
             val measuredBottom = 0 + webViewsContainer.measuredHeight
+            val adjustedKeyboardLimit = (keyboardLimit - horizontalReserve).coerceAtLeast(0)
 
             webViewsContainer.layout(
                     0, // No left margin in scroll mode
                     0,
                     0 + webViewsContainer.measuredWidth, // Full width minus margins
-                    minOf(keyboardLimit, measuredBottom)
+                    minOf(adjustedKeyboardLimit, measuredBottom)
             )
         } else {
             val navBarTop = eyeHeight - navBarHeight
@@ -3368,13 +3378,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     }
             // Respect proper measurement which accounts for margins (scrollbars)
             val measuredBottom = 0 + webViewsContainer.measuredHeight
+            val adjustedKeyboardLimit = (keyboardLimit - horizontalReserve).coerceAtLeast(0)
 
             webViewsContainer.layout(
                     toggleBarWidth, // Account for toggle bar
                     0,
                     toggleBarWidth +
                             webViewsContainer.measuredWidth, // Standard width + toggle bar offset
-                    minOf(keyboardLimit, measuredBottom)
+                    minOf(adjustedKeyboardLimit, measuredBottom)
             )
         }
 
@@ -3538,9 +3549,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 )
             }
 
-            // Show and position navigation bars - hardcoded to bottom of 480px eye
-            leftNavigationBar.visibility = View.VISIBLE
-            leftNavigationBar.layout(0, eyeHeight - navBarHeight, halfWidth, eyeHeight)
+            // Show navigation bar only in normal mode (hide in scroll mode to avoid overlap)
+            if (isInScrollMode) {
+                leftNavigationBar.visibility = View.GONE
+                leftNavigationBar.layout(0, 0, 0, 0)
+            } else {
+                leftNavigationBar.visibility = View.VISIBLE
+                leftNavigationBar.layout(0, eyeHeight - navBarHeight, halfWidth, eyeHeight)
+            }
         }
 
         // Update bitmap capture when layout changes
@@ -3633,13 +3649,23 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         if (horizontalScrollBar.visibility == View.VISIBLE) {
             val hScrollHeight = 20
+            val navBarTop =
+                    if (leftNavigationBar.visibility == View.VISIBLE) eyeHeight - navBarHeight
+                    else eyeHeight
             val hScrollY =
                     if (isInScrollMode) eyeHeight - hScrollHeight
-                    else eyeHeight - navBarHeight - hScrollHeight // At bottom in scroll mode
+                    else navBarTop - hScrollHeight // Sit right above nav bar
 
-            val scrollLeft = if (isInScrollMode) 0 else toggleBarWidth
+            val leftInset =
+                    if (leftToggleBar.visibility == View.VISIBLE) {
+                        leftToggleBar.measuredWidth.takeIf { it > 0 } ?: toggleBarWidth
+                    } else {
+                        0
+                    }
+            val scrollLeft = leftInset
             var scrollWidth =
-                    if (isInScrollMode) halfWidth - eyeButtonSpace else halfWidth - toggleBarWidth
+                    if (isInScrollMode) halfWidth - leftInset - eyeButtonSpace
+                    else halfWidth - leftInset
 
             // Prevent overlap with vertical scrollbar if visible
             if (verticalScrollBar.visibility == View.VISIBLE) {
@@ -4466,20 +4492,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Step 1: Update WebView settings (user agent)
         // If on Netflix, we preserve the current UA (which should be the system default) to prevent
         // DRM errors.
-        val isNetflix = webView.url?.contains("netflix.com") == true
-
-        if (!isNetflix) {
-            webView.settings.apply {
-                userAgentString =
-                        if (isDesktop) {
-                            desktopUserAgent
-                        } else {
-                            mobileUserAgent
-                        }
-                loadWithOverviewMode = true
-                useWideViewPort = true
-            }
-        }
+        applyBrowsingModeToWebView(webView, isDesktop)
 
         // Step 2: Update viewport using JavaScript without forcing a complete reload
         val viewportContent =
@@ -4511,11 +4524,31 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         // Update toggle button icons
+        syncBrowsingModeUi()
+    }
+
+    private fun applyBrowsingModeToWebView(targetWebView: WebView, isDesktop: Boolean) {
+        val isNetflix = targetWebView.url?.contains("netflix.com") == true
+        if (isNetflix) return
+
+        targetWebView.settings.apply {
+            userAgentString =
+                    if (isDesktop) {
+                        desktopUserAgent
+                    } else {
+                        mobileUserAgent
+                    }
+            loadWithOverviewMode = true
+            useWideViewPort = true
+        }
+    }
+
+    private fun syncBrowsingModeUi() {
         webView.post {
             val leftButton = leftToggleBar.findViewById<FontIconView>(R.id.btnModeToggle)
             leftButton?.text =
                     context.getString(
-                            if (isDesktop) R.string.fa_desktop else R.string.fa_mobile_screen
+                            if (isDesktopMode) R.string.fa_desktop else R.string.fa_mobile_screen
                     )
         }
     }
@@ -7472,6 +7505,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val script =
                 """
             (function() {
+                if (window.__taplinkReportScroll) {
+                    window.__taplinkReportScroll();
+                    if (window.__taplinkWarmupScroll) {
+                        window.__taplinkWarmupScroll();
+                    }
+                    return;
+                }
+
                 function initTaplinkObservers() {
                     if (window.__observersInjected) return;
                     if (!document.body) {
@@ -7690,6 +7731,25 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         }
                     }
 
+                    function warmupScrollReports() {
+                        if (window.__taplinkWarmupActive) return;
+                        window.__taplinkWarmupActive = true;
+                        const delays = [0, 120, 300, 600, 1000, 1500, 2000];
+                        for (let i = 0; i < delays.length; i++) {
+                            const delay = delays[i];
+                            setTimeout(function() {
+                                rescanRequested = true;
+                                reportScroll();
+                                if (i === delays.length - 1) {
+                                    window.__taplinkWarmupActive = false;
+                                }
+                            }, delay);
+                        }
+                    }
+
+                    window.__taplinkReportScroll = reportScroll;
+                    window.__taplinkWarmupScroll = warmupScrollReports;
+
                     // Global capture listeners for scrollable activity
                     window.addEventListener('scroll', reportScroll, { capture: true, passive: true });
                     window.addEventListener('wheel', reportScroll, { capture: true, passive: true });
@@ -7697,6 +7757,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                     // Also check on resize
                     window.addEventListener('resize', reportScroll);
+                    document.addEventListener('DOMContentLoaded', reportScroll, { passive: true });
 
                     // Periodic check
                     setInterval(function() { reportScroll(); }, 1000);
@@ -7721,6 +7782,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                     // Immediate metrics after setup
                     reportScroll();
+                    warmupScrollReports();
                 }
 
                 initTaplinkObservers();
