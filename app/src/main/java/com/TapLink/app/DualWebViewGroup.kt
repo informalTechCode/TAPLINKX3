@@ -1565,6 +1565,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Ensure observers exist for restored pages where onPageFinished may not fire.
         webView.post { injectPageObservers(webView) }
+        // Ensure refresh loop is running (it might have died if previous webview was detached)
+        startRefreshing()
 
         hideWindowsOverview()
         saveAllWindowsState()
@@ -1654,7 +1656,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val jsonString = prefs.getString(KEY_WINDOWS_STATE, null)
 
-            if (jsonString.isNullOrEmpty()) return
+            if (jsonString.isNullOrEmpty()) {
+                if (windows.isEmpty()) {
+                    createNewWindow()
+                }
+                return
+            }
 
             val root = org.json.JSONObject(jsonString)
             val savedActiveId = if (root.has("activeId")) root.getString("activeId") else null
@@ -1733,6 +1740,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     // Fallback if parsing failed
                     createNewWindow()
                 }
+            } else if (windows.isEmpty()) {
+                createNewWindow()
             }
         } catch (e: Exception) {
             Log.e("Persistence", "Error restoring window state", e)
@@ -3262,14 +3271,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         lastRefreshLogTime = now
                     }
 
-                    if (isRefreshing && webView.isAttachedToWindow) {
-                        captureLeftEyeContent()
+                    if (isRefreshing) {
+                        if (webView.isAttachedToWindow) {
+                            captureLeftEyeContent()
+                        }
                         refreshHandler.postDelayed(this, refreshInterval)
                     } else {
-                        Log.w(
-                                "MirrorDebug",
-                                "RefreshLoop STOPPING! isRefreshing=$isRefreshing, webViewAttached=${webView.isAttachedToWindow}"
-                        )
+                        Log.w("MirrorDebug", "RefreshLoop STOPPING! isRefreshing=$isRefreshing")
+                        // No need to call stopRefreshing() here as we just stop posting callbacks
                     }
                 }
             }
@@ -5158,7 +5167,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             if (container.visibility != View.VISIBLE) return null
             val rect = android.graphics.Rect()
             if (!container.getGlobalVisibleRect(rect)) return null
-            if (screenX < rect.left || screenX > rect.right || screenY < rect.top || screenY > rect.bottom) {
+            if (screenX < rect.left ||
+                            screenX > rect.right ||
+                            screenY < rect.top ||
+                            screenY > rect.bottom
+            ) {
                 return null
             }
             val scaleX = if (container.scaleX == 0f) 1f else container.scaleX
@@ -5178,7 +5191,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 if (localX >= child.left &&
                                 localX <= child.right &&
                                 localY >= child.top &&
-                                localY <= child.bottom) {
+                                localY <= child.bottom
+                ) {
 
                     if (child.hasOnClickListeners()) {
                         child.performClick()
