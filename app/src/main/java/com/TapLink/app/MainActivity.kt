@@ -1140,6 +1140,14 @@ class MainActivity :
         }
     }
 
+    fun getLastLocation(): Pair<Double, Double>? {
+        return if (lastGpsLat != null && lastGpsLon != null) {
+            Pair(lastGpsLat!!, lastGpsLon!!)
+        } else {
+            null
+        }
+    }
+
     private fun ensureGpsUpdates() {
         if (gpsUpdatesRegistered) return
 

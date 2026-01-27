@@ -1,6 +1,7 @@
 package com.TapLinkX3.app
 
 import android.content.Context
+import android.content.ContextWrapper
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -56,10 +57,15 @@ class WebAppInterface(private val context: Context, private val webView: WebView
                         // Add system prompt
                         val systemMsg = JSONObject()
                         systemMsg.put("role", "system")
-                        systemMsg.put(
-                                "content",
-                                "You are a helpful AI assistant integrated into the TapLinkX3 dashboard."
-                        )
+
+                        var systemContent = "You are a helpful AI assistant integrated into the TapLinkX3 dashboard."
+                        val activity = findMainActivity(context)
+                        val location = activity?.getLastLocation()
+                        if (location != null) {
+                            systemContent += "\nCurrent Location: ${location.first}, ${location.second}"
+                        }
+
+                        systemMsg.put("content", systemContent)
                         messages.put(systemMsg)
 
                         // Add history
@@ -129,5 +135,14 @@ class WebAppInterface(private val context: Context, private val webView: WebView
             // Log.d("WebAppInterface", "Posting response to WebView: $escapedText")
             webView.evaluateJavascript("receiveGroqResponse('$escapedText')", null)
         }
+    }
+
+    private fun findMainActivity(context: Context): MainActivity? {
+        var ctx = context
+        while (ctx is ContextWrapper) {
+            if (ctx is MainActivity) return ctx
+            ctx = ctx.baseContext
+        }
+        return ctx as? MainActivity
     }
 }
