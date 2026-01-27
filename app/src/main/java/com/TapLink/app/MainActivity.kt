@@ -3186,7 +3186,7 @@ class MainActivity :
                                 }
 
                                 // Restore media listeners and scrollbar logic from DualWebViewGroup
-                                view?.let { dualWebViewGroup.injectMediaListeners(it) }
+                                view?.let { dualWebViewGroup.injectPageObservers(it) }
                                 dualWebViewGroup.updateScrollBarsVisibility()
 
                                 // Inject media listeners with enhanced YouTube support
@@ -4013,7 +4013,6 @@ class MainActivity :
 
         // Hide info bars when keyboard shows
         dualWebViewGroup.hideInfoBars()
-
 
         keyboardView?.let { keyboard ->
             // Log state before setting keyboard

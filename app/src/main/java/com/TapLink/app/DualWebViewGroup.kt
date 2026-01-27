@@ -761,7 +761,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val webHExtent = metrics.extentX
         val webVRange = metrics.rangeY
         val webVExtent = metrics.extentY
-        val scrollDeltaThreshold = 6
+        val scrollDeltaThreshold = 1
         val webHDelta = webHRange - webHExtent
         val webVDelta = webVRange - webVExtent
         val showHorzRaw = webHDelta > scrollDeltaThreshold
@@ -790,8 +790,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Apply layout adjustments
         (webViewsContainer.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
             // Keep WebView sizing stable to avoid layout churn (prevents media pauses/flicker).
-            val rightMarginShift = if (verticalScrollBar.visibility == View.VISIBLE) 30 else 0
-            val bottomMarginShift = if (horizontalScrollBar.visibility == View.VISIBLE) 30 else 0
+            val rightMarginShift = if (verticalScrollBar.visibility == View.VISIBLE) 20 else 0
+            val bottomMarginShift = if (horizontalScrollBar.visibility == View.VISIBLE) 20 else 0
 
             var targetWidth = 0
             var targetHeight = 0
@@ -899,18 +899,26 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         val external =
                 externalScrollMetrics?.takeIf { now - it.timestamp <= externalScrollMetricsStaleMs }
-        val useExternalH =
-                external != null && external.rangeX > external.extentX && external.extentX > 0
-        val useExternalV =
-                external != null && external.rangeY > external.extentY && external.extentY > 0
+        if (external == null) {
+            return ScrollMetrics(
+                    rangeX = webRangeX,
+                    extentX = webExtentX,
+                    offsetX = webOffsetX,
+                    rangeY = webRangeY,
+                    extentY = webExtentY,
+                    offsetY = webOffsetY
+            )
+        }
 
+        val useExternalH = external.rangeX > external.extentX && external.extentX > 0
+        val useExternalV = external.rangeY > external.extentY && external.extentY > 0
         return ScrollMetrics(
-                rangeX = if (useExternalH && external != null) external.rangeX else webRangeX,
-                extentX = if (useExternalH && external != null) external.extentX else webExtentX,
-                offsetX = if (useExternalH && external != null) external.offsetX else webOffsetX,
-                rangeY = if (useExternalV && external != null) external.rangeY else webRangeY,
-                extentY = if (useExternalV && external != null) external.extentY else webExtentY,
-                offsetY = if (useExternalV && external != null) external.offsetY else webOffsetY
+                rangeX = if (useExternalH) external.rangeX else webRangeX,
+                extentX = if (useExternalH) external.extentX else webExtentX,
+                offsetX = if (useExternalH) external.offsetX else webOffsetX,
+                rangeY = if (useExternalV) external.rangeY else webRangeY,
+                extentY = if (useExternalV) external.extentY else webExtentY,
+                offsetY = if (useExternalV) external.offsetY else webOffsetY
         )
     }
 
@@ -930,12 +938,78 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         webView.evaluateJavascript(
                 """
             (function() {
-                if ($useScrollToJs && typeof window.scrollTo === 'function') {
-                    window.scrollTo({ left: $leftValue, top: $topValue, behavior: $behavior });
-                } else if (!$useScrollToJs && typeof window.scrollBy === 'function') {
-                    window.scrollBy({ left: $leftValue, top: $topValue, behavior: $behavior });
-                } else if (typeof window.scrollTo === 'function') {
-                    window.scrollTo({ left: $leftValue, top: $topValue, behavior: $behavior });
+                var leftVal = $leftValue;
+                var topVal = $topValue;
+                var behavior = $behavior;
+                var useScrollTo = $useScrollToJs;
+
+                function isNumber(v) {
+                    return typeof v === 'number' && !isNaN(v);
+                }
+
+                function scrollWindow() {
+                    if (useScrollTo && typeof window.scrollTo === 'function') {
+                        window.scrollTo({
+                            left: isNumber(leftVal) ? leftVal : window.scrollX,
+                            top: isNumber(topVal) ? topVal : window.scrollY,
+                            behavior: behavior
+                        });
+                    } else if (!useScrollTo && typeof window.scrollBy === 'function') {
+                        window.scrollBy({
+                            left: isNumber(leftVal) ? leftVal : 0,
+                            top: isNumber(topVal) ? topVal : 0,
+                            behavior: behavior
+                        });
+                    } else if (typeof window.scrollTo === 'function') {
+                        window.scrollTo({
+                            left: isNumber(leftVal) ? leftVal : window.scrollX,
+                            top: isNumber(topVal) ? topVal : window.scrollY,
+                            behavior: behavior
+                        });
+                    }
+                }
+
+                function scrollElement(el) {
+                    if (!el) {
+                        scrollWindow();
+                        return;
+                    }
+                    var hasScrollTo = typeof el.scrollTo === 'function';
+                    var hasScrollBy = typeof el.scrollBy === 'function';
+                    if (useScrollTo && hasScrollTo) {
+                        el.scrollTo({
+                            left: isNumber(leftVal) ? leftVal : el.scrollLeft,
+                            top: isNumber(topVal) ? topVal : el.scrollTop,
+                            behavior: behavior
+                        });
+                        return;
+                    }
+                    if (!useScrollTo && hasScrollBy) {
+                        el.scrollBy({
+                            left: isNumber(leftVal) ? leftVal : 0,
+                            top: isNumber(topVal) ? topVal : 0,
+                            behavior: behavior
+                        });
+                        return;
+                    }
+
+                    var targetLeft = isNumber(leftVal) ? leftVal : el.scrollLeft;
+                    var targetTop = isNumber(topVal) ? topVal : el.scrollTop;
+                    if (!useScrollTo) {
+                        targetLeft = el.scrollLeft + (isNumber(leftVal) ? leftVal : 0);
+                        targetTop = el.scrollTop + (isNumber(topVal) ? topVal : 0);
+                    }
+                    el.scrollLeft = targetLeft;
+                    el.scrollTop = targetTop;
+                }
+
+                var target = window.__taplinkScrollTarget;
+                var root = document.scrollingElement || document.documentElement || document.body;
+                var isRoot = !target || target === root || target === document.documentElement || target === document.body;
+                if (!isRoot && target && target.isConnected !== false) {
+                    scrollElement(target);
+                } else {
+                    scrollWindow();
                 }
             })();
         """,
@@ -1743,7 +1817,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             // Kotlin anonymous object inside a method (configureWebView)
                             // configureWebView is a method of DualWebViewGroup.
                             // So yes, we can call injectMediaListeners() directly.
-                            view?.let { injectMediaListeners(it) }
+                            view?.let { injectPageObservers(it) }
                             updateScrollBarsVisibility()
                         } catch (e: Exception) {
                             android.util.Log.e("TapLink", "Error in onPageFinished", e)
@@ -1788,7 +1862,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // restoreState() will either:
         // 1. Restore saved windows (and set active one)
         // 2. Or call createNewWindow() calls which will add a window and load the default URL.
-
 
         val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
         isDesktopMode = prefs.getBoolean("isDesktopMode", false)
@@ -1984,7 +2057,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Initialize URL EditTexts
         urlEditText = setupUrlEditText(true)
-
 
         // Bring urlEditTextLeft to front
         urlEditText.bringToFront()
@@ -2370,16 +2442,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Add scroll bars to UI container
         leftEyeUIContainer.addView(
                 horizontalScrollBar,
-                FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, 30).apply {
+                FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, 20).apply {
                     gravity = Gravity.BOTTOM
                     leftMargin = 0
-                    rightMargin = 30 // Prevent overlap with vertical scroll bar
+                    rightMargin = 20 // Prevent overlap with vertical scroll bar
                     bottomMargin = navBarHeightPx // Sit on top of the nav bar
                 }
         )
         leftEyeUIContainer.addView(
                 verticalScrollBar,
-                FrameLayout.LayoutParams(30, FrameLayout.LayoutParams.MATCH_PARENT).apply {
+                FrameLayout.LayoutParams(20, FrameLayout.LayoutParams.MATCH_PARENT).apply {
                     gravity = Gravity.END
                     bottomMargin = navBarHeightPx // End at the nav bar
                 }
@@ -2404,7 +2476,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val viewHashCode = view.hashCode()
         val isSameView = viewHashCode == lastFullscreenViewHashCode
         lastFullscreenViewHashCode = viewHashCode
-
 
         // Remove from current parent if any
         if (view.parent is ViewGroup) {
@@ -3783,7 +3854,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val localX = localXContainer - kbView.x
         val localY = localYContainer - kbView.y
 
-
         return Pair(localX, localY)
     }
 
@@ -5074,63 +5144,53 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     // Helper method to check if a point is within any visible scrollbar
     fun isPointInScrollbar(screenX: Float, screenY: Float): Boolean {
-        if (horizontalScrollBar.visibility == View.VISIBLE) {
-            val location = IntArray(2)
-            horizontalScrollBar.getLocationOnScreen(location)
-            if (screenX >= location[0] &&
-                            screenX <= location[0] + horizontalScrollBar.width &&
-                            screenY >= location[1] &&
-                            screenY <= location[1] + horizontalScrollBar.height
-            ) {
-                return true
-            }
-        }
-        if (verticalScrollBar.visibility == View.VISIBLE) {
-            val location = IntArray(2)
-            verticalScrollBar.getLocationOnScreen(location)
-            if (screenX >= location[0] &&
-                            screenX <= location[0] + verticalScrollBar.width &&
-                            screenY >= location[1] &&
-                            screenY <= location[1] + verticalScrollBar.height
-            ) {
-                return true
-            }
-        }
-        return false
+        return isOver(horizontalScrollBar, screenX, screenY) ||
+                isOver(verticalScrollBar, screenX, screenY)
     }
 
     // Dispatch touch/click to the appropriate scrollbar element
     fun dispatchScrollbarTouch(screenX: Float, screenY: Float) {
+        fun getLocalPoint(container: ViewGroup): Pair<Float, Float>? {
+            if (container.visibility != View.VISIBLE) return null
+            val rect = android.graphics.Rect()
+            if (!container.getGlobalVisibleRect(rect)) return null
+            if (screenX < rect.left || screenX > rect.right || screenY < rect.top || screenY > rect.bottom) {
+                return null
+            }
+            val scaleX = if (container.scaleX == 0f) 1f else container.scaleX
+            val scaleY = if (container.scaleY == 0f) 1f else container.scaleY
+            val localX = (screenX - rect.left) / scaleX
+            val localY = (screenY - rect.top) / scaleY
+            return localX to localY
+        }
+
         fun dispatchToContainer(container: ViewGroup) {
-            val location = IntArray(2)
-            container.getLocationOnScreen(location)
+            val localPoint = getLocalPoint(container) ?: return
+            val localX = localPoint.first
+            val localY = localPoint.second
             // Check which child is hit
             for (i in 0 until container.childCount) {
                 val child = container.getChildAt(i)
-                val childLocation = IntArray(2)
-                child.getLocationOnScreen(childLocation)
-
-                if (screenX >= childLocation[0] &&
-                                screenX <= childLocation[0] + child.width &&
-                                screenY >= childLocation[1] &&
-                                screenY <= childLocation[1] + child.height
-                ) {
+                if (localX >= child.left &&
+                                localX <= child.right &&
+                                localY >= child.top &&
+                                localY <= child.bottom) {
 
                     if (child.hasOnClickListeners()) {
                         child.performClick()
                     } else {
                         // For track/thumb, we need to simulate touch events
                         // The track listener reacts to ACTION_UP
-                        val localX = screenX - childLocation[0]
-                        val localY = screenY - childLocation[1]
+                        val childLocalX = localX - child.left
+                        val childLocalY = localY - child.top
 
                         val downEvent =
                                 MotionEvent.obtain(
                                         SystemClock.uptimeMillis(),
                                         SystemClock.uptimeMillis(),
                                         MotionEvent.ACTION_DOWN,
-                                        localX,
-                                        localY,
+                                        childLocalX,
+                                        childLocalY,
                                         0
                                 )
                         child.dispatchTouchEvent(downEvent)
@@ -5141,8 +5201,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                         SystemClock.uptimeMillis(),
                                         SystemClock.uptimeMillis(),
                                         MotionEvent.ACTION_UP,
-                                        localX,
-                                        localY,
+                                        childLocalX,
+                                        childLocalY,
                                         0
                                 )
                         child.dispatchTouchEvent(upEvent)
@@ -5153,30 +5213,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             }
         }
 
-        if (horizontalScrollBar.visibility == View.VISIBLE) {
-            val location = IntArray(2)
-            horizontalScrollBar.getLocationOnScreen(location)
-            if (screenX >= location[0] &&
-                            screenX <= location[0] + horizontalScrollBar.width &&
-                            screenY >= location[1] &&
-                            screenY <= location[1] + horizontalScrollBar.height
-            ) {
-                dispatchToContainer(horizontalScrollBar)
-                return
-            }
+        if (isOver(horizontalScrollBar, screenX, screenY)) {
+            dispatchToContainer(horizontalScrollBar)
+            return
         }
 
-        if (verticalScrollBar.visibility == View.VISIBLE) {
-            val location = IntArray(2)
-            verticalScrollBar.getLocationOnScreen(location)
-            if (screenX >= location[0] &&
-                            screenX <= location[0] + verticalScrollBar.width &&
-                            screenY >= location[1] &&
-                            screenY <= location[1] + verticalScrollBar.height
-            ) {
-                dispatchToContainer(verticalScrollBar)
-                return
-            }
+        if (isOver(verticalScrollBar, screenX, screenY)) {
+            dispatchToContainer(verticalScrollBar)
+            return
         }
     }
 
@@ -5647,7 +5691,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         v.getLocationOnScreen(location)
                         val parentLocation = IntArray(2)
                         leftToggleBar.getLocationOnScreen(parentLocation)
-
 
                         false
                     }
@@ -6439,7 +6482,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             )
                     return
                 }
-
             } else {
                 return
             }
@@ -7408,24 +7450,19 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         post { webView.evaluateJavascript(script, null) }
     }
 
-    fun injectMediaListeners(targetWebView: WebView) {
+    fun injectPageObservers(targetWebView: WebView) {
         val script =
                 """
             (function() {
-                if (window.__mediaListenersInjected) return;
-                window.__mediaListenersInjected = true;
+                if (window.__observersInjected) return;
+                window.__observersInjected = true;
 
-                function attachListeners(media) {
+                // --- Media Listeners ---
+                function attachMediaListeners(media) {
                     if (media.__listenersAttached) return;
                     media.__listenersAttached = true;
                     
-                    media.addEventListener('play', function() {
-                        console.log('MediaInterface: play detected');
-                        window.MediaInterface.onMediaStateChanged(true);
-                    });
-                    
-                    media.addEventListener('pause', function() {
-                        // Check if any other media is playing before saying paused
+                    const updateState = () => {
                         const allMedia = document.querySelectorAll('video, audio');
                         let anyPlaying = false;
                         for(let i=0; i<allMedia.length; i++) {
@@ -7434,39 +7471,227 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                 break;
                             }
                         }
-                        console.log('MediaInterface: pause detected. Any playing? ' + anyPlaying);
-                        window.MediaInterface.onMediaStateChanged(anyPlaying);
-                    });
-                    
-                    media.addEventListener('ended', function() {
-                         const allMedia = document.querySelectorAll('video, audio');
-                        let anyPlaying = false;
-                        for(let i=0; i<allMedia.length; i++) {
-                            if(!allMedia[i].paused && !allMedia[i].ended && allMedia[i].readyState > 2) {
-                                anyPlaying = true;
-                                break;
-                            }
+                        if (window.MediaInterface) {
+                             window.MediaInterface.onMediaStateChanged(anyPlaying);
                         }
-                        console.log('MediaInterface: ended detected. Any playing? ' + anyPlaying);
-                        window.MediaInterface.onMediaStateChanged(anyPlaying);
-                    });
+                    };
+
+                    media.addEventListener('play', updateState);
+                    media.addEventListener('pause', updateState);
+                    media.addEventListener('ended', updateState);
                 }
 
-                // Attach to existing media
                 const existingMedia = document.querySelectorAll('video, audio');
-                existingMedia.forEach(attachListeners);
+                existingMedia.forEach(attachMediaListeners);
 
-                // Observe for new media
+                // --- Scroll Detection ---
+                let lastScrollTime = 0;
+                let lastScanTime = 0;
+                let cachedScroller = null;
+                let rescanRequested = false;
+                const SCAN_INTERVAL_MS = 1200;
+                const SCROLL_MIN_SIZE = 80;
+                const trackedScrollers = typeof WeakSet !== 'undefined' ? new WeakSet() : new Set();
+
+                function isRootScrollable(el) {
+                    if (!el) return false;
+                    return (el.scrollHeight - el.clientHeight) > 1 || (el.scrollWidth - el.clientWidth) > 1;
+                }
+
+                function isScrollable(el) {
+                    if (!el || el.nodeType !== 1 || !el.getBoundingClientRect) return false;
+                    const style = window.getComputedStyle(el);
+                    const overflowY = style.overflowY;
+                    const overflowX = style.overflowX;
+                    const scrollY = (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') &&
+                        (el.scrollHeight - el.clientHeight) > 1;
+                    const scrollX = (overflowX === 'auto' || overflowX === 'scroll' || overflowX === 'overlay') &&
+                        (el.scrollWidth - el.clientWidth) > 1;
+                    if (!(scrollY || scrollX)) return false;
+                    return (el.clientHeight > SCROLL_MIN_SIZE || el.clientWidth > SCROLL_MIN_SIZE);
+                }
+
+                function ensureScrollListener(el) {
+                    if (!el || trackedScrollers.has(el)) return;
+                    trackedScrollers.add(el);
+                    el.addEventListener('scroll', reportScroll, { passive: true });
+                }
+
+                function collectScrollableElements(root, out) {
+                    if (!root || !root.querySelectorAll) return;
+                    const elements = root.querySelectorAll('*');
+                    for (let i = 0; i < elements.length; i++) {
+                        const el = elements[i];
+                        if (isScrollable(el)) out.push(el);
+                        if (el.shadowRoot) {
+                            collectScrollableElements(el.shadowRoot, out);
+                        }
+                    }
+                }
+
+                function pickBestScroller(candidates) {
+                    let best = null;
+                    let bestScore = -1;
+                    for (let i = 0; i < candidates.length; i++) {
+                        const el = candidates[i];
+                        if (!el || !el.getBoundingClientRect) continue;
+                        const rect = el.getBoundingClientRect();
+                        const width = Math.max(0, Math.min(rect.width, window.innerWidth));
+                        const height = Math.max(0, Math.min(rect.height, window.innerHeight));
+                        const score = width * height;
+                        if (score > bestScore) {
+                            bestScore = score;
+                            best = el;
+                        }
+                    }
+                    return best;
+                }
+
+                function findScrollableElement(forceScan) {
+                    const now = Date.now();
+                    if (cachedScroller && cachedScroller.isConnected === false) {
+                        cachedScroller = null;
+                    }
+                    if (cachedScroller && !isScrollable(cachedScroller) && !isRootScrollable(cachedScroller)) {
+                        cachedScroller = null;
+                    }
+
+                    const shouldScan = forceScan || !cachedScroller || (now - lastScanTime) >= SCAN_INTERVAL_MS;
+                    if (!shouldScan && cachedScroller) {
+                        return cachedScroller;
+                    }
+
+                    const candidates = [];
+                    const rootScroller = document.scrollingElement || document.documentElement || document.body;
+                    if (rootScroller && isRootScrollable(rootScroller)) {
+                        candidates.push(rootScroller);
+                    }
+
+                    collectScrollableElements(document, candidates);
+
+                    const deduped = [];
+                    const seen = new Set();
+                    for (let i = 0; i < candidates.length; i++) {
+                        const el = candidates[i];
+                        if (el && !seen.has(el)) {
+                            seen.add(el);
+                            deduped.push(el);
+                        }
+                    }
+
+                    for (let i = 0; i < deduped.length; i++) {
+                        ensureScrollListener(deduped[i]);
+                    }
+
+                    cachedScroller = pickBestScroller(deduped);
+                    lastScanTime = now;
+                    rescanRequested = false;
+                    return cachedScroller;
+                }
+
+                function pickScrollerFromEvent(event) {
+                    if (!event) return null;
+                    if (event.composedPath) {
+                        const path = event.composedPath();
+                        for (let i = 0; i < path.length; i++) {
+                            const node = path[i];
+                            if (node && node.nodeType === 1) {
+                                const el = node;
+                                if (isScrollable(el) || isRootScrollable(el)) {
+                                    ensureScrollListener(el);
+                                    return el;
+                                }
+                            }
+                        }
+                    }
+
+                    if (event.target && event.target.nodeType === 1) {
+                        const tgt = event.target;
+                        if (isScrollable(tgt) || isRootScrollable(tgt)) {
+                            ensureScrollListener(tgt);
+                            return tgt;
+                        }
+                    }
+
+                    return null;
+                }
+
+                function reportScroll(event) {
+                    const now = Date.now();
+                    // Basic throttle/debounce
+                    if (now - lastScrollTime < 16) return;
+                    lastScrollTime = now;
+
+                    let scroller = pickScrollerFromEvent(event);
+                    if (!scroller) {
+                        scroller = findScrollableElement(rescanRequested);
+                    }
+
+                    if (!scroller) return;
+
+                    window.__taplinkScrollTarget = scroller;
+
+                    const rootScroller = document.scrollingElement || document.documentElement || document.body;
+
+                    // If it's the root, use window metrics
+                    let range, extent, offset, hRange, hExtent, hOffset;
+
+                    if (scroller === rootScroller || scroller === document.documentElement || scroller === document.body) {
+                        const docEl = document.documentElement;
+                        range = docEl.scrollHeight;
+                        extent = window.innerHeight;
+                        offset = window.scrollY;
+
+                        hRange = docEl.scrollWidth;
+                        hExtent = window.innerWidth;
+                        hOffset = window.scrollX;
+                    } else {
+                        range = scroller.scrollHeight;
+                        extent = scroller.clientHeight;
+                        offset = scroller.scrollTop;
+
+                        hRange = scroller.scrollWidth;
+                        hExtent = scroller.clientWidth;
+                        hOffset = scroller.scrollLeft;
+                    }
+
+                    if (window.MediaInterface) {
+                        window.MediaInterface.updateScrollMetrics(
+                            Math.round(hRange),
+                            Math.round(hExtent),
+                            Math.round(hOffset),
+                            Math.round(range),
+                            Math.round(extent),
+                            Math.round(offset)
+                        );
+                    }
+                }
+
+                // Global capture listeners for scrollable activity
+                window.addEventListener('scroll', reportScroll, { capture: true, passive: true });
+                window.addEventListener('wheel', reportScroll, { capture: true, passive: true });
+                window.addEventListener('touchmove', reportScroll, { capture: true, passive: true });
+
+                // Also check on resize
+                window.addEventListener('resize', reportScroll);
+
+                // Periodic check
+                setInterval(function() { reportScroll(); }, 1000);
+
+                // --- Mutation Observer ---
                 const observer = new MutationObserver(function(mutations) {
                     mutations.forEach(function(mutation) {
                         mutation.addedNodes.forEach(function(node) {
                             if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO') {
-                                attachListeners(node);
+                                attachMediaListeners(node);
                             } else if (node.querySelectorAll) {
-                                node.querySelectorAll('video, audio').forEach(attachListeners);
+                                node.querySelectorAll('video, audio').forEach(attachMediaListeners);
                             }
                         });
                     });
+                    // Also re-check scroll on mutations
+                    rescanRequested = true;
+                    reportScroll();
                 });
                 
                 observer.observe(document.body, { childList: true, subtree: true });
@@ -7484,6 +7709,27 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         fun onMediaStateChanged(isPlaying: Boolean) {
             // Run on UI thread to update UI
             parent.post { parent.handleMediaStateChanged(sourceWebView, isPlaying) }
+        }
+
+        @android.webkit.JavascriptInterface
+        fun updateScrollMetrics(
+                rangeX: Int,
+                extentX: Int,
+                offsetX: Int,
+                rangeY: Int,
+                extentY: Int,
+                offsetY: Int
+        ) {
+            parent.post {
+                parent.updateExternalScrollMetrics(
+                        rangeX,
+                        extentX,
+                        offsetX,
+                        rangeY,
+                        extentY,
+                        offsetY
+                )
+            }
         }
     }
 }
