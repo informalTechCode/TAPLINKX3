@@ -81,14 +81,20 @@ class GroqInterface(private val context: Context, private val webView: WebView) 
                         // Add system prompt
                         val systemMsg = JSONObject()
                         systemMsg.put("role", "system")
-                        systemMsg.put(
-                                "content",
-                                """Your name is TapLink AI. You are a helpful AI assistant built into the TapLink X3 web browser for RayNeo X3 Pro glasses.
+
+                        var systemContent = """Your name is TapLink AI. You are a helpful AI assistant built into the TapLink X3 web browser for RayNeo X3 Pro glasses.
 The documentation for the web browser can be found here: https://github.com/informalTechCode/TAPLINKX3/tree/main/docs
 Information about the glasses it lives on can be found here: https://www.rayneo.com/products/x3-pro-ai-display-glasses
 The creator of the TapLink X3 browser is Informal Tech. Tech-tuber that makes awesome tech videos on YouTube. He is found at youtube.com/@informal-tech.
 Answer questions concisely and keep all responses human readable."""
-                        )
+
+                        val activity = findMainActivity(context)
+                        val location = activity?.getLastLocation()
+                        if (location != null) {
+                            systemContent += "\nCurrent Location: ${location.first}, ${location.second}"
+                        }
+
+                        systemMsg.put("content", systemContent)
                         messages.put(systemMsg)
 
                         // Add history
