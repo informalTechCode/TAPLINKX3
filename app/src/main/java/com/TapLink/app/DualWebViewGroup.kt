@@ -167,8 +167,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 setBackgroundColor(Color.TRANSPARENT)
                 visibility = View.GONE
             }
-    private val nButtons = 7
-    private val buttonHeight = toggleButtonSizePx
     private val buttonFeedbackDuration = 200L
     var lastCursorX = 0f
     var lastCursorY = 0f
@@ -1791,9 +1789,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // 1. Restore saved windows (and set active one)
         // 2. Or call createNewWindow() calls which will add a window and load the default URL.
 
-        // webViewsContainer.addView(...) -> Removed
-        // windows.add(...) -> Removed
-        // activeWindowId = ... -> Removed (remains null initially)
 
         val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
         isDesktopMode = prefs.getBoolean("isDesktopMode", false)
@@ -1990,7 +1985,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Initialize URL EditTexts
         urlEditText = setupUrlEditText(true)
 
-        // addView(urlEditText)
 
         // Bring urlEditTextLeft to front
         urlEditText.bringToFront()
@@ -2056,14 +2050,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         viewTreeObserver.addOnGlobalLayoutListener(
                 object : ViewTreeObserver.OnGlobalLayoutListener {
                     override fun onGlobalLayout() {
-                        /* Log.d("TouchDebug", """
-                            Toggle Bar Layout:
-                            Width: ${leftToggleBar.width}
-                            Height: ${leftToggleBar.height}
-                            Left: ${leftToggleBar.left}
-                            Top: ${leftToggleBar.top}
-                            Translation: (${leftToggleBar.translationX}, ${leftToggleBar.translationY})
-                        """.trimIndent()) */
                         viewTreeObserver.removeOnGlobalLayoutListener(this)
                     }
                 }
@@ -2419,16 +2405,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val isSameView = viewHashCode == lastFullscreenViewHashCode
         lastFullscreenViewHashCode = viewHashCode
 
-        /* Log.d("FullscreenDebug", """
-            showFullScreenOverlay called:
-              Entry count: $fullscreenEntryCount
-              View class: ${view.javaClass.simpleName}
-              View hashCode: $viewHashCode
-              Same as last view: $isSameView
-              View attached: ${view.isAttachedToWindow}
-              View parent: ${view.parent?.javaClass?.simpleName ?: "null"}
-              Container child count before: ${fullScreenOverlayContainer.childCount}
-        """.trimIndent()) */
 
         // Remove from current parent if any
         if (view.parent is ViewGroup) {
@@ -2497,11 +2473,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun hideFullScreenOverlay() {
-        /* Log.d("FullscreenDebug", """
-            hideFullScreenOverlay called:
-              Container child count: ${fullScreenOverlayContainer.childCount}
-              Container visibility: ${if (fullScreenOverlayContainer.visibility == View.VISIBLE) "VISIBLE" else "GONE/INVISIBLE"}
-        """.trimIndent()) */
 
         // Get reference to the view being removed for logging
         val removedView =
@@ -3812,10 +3783,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val localX = localXContainer - kbView.x
         val localY = localYContainer - kbView.y
 
-        /* Log.d(
-            "TouchDebug",
-            "Anchored cursor mapped to keyboard local=($localX, $localY) kbSize=(${kbView.width}, ${kbView.height})"
-        ) */
 
         return Pair(localX, localY)
     }
@@ -4176,8 +4143,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val travelX = kotlin.math.abs(event.x - downX)
                 val travelY = kotlin.math.abs(event.y - downY)
                 val wasTap = dur < 300 && travelX < 8 && travelY < 8
-                /* android.util.Log.d("TouchDebug",
-                "DWG UP: wasTap=$wasTap dur=${dur}ms travel=(${travelX},${travelY}) kbVisible=$kbVisible isAnchored=$isAnchored") */
 
                 if (wasTap && !isAnchored) {
                     // Check for potential content changes
@@ -4546,14 +4511,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             setSelection(text.length)
             bringToFront()
             // Add logging to verify state
-            /* Log.d("DualWebViewGroup", """
-                Edit field state:
-                Text: $text
-                Visibility: $visibility
-                Parent: ${parent?.javaClass?.simpleName}
-                Position: ($x, $y)
-                Width: $width, Height: $height
-            """.trimIndent()) */
         }
         // Make sure we're in edit mode
         isBookmarkEditing = true
@@ -5691,15 +5648,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         val parentLocation = IntArray(2)
                         leftToggleBar.getLocationOnScreen(parentLocation)
 
-                        /* Log.d("TouchDebug", """
-                            Button Touch (${v.id}):
-                            Raw touch: (${event.rawX}, ${event.rawY})
-                            Button screen location: (${location[0]}, ${location[1]})
-                            Button size: ${v.width}x${v.height}
-                            Toggle bar screen location: (${parentLocation[0]}, ${parentLocation[1]})
-                            Button relative to parent: (${v.x}, ${v.y})
-                            Layout bounds: ($left, $top, $right, $bottom)
-                        """.trimIndent()) */
 
                         false
                     }
@@ -6492,13 +6440,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     return
                 }
 
-                /* Log.d("SettingsDebug", """
-                    Touch at ($x, $y)
-                    Volume seekbar at (${volumeLocation[0]}, ${volumeLocation[1]}) size ${volumeSeekBar?.width}x${volumeSeekBar?.height}
-                    Brightness seekbar at (${brightnessLocation[0]}, ${brightnessLocation[1]}) size ${brightnessSeekBar?.width}x${brightnessSeekBar?.height}
-                    Smoothness seekbar at (${smoothnessLocation[0]}, ${smoothnessLocation[1]}) size ${smoothnessSeekBar?.width}x${smoothnessSeekBar?.height}
-                    Close button at (${closeLocation[0]}, ${closeLocation[1]}) size ${closeButton?.width}x${closeButton?.height}
-                """.trimIndent()) */
             } else {
                 return
             }
