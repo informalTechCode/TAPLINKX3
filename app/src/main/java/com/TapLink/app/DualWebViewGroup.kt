@@ -1488,6 +1488,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Notify callback
         windowCallback?.onWindowSwitched(webView)
 
+        // Ensure refresh loop is running (it might have died if previous webview was detached)
+        startRefreshing()
+
         hideWindowsOverview()
         saveAllWindowsState()
     }
