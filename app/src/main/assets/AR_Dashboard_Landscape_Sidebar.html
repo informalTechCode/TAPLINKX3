@@ -110,6 +110,13 @@
       flex-wrap: wrap;
     }
 
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: nowrap;
+    }
+
     .btn {
       border: none;
       background: rgba(255, 255, 255, .08);
@@ -708,10 +715,12 @@
     <div class="topbar">
       <strong style="color:var(--text)">TapLinkX3 Dashboard</strong>
       <div style="flex:1"></div>
-      <button class="btn" id="editToggle" type="button">Edit Links</button>
-      <button class="btn" id="addLink" type="button">Add Link</button>
+      <div class="topbar-actions">
+        <button class="btn" id="editToggle" type="button">Edit Links</button>
+        <button class="btn" id="addLink" type="button">Add Link</button>
+        <button class="btn" id="themeToggle">Theme: Light</button>
+      </div>
       <input id="appSearch" class="search" placeholder="Filter apps." />
-      <button class="btn" id="themeToggle">Theme: Light</button>
     </div>
 
     <div class="content">
@@ -763,7 +772,7 @@
     function setTheme(t) {
       document.documentElement.setAttribute('data-theme', t);
       localStorage.setItem('theme', t);
-      themeToggle.textContent = (t === 'dark') ? 'Theme: Light' : 'Theme: Dark';
+      themeToggle.textContent = `Theme: ${t === 'dark' ? 'Dark' : 'Light'}`;
     }
     const savedTheme = localStorage.getItem('theme');
     setTheme(savedTheme === 'light' ? 'light' : 'dark');

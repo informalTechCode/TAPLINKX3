@@ -910,8 +910,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             )
         }
 
-        val useExternalH = external.rangeX > external.extentX && external.extentX > 0
-        val useExternalV = external.rangeY > external.extentY && external.extentY > 0
+        // Use external metrics whenever available so nested scrollers can suppress bars correctly.
+        val useExternalH = external.extentX > 0
+        val useExternalV = external.extentY > 0
         return ScrollMetrics(
                 rangeX = if (useExternalH) external.rangeX else webRangeX,
                 extentX = if (useExternalH) external.extentX else webExtentX,
@@ -1561,6 +1562,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Notify callback
         windowCallback?.onWindowSwitched(webView)
+
+        // Ensure observers exist for restored pages where onPageFinished may not fire.
+        webView.post { injectPageObservers(webView) }
 
         hideWindowsOverview()
         saveAllWindowsState()
@@ -7454,247 +7458,258 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val script =
                 """
             (function() {
-                if (window.__observersInjected) return;
-                window.__observersInjected = true;
+                function initTaplinkObservers() {
+                    if (window.__observersInjected) return;
+                    if (!document.body) {
+                        setTimeout(initTaplinkObservers, 50);
+                        return;
+                    }
+                    window.__observersInjected = true;
 
-                // --- Media Listeners ---
-                function attachMediaListeners(media) {
-                    if (media.__listenersAttached) return;
-                    media.__listenersAttached = true;
-                    
-                    const updateState = () => {
-                        const allMedia = document.querySelectorAll('video, audio');
-                        let anyPlaying = false;
-                        for(let i=0; i<allMedia.length; i++) {
-                            if(!allMedia[i].paused && !allMedia[i].ended && allMedia[i].readyState > 2) {
-                                anyPlaying = true;
-                                break;
+                    // --- Media Listeners ---
+                    function attachMediaListeners(media) {
+                        if (media.__listenersAttached) return;
+                        media.__listenersAttached = true;
+                        
+                        const updateState = () => {
+                            const allMedia = document.querySelectorAll('video, audio');
+                            let anyPlaying = false;
+                            for(let i=0; i<allMedia.length; i++) {
+                                if(!allMedia[i].paused && !allMedia[i].ended && allMedia[i].readyState > 2) {
+                                    anyPlaying = true;
+                                    break;
+                                }
+                            }
+                            if (window.MediaInterface) {
+                                 window.MediaInterface.onMediaStateChanged(anyPlaying);
+                            }
+                        };
+
+                        media.addEventListener('play', updateState);
+                        media.addEventListener('pause', updateState);
+                        media.addEventListener('ended', updateState);
+                    }
+
+                    const existingMedia = document.querySelectorAll('video, audio');
+                    existingMedia.forEach(attachMediaListeners);
+
+                    // --- Scroll Detection ---
+                    let lastScrollTime = 0;
+                    let lastScanTime = 0;
+                    let cachedScroller = null;
+                    let rescanRequested = false;
+                    const SCAN_INTERVAL_MS = 1200;
+                    const SCROLL_MIN_SIZE = 80;
+                    const trackedScrollers = typeof WeakSet !== 'undefined' ? new WeakSet() : new Set();
+
+                    function isRootScrollable(el) {
+                        if (!el) return false;
+                        return (el.scrollHeight - el.clientHeight) > 1 || (el.scrollWidth - el.clientWidth) > 1;
+                    }
+
+                    function isScrollable(el) {
+                        if (!el || el.nodeType !== 1 || !el.getBoundingClientRect) return false;
+                        const style = window.getComputedStyle(el);
+                        const overflowY = style.overflowY;
+                        const overflowX = style.overflowX;
+                        const scrollY = (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') &&
+                            (el.scrollHeight - el.clientHeight) > 1;
+                        const scrollX = (overflowX === 'auto' || overflowX === 'scroll' || overflowX === 'overlay') &&
+                            (el.scrollWidth - el.clientWidth) > 1;
+                        if (!(scrollY || scrollX)) return false;
+                        return (el.clientHeight > SCROLL_MIN_SIZE || el.clientWidth > SCROLL_MIN_SIZE);
+                    }
+
+                    function ensureScrollListener(el) {
+                        if (!el || trackedScrollers.has(el)) return;
+                        trackedScrollers.add(el);
+                        el.addEventListener('scroll', reportScroll, { passive: true });
+                    }
+
+                    function collectScrollableElements(root, out) {
+                        if (!root || !root.querySelectorAll) return;
+                        const elements = root.querySelectorAll('*');
+                        for (let i = 0; i < elements.length; i++) {
+                            const el = elements[i];
+                            if (isScrollable(el)) out.push(el);
+                            if (el.shadowRoot) {
+                                collectScrollableElements(el.shadowRoot, out);
                             }
                         }
-                        if (window.MediaInterface) {
-                             window.MediaInterface.onMediaStateChanged(anyPlaying);
+                    }
+
+                    function pickBestScroller(candidates) {
+                        let best = null;
+                        let bestScore = -1;
+                        for (let i = 0; i < candidates.length; i++) {
+                            const el = candidates[i];
+                            if (!el || !el.getBoundingClientRect) continue;
+                            const rect = el.getBoundingClientRect();
+                            const width = Math.max(0, Math.min(rect.width, window.innerWidth));
+                            const height = Math.max(0, Math.min(rect.height, window.innerHeight));
+                            const score = width * height;
+                            if (score > bestScore) {
+                                bestScore = score;
+                                best = el;
+                            }
                         }
-                    };
+                        return best;
+                    }
 
-                    media.addEventListener('play', updateState);
-                    media.addEventListener('pause', updateState);
-                    media.addEventListener('ended', updateState);
-                }
-
-                const existingMedia = document.querySelectorAll('video, audio');
-                existingMedia.forEach(attachMediaListeners);
-
-                // --- Scroll Detection ---
-                let lastScrollTime = 0;
-                let lastScanTime = 0;
-                let cachedScroller = null;
-                let rescanRequested = false;
-                const SCAN_INTERVAL_MS = 1200;
-                const SCROLL_MIN_SIZE = 80;
-                const trackedScrollers = typeof WeakSet !== 'undefined' ? new WeakSet() : new Set();
-
-                function isRootScrollable(el) {
-                    if (!el) return false;
-                    return (el.scrollHeight - el.clientHeight) > 1 || (el.scrollWidth - el.clientWidth) > 1;
-                }
-
-                function isScrollable(el) {
-                    if (!el || el.nodeType !== 1 || !el.getBoundingClientRect) return false;
-                    const style = window.getComputedStyle(el);
-                    const overflowY = style.overflowY;
-                    const overflowX = style.overflowX;
-                    const scrollY = (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') &&
-                        (el.scrollHeight - el.clientHeight) > 1;
-                    const scrollX = (overflowX === 'auto' || overflowX === 'scroll' || overflowX === 'overlay') &&
-                        (el.scrollWidth - el.clientWidth) > 1;
-                    if (!(scrollY || scrollX)) return false;
-                    return (el.clientHeight > SCROLL_MIN_SIZE || el.clientWidth > SCROLL_MIN_SIZE);
-                }
-
-                function ensureScrollListener(el) {
-                    if (!el || trackedScrollers.has(el)) return;
-                    trackedScrollers.add(el);
-                    el.addEventListener('scroll', reportScroll, { passive: true });
-                }
-
-                function collectScrollableElements(root, out) {
-                    if (!root || !root.querySelectorAll) return;
-                    const elements = root.querySelectorAll('*');
-                    for (let i = 0; i < elements.length; i++) {
-                        const el = elements[i];
-                        if (isScrollable(el)) out.push(el);
-                        if (el.shadowRoot) {
-                            collectScrollableElements(el.shadowRoot, out);
+                    function findScrollableElement(forceScan) {
+                        const now = Date.now();
+                        if (cachedScroller && cachedScroller.isConnected === false) {
+                            cachedScroller = null;
                         }
-                    }
-                }
-
-                function pickBestScroller(candidates) {
-                    let best = null;
-                    let bestScore = -1;
-                    for (let i = 0; i < candidates.length; i++) {
-                        const el = candidates[i];
-                        if (!el || !el.getBoundingClientRect) continue;
-                        const rect = el.getBoundingClientRect();
-                        const width = Math.max(0, Math.min(rect.width, window.innerWidth));
-                        const height = Math.max(0, Math.min(rect.height, window.innerHeight));
-                        const score = width * height;
-                        if (score > bestScore) {
-                            bestScore = score;
-                            best = el;
+                        if (cachedScroller && !isScrollable(cachedScroller) && !isRootScrollable(cachedScroller)) {
+                            cachedScroller = null;
                         }
-                    }
-                    return best;
-                }
 
-                function findScrollableElement(forceScan) {
-                    const now = Date.now();
-                    if (cachedScroller && cachedScroller.isConnected === false) {
-                        cachedScroller = null;
-                    }
-                    if (cachedScroller && !isScrollable(cachedScroller) && !isRootScrollable(cachedScroller)) {
-                        cachedScroller = null;
-                    }
+                        const shouldScan = forceScan || !cachedScroller || (now - lastScanTime) >= SCAN_INTERVAL_MS;
+                        if (!shouldScan && cachedScroller) {
+                            return cachedScroller;
+                        }
 
-                    const shouldScan = forceScan || !cachedScroller || (now - lastScanTime) >= SCAN_INTERVAL_MS;
-                    if (!shouldScan && cachedScroller) {
+                        const candidates = [];
+                        const rootScroller = document.scrollingElement || document.documentElement || document.body;
+                        if (rootScroller && isRootScrollable(rootScroller)) {
+                            candidates.push(rootScroller);
+                        }
+
+                        collectScrollableElements(document, candidates);
+
+                        const deduped = [];
+                        const seen = new Set();
+                        for (let i = 0; i < candidates.length; i++) {
+                            const el = candidates[i];
+                            if (el && !seen.has(el)) {
+                                seen.add(el);
+                                deduped.push(el);
+                            }
+                        }
+
+                        for (let i = 0; i < deduped.length; i++) {
+                            ensureScrollListener(deduped[i]);
+                        }
+
+                        cachedScroller = pickBestScroller(deduped);
+                        lastScanTime = now;
+                        rescanRequested = false;
                         return cachedScroller;
                     }
 
-                    const candidates = [];
-                    const rootScroller = document.scrollingElement || document.documentElement || document.body;
-                    if (rootScroller && isRootScrollable(rootScroller)) {
-                        candidates.push(rootScroller);
-                    }
-
-                    collectScrollableElements(document, candidates);
-
-                    const deduped = [];
-                    const seen = new Set();
-                    for (let i = 0; i < candidates.length; i++) {
-                        const el = candidates[i];
-                        if (el && !seen.has(el)) {
-                            seen.add(el);
-                            deduped.push(el);
-                        }
-                    }
-
-                    for (let i = 0; i < deduped.length; i++) {
-                        ensureScrollListener(deduped[i]);
-                    }
-
-                    cachedScroller = pickBestScroller(deduped);
-                    lastScanTime = now;
-                    rescanRequested = false;
-                    return cachedScroller;
-                }
-
-                function pickScrollerFromEvent(event) {
-                    if (!event) return null;
-                    if (event.composedPath) {
-                        const path = event.composedPath();
-                        for (let i = 0; i < path.length; i++) {
-                            const node = path[i];
-                            if (node && node.nodeType === 1) {
-                                const el = node;
-                                if (isScrollable(el) || isRootScrollable(el)) {
-                                    ensureScrollListener(el);
-                                    return el;
+                    function pickScrollerFromEvent(event) {
+                        if (!event) return null;
+                        if (event.composedPath) {
+                            const path = event.composedPath();
+                            for (let i = 0; i < path.length; i++) {
+                                const node = path[i];
+                                if (node && node.nodeType === 1) {
+                                    const el = node;
+                                    if (isScrollable(el) || isRootScrollable(el)) {
+                                        ensureScrollListener(el);
+                                        return el;
+                                    }
                                 }
                             }
                         }
+
+                        if (event.target && event.target.nodeType === 1) {
+                            const tgt = event.target;
+                            if (isScrollable(tgt) || isRootScrollable(tgt)) {
+                                ensureScrollListener(tgt);
+                                return tgt;
+                            }
+                        }
+
+                        return null;
                     }
 
-                    if (event.target && event.target.nodeType === 1) {
-                        const tgt = event.target;
-                        if (isScrollable(tgt) || isRootScrollable(tgt)) {
-                            ensureScrollListener(tgt);
-                            return tgt;
+                    function reportScroll(event) {
+                        const now = Date.now();
+                        // Basic throttle/debounce
+                        if (now - lastScrollTime < 16) return;
+                        lastScrollTime = now;
+
+                        let scroller = pickScrollerFromEvent(event);
+                        if (!scroller) {
+                            scroller = findScrollableElement(rescanRequested);
+                        }
+
+                        if (!scroller) return;
+
+                        window.__taplinkScrollTarget = scroller;
+
+                        const rootScroller = document.scrollingElement || document.documentElement || document.body;
+
+                        // If it's the root, use window metrics
+                        let range, extent, offset, hRange, hExtent, hOffset;
+
+                        if (scroller === rootScroller || scroller === document.documentElement || scroller === document.body) {
+                            const docEl = document.documentElement;
+                            range = docEl.scrollHeight;
+                            extent = window.innerHeight;
+                            offset = window.scrollY;
+
+                            hRange = docEl.scrollWidth;
+                            hExtent = window.innerWidth;
+                            hOffset = window.scrollX;
+                        } else {
+                            range = scroller.scrollHeight;
+                            extent = scroller.clientHeight;
+                            offset = scroller.scrollTop;
+
+                            hRange = scroller.scrollWidth;
+                            hExtent = scroller.clientWidth;
+                            hOffset = scroller.scrollLeft;
+                        }
+
+                        if (window.MediaInterface) {
+                            window.MediaInterface.updateScrollMetrics(
+                                Math.round(hRange),
+                                Math.round(hExtent),
+                                Math.round(hOffset),
+                                Math.round(range),
+                                Math.round(extent),
+                                Math.round(offset)
+                            );
                         }
                     }
 
-                    return null;
-                }
+                    // Global capture listeners for scrollable activity
+                    window.addEventListener('scroll', reportScroll, { capture: true, passive: true });
+                    window.addEventListener('wheel', reportScroll, { capture: true, passive: true });
+                    window.addEventListener('touchmove', reportScroll, { capture: true, passive: true });
 
-                function reportScroll(event) {
-                    const now = Date.now();
-                    // Basic throttle/debounce
-                    if (now - lastScrollTime < 16) return;
-                    lastScrollTime = now;
+                    // Also check on resize
+                    window.addEventListener('resize', reportScroll);
 
-                    let scroller = pickScrollerFromEvent(event);
-                    if (!scroller) {
-                        scroller = findScrollableElement(rescanRequested);
-                    }
+                    // Periodic check
+                    setInterval(function() { reportScroll(); }, 1000);
 
-                    if (!scroller) return;
-
-                    window.__taplinkScrollTarget = scroller;
-
-                    const rootScroller = document.scrollingElement || document.documentElement || document.body;
-
-                    // If it's the root, use window metrics
-                    let range, extent, offset, hRange, hExtent, hOffset;
-
-                    if (scroller === rootScroller || scroller === document.documentElement || scroller === document.body) {
-                        const docEl = document.documentElement;
-                        range = docEl.scrollHeight;
-                        extent = window.innerHeight;
-                        offset = window.scrollY;
-
-                        hRange = docEl.scrollWidth;
-                        hExtent = window.innerWidth;
-                        hOffset = window.scrollX;
-                    } else {
-                        range = scroller.scrollHeight;
-                        extent = scroller.clientHeight;
-                        offset = scroller.scrollTop;
-
-                        hRange = scroller.scrollWidth;
-                        hExtent = scroller.clientWidth;
-                        hOffset = scroller.scrollLeft;
-                    }
-
-                    if (window.MediaInterface) {
-                        window.MediaInterface.updateScrollMetrics(
-                            Math.round(hRange),
-                            Math.round(hExtent),
-                            Math.round(hOffset),
-                            Math.round(range),
-                            Math.round(extent),
-                            Math.round(offset)
-                        );
-                    }
-                }
-
-                // Global capture listeners for scrollable activity
-                window.addEventListener('scroll', reportScroll, { capture: true, passive: true });
-                window.addEventListener('wheel', reportScroll, { capture: true, passive: true });
-                window.addEventListener('touchmove', reportScroll, { capture: true, passive: true });
-
-                // Also check on resize
-                window.addEventListener('resize', reportScroll);
-
-                // Periodic check
-                setInterval(function() { reportScroll(); }, 1000);
-
-                // --- Mutation Observer ---
-                const observer = new MutationObserver(function(mutations) {
-                    mutations.forEach(function(mutation) {
-                        mutation.addedNodes.forEach(function(node) {
-                            if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO') {
-                                attachMediaListeners(node);
-                            } else if (node.querySelectorAll) {
-                                node.querySelectorAll('video, audio').forEach(attachMediaListeners);
-                            }
+                    // --- Mutation Observer ---
+                    const observer = new MutationObserver(function(mutations) {
+                        mutations.forEach(function(mutation) {
+                            mutation.addedNodes.forEach(function(node) {
+                                if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO') {
+                                    attachMediaListeners(node);
+                                } else if (node.querySelectorAll) {
+                                    node.querySelectorAll('video, audio').forEach(attachMediaListeners);
+                                }
+                            });
                         });
+                        // Also re-check scroll on mutations
+                        rescanRequested = true;
+                        reportScroll();
                     });
-                    // Also re-check scroll on mutations
-                    rescanRequested = true;
+                    
+                    observer.observe(document.body, { childList: true, subtree: true });
+
+                    // Immediate metrics after setup
                     reportScroll();
-                });
-                
-                observer.observe(document.body, { childList: true, subtree: true });
+                }
+
+                initTaplinkObservers();
             })();
         """.trimIndent()
 

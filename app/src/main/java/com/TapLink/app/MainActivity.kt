@@ -3652,6 +3652,19 @@ class MainActivity :
                     DebugLog.d("WebViewDebug", "No valid saved URL, loading default AR dashboard")
                     webView.loadUrl(defaultDashboardUrl)
                 }
+            } else {
+                // Restored pages may skip onPageFinished; inject observers and refresh scrollbars.
+                webView.post {
+                    dualWebViewGroup.injectPageObservers(webView)
+                    dualWebViewGroup.updateScrollBarsVisibility()
+                }
+                webView.postDelayed(
+                        {
+                            dualWebViewGroup.injectPageObservers(webView)
+                            dualWebViewGroup.updateScrollBarsVisibility()
+                        },
+                        750
+                )
             }
         } catch (e: Exception) {
             DebugLog.e("WebViewDebug", "Error restoring session", e)
