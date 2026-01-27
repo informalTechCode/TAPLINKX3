@@ -790,8 +790,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Apply layout adjustments
         (webViewsContainer.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
             // Keep WebView sizing stable to avoid layout churn (prevents media pauses/flicker).
-            val rightMarginShift = if (verticalScrollBar.visibility == View.VISIBLE) 20 else 0
-            val bottomMarginShift = if (horizontalScrollBar.visibility == View.VISIBLE) 20 else 0
+            val rightMarginShift = if (verticalScrollBar.visibility == View.VISIBLE) 30 else 0
+            val bottomMarginShift = if (horizontalScrollBar.visibility == View.VISIBLE) 30 else 0
 
             var targetWidth = 0
             var targetHeight = 0
