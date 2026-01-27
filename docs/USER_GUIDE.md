@@ -143,6 +143,7 @@ When Scroll Mode is active, a small transparent **Show** button appears in the b
 ### Open and Close Settings
 - Tap **Settings** (gear) on the bottom navigation bar.
 - In the settings header, use **Help** (question mark icon) or **Close** (X) on the right.
+- The Help dialog includes a TapLink AI page with quick tips and requirements.
 
 ### Audio and Display
 - **Volume** and **Brightness** sliders are in the left column.
@@ -166,3 +167,4 @@ When Scroll Mode is active, a small transparent **Show** button appears in the b
 ## Voice Control and AI
 - **Speech-to-Text**: Tap the **Mic** key on the on-screen keyboard to dictate into the active field.
 - **TapLink AI**: Tap **Chat** (comment icon) on the bottom navigation bar to open the AI window. Tap again to close it.
+- **Summarize**: Use the **Summarize** button in TapLink AI to recap the active webpage (dashboard/about:blank are not supported).

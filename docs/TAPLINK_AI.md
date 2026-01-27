@@ -7,8 +7,9 @@ TapLink X3 includes a dedicated, floating TapLink AI window powered by the **Gro
 1. Tap the **Chat** (comment bubble) button on the **bottom navigation bar** to open the AI window.
 2. The chat window appears centered on the screen with a message list and an input field at the bottom.
 3. Type your question in the input field.
-4. Tap the **Send** button (arrow) or press **Enter** on the keyboard.
-5. Tap the **Chat** button again to hide the AI window.
+4. Tap **Summarize** to recap the current webpage (requires a normal webpage, not the dashboard).
+5. Tap the **Send** button (arrow) or press **Enter** on the keyboard.
+6. Tap the **Chat** button again to hide the AI window.
 
 ### Entering the Groq API Key
 1. Tap **Settings** (gear) on the bottom navigation bar.
@@ -22,6 +23,7 @@ TapLink X3 includes a dedicated, floating TapLink AI window powered by the **Gro
 *   **Context-Aware**: The AI is aware it is running on the RayNeo X3 Pro glasses and TapLink browser.
 *   **High Performance**: Uses the `groq/compound` model for fast inference and advanced reasoning.
 *   **Persistent History**: Chat history is maintained during the session.
+*   **Summarize Button**: Sends the active webpage URL for a quick summary (dashboard/about:blank are ignored).
 
 ## Architecture
 

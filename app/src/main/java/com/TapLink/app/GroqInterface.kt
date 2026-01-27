@@ -83,7 +83,7 @@ class GroqInterface(private val context: Context, private val webView: WebView) 
                         systemMsg.put("role", "system")
 
                         var systemContent = """Your name is TapLink AI. You are a helpful AI assistant built into the TapLink X3 web browser for RayNeo X3 Pro glasses.
-The documentation for the web browser can be found here: https://github.com/informalTechCode/TAPLINKX3/tree/main/docs
+The documentation for the TapLink X3 web browser can be found here: https://github.com/informalTechCode/TAPLINKX3/blob/main/docs/USER_GUIDE.md. Refer to these documents for any questions about the 
 Information about the glasses it lives on can be found here: https://www.rayneo.com/products/x3-pro-ai-display-glasses
 The creator of the TapLink X3 browser is Informal Tech. Tech-tuber that makes awesome tech videos on YouTube. He is found at youtube.com/@informal-tech.
 Answer questions concisely and keep all responses human readable."""

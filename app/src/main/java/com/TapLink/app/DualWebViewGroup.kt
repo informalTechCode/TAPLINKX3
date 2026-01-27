@@ -6754,6 +6754,19 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 • Skip Back/Forward: Jump 10 seconds.
                 • Unmask (Eye Icon): Exit blank screen mode.
                 """.trimIndent(),
+                                    true,
+                                    true
+                            )
+                    5 ->
+                            Quadruple(
+                                    "TapLink AI",
+                                    """
+                TAPLINK AI (Chat Icon):
+                • Open/close with the Chat button on the bottom bar.
+                • Requires a Groq API Key (Settings -> Enter Groq API Key).
+                • Ask questions or use Summarize to recap the current webpage.
+                • Summarize works only when a normal webpage is open.
+                """.trimIndent(),
                                     false,
                                     true
                             )
