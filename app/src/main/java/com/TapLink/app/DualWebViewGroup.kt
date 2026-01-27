@@ -907,12 +907,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 external != null && external.rangeY > external.extentY && external.extentY > 0
 
         return ScrollMetrics(
-                rangeX = if (useExternalH) external?.rangeX ?: webRangeX else webRangeX,
-                extentX = if (useExternalH) external?.extentX ?: webExtentX else webExtentX,
-                offsetX = if (useExternalH) external?.offsetX ?: webOffsetX else webOffsetX,
-                rangeY = if (useExternalV) external?.rangeY ?: webRangeY else webRangeY,
-                extentY = if (useExternalV) external?.extentY ?: webExtentY else webExtentY,
-                offsetY = if (useExternalV) external?.offsetY ?: webOffsetY else webOffsetY
+                rangeX = if (useExternalH && external != null) external.rangeX else webRangeX,
+                extentX = if (useExternalH && external != null) external.extentX else webExtentX,
+                offsetX = if (useExternalH && external != null) external.offsetX else webOffsetX,
+                rangeY = if (useExternalV && external != null) external.rangeY else webRangeY,
+                extentY = if (useExternalV && external != null) external.extentY else webExtentY,
+                offsetY = if (useExternalV && external != null) external.offsetY else webOffsetY
         )
     }
 
@@ -1669,6 +1669,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val settings = webView.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
+        @Suppress("DEPRECATION") // Suppress for extensive database usage
         settings.databaseEnabled = true
         settings.useWideViewPort = true
         settings.loadWithOverviewMode = true
