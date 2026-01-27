@@ -3195,6 +3195,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                 "MirrorDebug",
                                 "RefreshLoop STOPPING! isRefreshing=$isRefreshing, webViewAttached=${webView.isAttachedToWindow}"
                         )
+                        stopRefreshing()
                     }
                 }
             }
