@@ -137,7 +137,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var lastHorzScrollableAt = 0L
     private var lastVertScrollableAt = 0L
     private var externalScrollMetrics: ExternalScrollMetrics? = null
-    private val externalScrollMetricsStaleMs = 3500L
+    private val externalScrollMetricsStaleMs = 600000L // 10 minutes
     private var isMediaPlaying = false
     private var lastMediaPlayingAt = 0L
     private val mediaScrollFreezeMs = 1500L
@@ -552,7 +552,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private fun updateScrollBarThumbs(xProgress: Int, yProgress: Int) {
         val now = SystemClock.uptimeMillis()
-        if (isInteractingWithScrollBar && now - lastScrollBarInteractionTime < 120L) return
+        // Guard against updates during or shortly after scrollbar interaction to prevent bouncing
+        if (now - lastScrollBarInteractionTime < 250L) return
 
         if (isWebViewScrollEnabled()) {
             val metrics = resolveScrollMetrics(now)
@@ -841,6 +842,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 // "Normal"}, [${p.width} x ${p.height}], Margins: L=${p.leftMargin},
                 // R=${p.rightMargin}, B=${p.bottomMargin}")
                 webViewsContainer.layoutParams = p
+                // Force layout update on WebView itself to ensure it resizes
+                webView.requestLayout()
                 webViewsContainer.requestLayout()
                 webViewsContainer.invalidate()
             }
@@ -880,7 +883,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (!isAnchored && now - lastScrollBarCheckTime > scrollBarVisibilityThrottleMs) {
             updateScrollBarsVisibility()
             lastScrollBarCheckTime = now
-        } else {
+        } else if (now - lastScrollBarInteractionTime >= 250L) {
+            // Only update thumb position if not recently interacting with scrollbar
             updateScrollBarThumbs(0, 0)
         }
     }
@@ -1799,6 +1803,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             return true
                         }
                         return false
+                    }
+
+                    override fun onPageStarted(
+                            view: android.webkit.WebView?,
+                            url: String?,
+                            favicon: Bitmap?
+                    ) {
+                        super.onPageStarted(view, url, favicon)
+                        clearExternalScrollMetrics()
                     }
 
                     @Deprecated("Deprecated in Java")
@@ -2730,6 +2743,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         maskOverlay.bringToFront()
         // Hide both cursor views
         leftToggleBar.findViewById<FontIconView>(R.id.btnMask)?.setText(R.string.fa_eye_slash)
+        keepScreenOn = true
         updateRefreshRate()
     }
 
@@ -2739,6 +2753,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Let MainActivity handle cursor visibility restoration - cursors will be shown
         // if they were visible before masking through updateCursorPosition call
         leftToggleBar.findViewById<FontIconView>(R.id.btnMask)?.setText(R.string.fa_eye)
+        keepScreenOn = false
         updateRefreshRate()
     }
 
@@ -7750,17 +7765,23 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     window.__taplinkReportScroll = reportScroll;
                     window.__taplinkWarmupScroll = warmupScrollReports;
 
+                    let reportTimer = null;
+                    function scheduleReport() {
+                        if (reportTimer !== null) return;
+                        reportTimer = setTimeout(function() {
+                            reportTimer = null;
+                            reportScroll();
+                        }, 250);
+                    }
+
                     // Global capture listeners for scrollable activity
-                    window.addEventListener('scroll', reportScroll, { capture: true, passive: true });
-                    window.addEventListener('wheel', reportScroll, { capture: true, passive: true });
-                    window.addEventListener('touchmove', reportScroll, { capture: true, passive: true });
+                    window.addEventListener('scroll', scheduleReport, { capture: true, passive: true });
+                    window.addEventListener('wheel', scheduleReport, { capture: true, passive: true });
+                    window.addEventListener('touchmove', scheduleReport, { capture: true, passive: true });
 
                     // Also check on resize
-                    window.addEventListener('resize', reportScroll);
-                    document.addEventListener('DOMContentLoaded', reportScroll, { passive: true });
-
-                    // Periodic check
-                    setInterval(function() { reportScroll(); }, 1000);
+                    window.addEventListener('resize', scheduleReport);
+                    document.addEventListener('DOMContentLoaded', scheduleReport, { passive: true });
 
                     // --- Mutation Observer ---
                     const observer = new MutationObserver(function(mutations) {
@@ -7775,7 +7796,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         });
                         // Also re-check scroll on mutations
                         rescanRequested = true;
-                        reportScroll();
+                        scheduleReport();
                     });
                     
                     observer.observe(document.body, { childList: true, subtree: true });

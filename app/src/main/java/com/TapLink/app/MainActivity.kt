@@ -292,6 +292,10 @@ class MainActivity :
 
     private var ipcLauncher: Launcher? = null
     private var gpsUpdatesRegistered = false
+    private val gpsHandler = Handler(Looper.getMainLooper())
+    private var gpsStopRunnable: Runnable? = null
+    private var lastGpsRequestAt = 0L
+    private val GPS_IDLE_TIMEOUT_MS = 60000L
 
     private val doubleTapLock = Any()
     private var isProcessingDoubleTap = false
@@ -1159,6 +1163,25 @@ class MainActivity :
         gpsUpdatesRegistered = true
     }
 
+    private fun noteGeolocationUse() {
+        lastGpsRequestAt = SystemClock.elapsedRealtime()
+        ensureGpsUpdates()
+
+        gpsStopRunnable?.let { gpsHandler.removeCallbacks(it) }
+        gpsStopRunnable =
+                object : Runnable {
+                    override fun run() {
+                        val now = SystemClock.elapsedRealtime()
+                        if (now - lastGpsRequestAt >= GPS_IDLE_TIMEOUT_MS) {
+                            stopGpsUpdates()
+                        } else {
+                            gpsHandler.postDelayed(this, GPS_IDLE_TIMEOUT_MS)
+                        }
+                    }
+                }
+        gpsHandler.postDelayed(gpsStopRunnable!!, GPS_IDLE_TIMEOUT_MS)
+    }
+
     private fun stopGpsUpdates() {
         if (!gpsUpdatesRegistered) return
 
@@ -1167,6 +1190,8 @@ class MainActivity :
         ipcLauncher?.disConnect()
         ipcLauncher = null
         gpsUpdatesRegistered = false
+        gpsStopRunnable?.let { gpsHandler.removeCallbacks(it) }
+        gpsStopRunnable = null
     }
 
     override fun getCurrentUrl(): String {
@@ -2983,7 +3008,7 @@ class MainActivity :
         DebugLog.d("WebView", "Speech recognition available: $speechRecognitionAvailable")
 
         // Section 1: Basic WebView Configuration
-        WebView.setWebContentsDebuggingEnabled(true)
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         webView.addJavascriptInterface(WebAppInterface(this, webView), "GroqBridge")
 
         // Intercept taplink://chat URLs
@@ -3238,6 +3263,15 @@ class MainActivity :
                                     notifyMediaState(isAnyPlaying);
                                     return isAnyPlaying;
                                 }
+
+                                let mediaCheckTimer = null;
+                                function scheduleMediaCheck() {
+                                    if (mediaCheckTimer !== null) return;
+                                    mediaCheckTimer = setTimeout(() => {
+                                        mediaCheckTimer = null;
+                                        checkMediaState();
+                                    }, 300);
+                                }
                                 
                                 function attachMediaListeners() {
                                     const mediaElements = document.querySelectorAll('video, audio');
@@ -3259,11 +3293,11 @@ class MainActivity :
                                         });
                                         media.addEventListener('pause', () => {
                                             console.log('[TapLink] Pause event');
-                                            checkMediaState();
+                                            scheduleMediaCheck();
                                         });
                                         media.addEventListener('ended', () => {
                                             console.log('[TapLink] Ended event');
-                                            checkMediaState();
+                                            scheduleMediaCheck();
                                         });
                                     });
                                 }
@@ -3271,19 +3305,14 @@ class MainActivity :
                                 // Run initially
                                 attachMediaListeners();
                                 checkMediaState();
+                                scheduleMediaCheck();
                                 
                                 // Watch for new media elements (YouTube loads videos dynamically)
                                 const observer = new MutationObserver((mutations) => {
                                     attachMediaListeners();
-                                    checkMediaState();
+                                    scheduleMediaCheck();
                                 });
                                 observer.observe(document.body, { childList: true, subtree: true });
-                                
-                                // Poll every second to catch state changes we might miss
-                                // (Some sites don't properly fire events)
-                                setInterval(() => {
-                                    checkMediaState();
-                                }, 1000);
                                 
                                 console.log('[TapLink] Media detection script initialized');
                             })();
@@ -3461,7 +3490,7 @@ class MainActivity :
                         ) {
                             // Always grant permission for WebView content so our injected GPS logic
                             // takes over
-                            ensureGpsUpdates()
+                            noteGeolocationUse()
                             callback.invoke(origin, true, false)
                         }
 
@@ -4782,6 +4811,7 @@ class MainActivity :
 
         // Persist active state on stop as a final snapshot.
         persistActiveWebViewState("onStop", webView)
+        stopGpsUpdates()
     }
 
     private fun persistActiveWebViewState(reason: String, activeView: WebView? = webView) {
@@ -4841,10 +4871,7 @@ class MainActivity :
         }
 
         DebugLog.d("WebViewDebug", "Persisting last URL ($reason): $url")
-        getSharedPreferences(prefsName, MODE_PRIVATE)
-                .edit()
-                .putString(keyLastUrl, url)
-                .apply()
+        getSharedPreferences(prefsName, MODE_PRIVATE).edit().putString(keyLastUrl, url).apply()
         lastUrl = url
     }
 

@@ -297,15 +297,7 @@
       border-radius: 4px
     }
 
-    [data-theme="light"] {
-      --bg: #f6f8fc;
-      --bg-2: #ffffff;
-      --card: #ffffff;
-      --accent: #0a84ff;
-      --accent-2: #2563eb;
-      --text: #0b0f1a;
-      --muted: #4a5b76
-    }
+
 
     .app span {
       color: var(--text);
@@ -718,7 +710,7 @@
       <div class="topbar-actions">
         <button class="btn" id="editToggle" type="button">Edit Links</button>
         <button class="btn" id="addLink" type="button">Add Link</button>
-        <button class="btn" id="themeToggle">Theme: Light</button>
+
       </div>
       <input id="appSearch" class="search" placeholder="Filter apps." />
     </div>
@@ -768,18 +760,7 @@
     }, { passive: false });
 
     /* Theme */
-    const themeToggle = document.getElementById('themeToggle');
-    function setTheme(t) {
-      document.documentElement.setAttribute('data-theme', t);
-      localStorage.setItem('theme', t);
-      themeToggle.textContent = `Theme: ${t === 'dark' ? 'Dark' : 'Light'}`;
-    }
-    const savedTheme = localStorage.getItem('theme');
-    setTheme(savedTheme === 'light' ? 'light' : 'dark');
-    themeToggle.addEventListener('click', () => {
-      const current = document.documentElement.getAttribute('data-theme') || 'dark';
-      setTheme(current === 'dark' ? 'light' : 'dark');
-    });
+
 
     /* Apps list */
     const storageKey = 'dashboardLinksV1';
@@ -1267,19 +1248,28 @@
         }
       }
 
+      let trailingTimer = null;
+      function scheduleTrailing() {
+        if (trailingTimer !== null) { return; }
+        trailingTimer = setTimeout(() => {
+          trailingTimer = null;
+          report();
+        }, 250);
+      }
+
       function schedule() {
         if (scheduled) { return; }
         scheduled = true;
         requestAnimationFrame(() => {
           scheduled = false;
           report();
+          scheduleTrailing();
         });
       }
 
       window.__taplinkReportScrollMetrics = report;
       hud.addEventListener('scroll', schedule, { passive: true });
       window.addEventListener('resize', schedule);
-      setInterval(report, 500);
       report();
     })();
   </script>
