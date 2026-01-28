@@ -3080,6 +3080,11 @@ class MainActivity :
                     safeBrowsingEnabled = true
                 }
 
+                // Force Dark Mode
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    @Suppress("DEPRECATION") forceDark = WebSettings.FORCE_DARK_ON
+                }
+
                 val wvVersion = getWebViewVersion() ?: "114.0.0.0"
 
                 // Store default UA for sites that require it (like Netflix)
