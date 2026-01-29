@@ -3106,7 +3106,9 @@ class MainActivity :
                 }
 
                 // Force Dark Mode
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    isAlgorithmicDarkeningAllowed = true
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     @Suppress("DEPRECATION") forceDark = WebSettings.FORCE_DARK_ON
                 }
 
