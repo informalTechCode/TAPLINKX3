@@ -252,8 +252,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                         override fun onSingleTapUp(e: MotionEvent): Boolean {
                             if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
-                                (context as? AppCompatActivity)?.onBackPressedDispatcher
-                                        ?.onBackPressed()
+                                // Toggle controls visibility instead of exiting
+                                if (::fullScreenControlsContainer.isInitialized) {
+                                    if (fullScreenControlsContainer.visibility == View.VISIBLE) {
+                                        fullScreenControlsContainer.visibility = View.GONE
+                                    } else {
+                                        fullScreenControlsContainer.visibility = View.VISIBLE
+                                        fullScreenControlsContainer.bringToFront()
+                                    }
+                                }
                                 return true
                             }
                             return false
@@ -1156,6 +1163,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private lateinit var btnMaskNext: FontIconView // 10s forward
     private lateinit var btnMaskNextTrack: FontIconView // Skip to next song
     private lateinit var btnMaskUnmask: ImageButton
+
+    // Fullscreen Mode UI elements
+    private lateinit var fullScreenControlsContainer: FrameLayout
+    private lateinit var fullScreenMediaControls: LinearLayout
+    private lateinit var btnFsPrevTrack: FontIconView
+    private lateinit var btnFsPrev: FontIconView
+    private lateinit var btnFsPlay: FontIconView
+    private lateinit var btnFsPause: FontIconView
+    private lateinit var btnFsNext: FontIconView
+    private lateinit var btnFsNextTrack: FontIconView
+    private lateinit var btnFsExit: FontIconView
 
     var anchorToggleListener: AnchorToggleListener? = null
 
@@ -2066,6 +2084,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Log.d("ViewDebug", "Toggle bar initialized with hash: ${leftToggleBar.hashCode()}")
 
         setupMaskOverlayUI()
+        setupFullScreenControlsUI()
 
         // Set background styles - use gradient drawables for modern look
         setBackgroundColor(Color.BLACK)
@@ -2538,6 +2557,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         FrameLayout.LayoutParams.MATCH_PARENT
                 )
         )
+
+        // Add the full screen controls overlay
+        if (::fullScreenControlsContainer.isInitialized) {
+            // Remove from parent if it was already added (defensive)
+            (fullScreenControlsContainer.parent as? ViewGroup)?.removeView(fullScreenControlsContainer)
+
+            fullScreenOverlayContainer.addView(fullScreenControlsContainer)
+            fullScreenControlsContainer.visibility = View.VISIBLE
+            fullScreenControlsContainer.bringToFront()
+        }
 
         // Log.d("FullscreenDebug", "  View added. Container child count:
         // ${fullScreenOverlayContainer.childCount}")
@@ -7384,6 +7413,125 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         maskMediaControlsContainer.addView(btnMaskNextTrack)
     }
 
+    private fun setupFullScreenControlsUI() {
+        // Container for controls (Bottom bar)
+        fullScreenControlsContainer = FrameLayout(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.BOTTOM
+            }
+            setBackgroundColor(Color.parseColor("#80000000")) // Semi-transparent black
+            setPadding(16, 16, 16, 16)
+            visibility = View.GONE // Hidden by default
+            isClickable = true // Consume clicks
+        }
+
+        // Media Controls Container (Center)
+        fullScreenMediaControls = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER
+            }
+        }
+        fullScreenControlsContainer.addView(fullScreenMediaControls)
+
+        // Exit Button (Right)
+        btnFsExit = FontIconView(context).apply {
+            setText(R.string.fa_compress)
+            setTextColor(Color.WHITE)
+            textSize = 24f
+            setPadding(16, 16, 16, 16)
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            }
+            setOnClickListener {
+                 (context as? AppCompatActivity)?.onBackPressedDispatcher?.onBackPressed()
+            }
+        }
+        fullScreenControlsContainer.addView(btnFsExit)
+
+        // Create Media Buttons (reusing logic from mask controls)
+        btnFsPrevTrack = createMediaButton(R.string.fa_backward_step) {
+            getMediaControlWebView().evaluateJavascript(
+                """
+                (function() {
+                    var prevBtn = document.querySelector('.ytp-prev-button') ||
+                                  document.querySelector('[aria-label*="previous" i]') ||
+                                  document.querySelector('[title*="previous" i]') ||
+                                  document.querySelector('button[data-testid="control-button-skip-back"]');
+                    if (prevBtn) { prevBtn.click(); return; }
+                    var media = document.querySelector('video, audio');
+                    if (media) media.currentTime = 0;
+                })();
+                """.trimIndent(), null
+            )
+        }
+
+        btnFsPrev = createMediaButton(R.string.fa_backward) {
+             getMediaControlWebView().evaluateJavascript(
+                 "document.querySelector('video, audio').currentTime -= 10;", null
+             )
+        }
+
+        btnFsPlay = createMediaButton(R.string.fa_play) {
+            getMediaControlWebView().evaluateJavascript(
+                "document.querySelector('video, audio').play();", null
+            )
+            // Local toggle for immediate feedback
+            btnFsPlay.visibility = View.GONE
+            btnFsPause.visibility = View.VISIBLE
+        }
+
+        btnFsPause = createMediaButton(R.string.fa_pause) {
+            getMediaControlWebView().evaluateJavascript(
+                "document.querySelector('video, audio').pause();", null
+            )
+            // Local toggle for immediate feedback
+            btnFsPause.visibility = View.GONE
+            btnFsPlay.visibility = View.VISIBLE
+        }
+
+        btnFsNext = createMediaButton(R.string.fa_forward) {
+             getMediaControlWebView().evaluateJavascript(
+                 "document.querySelector('video, audio').currentTime += 10;", null
+             )
+        }
+
+        btnFsNextTrack = createMediaButton(R.string.fa_forward_step) {
+            getMediaControlWebView().evaluateJavascript(
+                """
+                (function() {
+                    var nextBtn = document.querySelector('.ytp-next-button') ||
+                                  document.querySelector('[aria-label*="next" i]') ||
+                                  document.querySelector('[title*="next" i]') ||
+                                  document.querySelector('button[data-testid="control-button-skip-forward"]');
+                    if (nextBtn) { nextBtn.click(); return; }
+                    var media = document.querySelector('video, audio');
+                    if (media) media.currentTime = media.duration;
+                })();
+                """.trimIndent(), null
+            )
+        }
+
+        btnFsPause.visibility = View.GONE
+
+        fullScreenMediaControls.addView(btnFsPrevTrack)
+        fullScreenMediaControls.addView(btnFsPrev)
+        fullScreenMediaControls.addView(btnFsPlay)
+        fullScreenMediaControls.addView(btnFsPause)
+        fullScreenMediaControls.addView(btnFsNext)
+        fullScreenMediaControls.addView(btnFsNextTrack)
+    }
+
     private fun createMediaButton(iconRes: Int, onClick: () -> Unit): FontIconView {
         return FontIconView(context).apply {
             setText(iconRes)
@@ -7433,6 +7581,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 maskMediaControlsContainer.visibility = View.VISIBLE
                 // Log.d("MediaControls", "Controls container visibility:
                 // ${maskMediaControlsContainer.visibility}")
+            }
+
+            // Update full screen controls as well
+            if (::btnFsPlay.isInitialized && ::btnFsPause.isInitialized) {
+                if (isPlaying) {
+                    btnFsPlay.visibility = View.GONE
+                    btnFsPause.visibility = View.VISIBLE
+                } else {
+                    btnFsPlay.visibility = View.VISIBLE
+                    btnFsPause.visibility = View.GONE
+                }
             }
         }
     }
