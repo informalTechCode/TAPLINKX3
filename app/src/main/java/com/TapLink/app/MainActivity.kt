@@ -368,6 +368,9 @@ class MainActivity :
         // Set window background to black immediately
         window.setBackgroundDrawableResource(android.R.color.black)
 
+        // Set initial brightness to 10% to reduce power consumption
+        window.attributes = window.attributes.apply { screenBrightness = 0.1f }
+
         // Force hardware acceleration but with black background
         window.setFlags(
                 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
@@ -1045,7 +1048,7 @@ class MainActivity :
                 sensorManager.registerListener(
                         sensorEventListener,
                         sensor,
-                        SensorManager.SENSOR_DELAY_GAME
+                        SensorManager.SENSOR_DELAY_UI
                 )
             }
             dualWebViewGroup.startAnchoring()
@@ -1138,7 +1141,7 @@ class MainActivity :
                 sensorManager.registerListener(
                         sensorEventListener,
                         sensor,
-                        SensorManager.SENSOR_DELAY_GAME
+                        SensorManager.SENSOR_DELAY_UI
                 )
             }
         }
@@ -4151,11 +4154,11 @@ class MainActivity :
 
             sensorEventListener = createSensorEventListener()
             rotationSensor?.let { sensor ->
-                // Use FASTEST for maximum responsiveness (smoothing handles jitter)
+                // Use UI rate for good responsiveness with power savings (smoothing handles jitter)
                 sensorManager.registerListener(
                         sensorEventListener,
                         sensor,
-                        SensorManager.SENSOR_DELAY_GAME
+                        SensorManager.SENSOR_DELAY_UI
                 )
             }
             dualWebViewGroup.startAnchoring()
@@ -4680,6 +4683,12 @@ class MainActivity :
         } finally {
             isDispatchingTouchEvent = false
         }
+
+        // Reset idle timer on any touch to restore full refresh rate
+        if (::dualWebViewGroup.isInitialized) {
+            dualWebViewGroup.noteUserInteraction()
+        }
+
         return super.dispatchTouchEvent(ev)
     }
 

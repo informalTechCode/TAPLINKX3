@@ -140,9 +140,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val externalScrollMetricsStaleMs = 600000L // 10 minutes
     private var isMediaPlaying = false
     private var lastMediaPlayingAt = 0L
+    private var lastMediaInteractionTime = 0L
     private val mediaScrollFreezeMs = 1500L
     private val mediaStateByWindowId = mutableMapOf<String, Boolean>()
     private val mediaLastPlayedAtByWindowId = mutableMapOf<String, Long>()
+
+    // Idle detection for power saving
+    private var lastUserInteractionTime = 0L
+    private val idleThresholdMs = 5000L // 5 seconds before considered idle
+    private val idleRefreshIntervalMs = 100L // ~10fps when idle
 
     private var leftSystemInfoView: SystemInfoView
 
@@ -2638,19 +2644,30 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private fun updateRefreshRate() {
         val isFullscreen = fullScreenOverlayContainer.visibility == View.VISIBLE
-        // Logic:
-        // - Non-anchored: 30fps (33ms)
-        // - Anchored + Fullscreen (Video): ~24fps (42ms) for power saving
-        // - Anchored + Normal: 60fps (16ms)
+        val now = System.currentTimeMillis()
+        val isIdle = (now - lastUserInteractionTime) > idleThresholdMs
+
+        // Logic (prioritized):
+        // 1. Screen masked: 10fps (100ms) - minimal updates
+        // 2. Idle (no user interaction for 5s) and not playing media: 10fps (100ms)
+        // 3. Media playing: 60fps (16ms) - smooth video playback
+        // 4. Anchored + Normal browsing: 60fps (16ms) - needs smooth head tracking
+        // 5. Non-anchored without media: 30fps (33ms) - balanced for browsing
         refreshInterval =
                 when {
                     isScreenMasked -> maskedRefreshIntervalMs
+                    isIdle && !isMediaPlaying -> idleRefreshIntervalMs
+                    isMediaPlaying -> 16L
                     isAnchored && !isFullscreen -> 16L
-                    else -> 42L
+                    else -> 33L
                 }
-        // Log.d("PowerSaving", "Refresh rate updated: ${if (refreshInterval == 16L) "60fps" else if
-        // (refreshInterval == 33L) "30fps" else "24fps"} (Anchored=$isAnchored,
-        // Fullscreen=$isFullscreen)")
+    }
+
+    /** Call this from touch handlers to reset idle timer */
+    fun noteUserInteraction() {
+        lastUserInteractionTime = System.currentTimeMillis()
+        // If we were in idle mode, restore normal refresh rate
+        updateRefreshRate()
     }
 
     private fun hideSystemUI() {
@@ -7309,8 +7326,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     null
                             )
                     // Immediately update button visibility for responsive UI
+                    lastMediaInteractionTime = SystemClock.uptimeMillis()
                     btnMaskPlay.visibility = View.GONE
                     btnMaskPause.visibility = View.VISIBLE
+                    maskMediaControlsContainer.requestLayout()
                 }
         btnMaskPause =
                 createMediaButton(R.string.fa_pause) {
@@ -7320,8 +7339,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     null
                             )
                     // Immediately update button visibility for responsive UI
+                    lastMediaInteractionTime = SystemClock.uptimeMillis()
                     btnMaskPause.visibility = View.GONE
                     btnMaskPlay.visibility = View.VISIBLE
+                    maskMediaControlsContainer.requestLayout()
                 }
         btnMaskNext =
                 createMediaButton(R.string.fa_forward) {
@@ -7385,6 +7406,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun updateMediaState(isPlaying: Boolean) {
         // Log.d("MediaControls", "updateMediaState called: isPlaying=$isPlaying,
         // isScreenMasked=$isScreenMasked")
+
+        // Ignore updates shortly after manual interaction to prevent race conditions
+        if (SystemClock.uptimeMillis() - lastMediaInteractionTime < 500) {
+            return
+        }
+
         isMediaPlaying = isPlaying
         if (isPlaying) {
             lastMediaPlayingAt = SystemClock.uptimeMillis()

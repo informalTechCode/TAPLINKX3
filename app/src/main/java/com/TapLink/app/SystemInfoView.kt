@@ -10,7 +10,6 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import android.util.AttributeSet
-import android.util.Log
 import android.view.Gravity
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -19,11 +18,10 @@ import java.net.NetworkInterface
 import java.text.SimpleDateFormat
 import java.util.*
 
-class SystemInfoView @JvmOverloads constructor(
-    context: Context,
-    attrs: AttributeSet? = null,
-    defStyleAttr: Int = 0
-) : LinearLayout(context, attrs, defStyleAttr) {
+class SystemInfoView
+@JvmOverloads
+constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0) :
+        LinearLayout(context, attrs, defStyleAttr) {
 
     private var connectivityIcon: ImageView? = null
     private var batteryIcon: ImageView? = null
@@ -31,44 +29,47 @@ class SystemInfoView @JvmOverloads constructor(
     private var timeText: TextView? = null
     private var dateText: TextView? = null
 
-    private val batteryReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            try {
-                if (intent?.action == Intent.ACTION_BATTERY_CHANGED) {
-                    val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-                    val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-                    if (level != -1 && scale != -1) {
-                        val batteryPct = (level * 100f / scale).toInt()
-                        post { updateBattery(batteryPct) }
+    private val batteryReceiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    try {
+                        if (intent?.action == Intent.ACTION_BATTERY_CHANGED) {
+                            val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                            val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                            if (level != -1 && scale != -1) {
+                                val batteryPct = (level * 100f / scale).toInt()
+                                post { updateBattery(batteryPct) }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        DebugLog.e("SystemInfoView", "Battery update error", e)
                     }
                 }
-            } catch (e: Exception) {
-                DebugLog.e("SystemInfoView", "Battery update error", e)
             }
-        }
-    }
 
-    private val timeReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            try {
-                if (intent?.action == Intent.ACTION_TIME_TICK) {
-                    post { updateTimeAndDate() }
+    private val timeReceiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    try {
+                        if (intent?.action == Intent.ACTION_TIME_TICK) {
+                            post { updateTimeAndDate() }
+                        }
+                    } catch (e: Exception) {
+                        DebugLog.e("SystemInfoView", "Time update error", e)
+                    }
                 }
-            } catch (e: Exception) {
-                DebugLog.e("SystemInfoView", "Time update error", e)
             }
-        }
-    }
 
     private var updatesStarted = false
 
     init {
         try {
             orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.END    // Ensure parent layout centers children
-            setPadding(4, 0, 4, 0)    // Removed vertical padding to let height control spacing
+            gravity =
+                    Gravity.CENTER_VERTICAL or Gravity.END // Ensure parent layout centers children
+            setPadding(4, 0, 4, 0) // Removed vertical padding to let height control spacing
             setBackgroundColor(Color.parseColor("#202020"))
-            minimumHeight = 24    // Ensure consistent height
+            minimumHeight = 24 // Ensure consistent height
 
             setupViews()
         } catch (e: Exception) {
@@ -100,13 +101,15 @@ class SystemInfoView @JvmOverloads constructor(
 
     private fun createIconView(): ImageView {
         return ImageView(context).apply {
-            layoutParams = LayoutParams(
-                24,  // width in dp
-                24   // height in dp
-            ).apply {
-                gravity = Gravity.CENTER_VERTICAL
-                setMargins(6, 0, 6, 0)
-            }
+            layoutParams =
+                    LayoutParams(
+                                    24, // width in dp
+                                    24 // height in dp
+                            )
+                            .apply {
+                                gravity = Gravity.CENTER_VERTICAL
+                                setMargins(6, 0, 6, 0)
+                            }
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
     }
@@ -115,14 +118,15 @@ class SystemInfoView @JvmOverloads constructor(
         return TextView(context).apply {
             setTextColor(Color.WHITE)
             textSize = 12f
-            gravity = Gravity.CENTER_VERTICAL  // Changed from CENTER to CENTER_VERTICAL
-            layoutParams = LayoutParams(
-                LayoutParams.WRAP_CONTENT,
-                LayoutParams.MATCH_PARENT      // Changed from WRAP_CONTENT to MATCH_PARENT
-            ).apply {
-                setMargins(6, 0, 6, 0)
-            }
-            includeFontPadding = false        // Removes extra padding around text
+            gravity = Gravity.CENTER_VERTICAL // Changed from CENTER to CENTER_VERTICAL
+            layoutParams =
+                    LayoutParams(
+                                    LayoutParams.WRAP_CONTENT,
+                                    LayoutParams.MATCH_PARENT // Changed from WRAP_CONTENT to
+                                    // MATCH_PARENT
+                                    )
+                            .apply { setMargins(6, 0, 6, 0) }
+            includeFontPadding = false // Removes extra padding around text
         }
     }
 
@@ -137,15 +141,19 @@ class SystemInfoView @JvmOverloads constructor(
             updateConnectivity()
             updateTimeAndDate()
 
-            postDelayed(object : Runnable {
-                override fun run() {
-                    if (isAttachedToWindow) {
-                        updateConnectivity()
-                        updateTimeAndDate()
-                        postDelayed(this, 1000)
-                    }
-                }
-            }, 1000)
+            // Poll every 30 seconds for connectivity updates (power-saving)
+            // Time updates are handled by ACTION_TIME_TICK broadcast every minute
+            postDelayed(
+                    object : Runnable {
+                        override fun run() {
+                            if (isAttachedToWindow) {
+                                updateConnectivity()
+                                postDelayed(this, 30000) // 30 seconds instead of 1 second
+                            }
+                        }
+                    },
+                    30000
+            )
         } catch (e: Exception) {
             DebugLog.e("SystemInfoView", "Error starting updates", e)
         }
@@ -156,21 +164,25 @@ class SystemInfoView @JvmOverloads constructor(
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             val activeNetwork = cm.activeNetwork
             val networkCapabilities = cm.getNetworkCapabilities(activeNetwork)
-            val hasVpnTransport = networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ?: false
+            val hasVpnTransport =
+                    networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ?: false
             val hasTunInterface = hasTunInterface()
 
-            val iconResource = when {
-                networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> {
-                    R.drawable.wifi_on
-                }
-                networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) == true ||
-                        (hasVpnTransport && hasTunInterface) -> {
-                    R.drawable.wifi_bluetooth
-                }
-                else -> {
-                    R.drawable.wifi_off
-                }
-            }
+            val iconResource =
+                    when {
+                        networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ==
+                                true -> {
+                            R.drawable.wifi_on
+                        }
+                        networkCapabilities?.hasTransport(
+                                NetworkCapabilities.TRANSPORT_BLUETOOTH
+                        ) == true || (hasVpnTransport && hasTunInterface) -> {
+                            R.drawable.wifi_bluetooth
+                        }
+                        else -> {
+                            R.drawable.wifi_off
+                        }
+                    }
             connectivityIcon?.setImageResource(iconResource)
         } catch (e: Exception) {
             DebugLog.e("SystemInfoView", "Connectivity update error", e)
@@ -180,13 +192,14 @@ class SystemInfoView @JvmOverloads constructor(
 
     private fun updateBattery(level: Int) {
         try {
-            val iconResource = when {
-                level > 80 -> R.drawable.battery_full
-                level > 60 -> R.drawable.battery_75
-                level > 40 -> R.drawable.battery_50
-                level > 20 -> R.drawable.battery_25
-                else -> R.drawable.battery_low
-            }
+            val iconResource =
+                    when {
+                        level > 80 -> R.drawable.battery_full
+                        level > 60 -> R.drawable.battery_75
+                        level > 40 -> R.drawable.battery_50
+                        level > 20 -> R.drawable.battery_25
+                        else -> R.drawable.battery_low
+                    }
             batteryIcon?.setImageResource(iconResource)
             batteryText?.text = "$level%"
         } catch (e: Exception) {
@@ -201,7 +214,7 @@ class SystemInfoView @JvmOverloads constructor(
             timeText?.setTextColor(color)
             dateText?.setTextColor(color)
             batteryText?.setTextColor(color)
-            
+
             val tint = ColorStateList.valueOf(color)
             connectivityIcon?.imageTintList = tint
             batteryIcon?.imageTintList = tint
@@ -228,10 +241,11 @@ class SystemInfoView @JvmOverloads constructor(
     private fun hasTunInterface(): Boolean {
         return try {
             val interfaces = NetworkInterface.getNetworkInterfaces()?.toList() ?: emptyList()
-            val hasTun = interfaces.any { networkInterface ->
-                networkInterface.name == "tun0" && networkInterface.isUp
-            }
-            //DebugLog.d("SystemInfoView", "Has TUN interface: $hasTun")
+            val hasTun =
+                    interfaces.any { networkInterface ->
+                        networkInterface.name == "tun0" && networkInterface.isUp
+                    }
+            // DebugLog.d("SystemInfoView", "Has TUN interface: $hasTun")
             hasTun
         } catch (e: Exception) {
             DebugLog.e("SystemInfoView", "Error checking TUN interface", e)
