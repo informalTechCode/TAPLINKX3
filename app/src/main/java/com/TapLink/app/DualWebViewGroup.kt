@@ -693,7 +693,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun updateScrollBarsVisibility() {
-        // Log.d("ScrollDebug", "updateScrollBarsVisibility called. isAnchored=$isAnchored,
+        // DebugLog.d("ScrollDebug", "updateScrollBarsVisibility called. isAnchored=$isAnchored,
         // isInScrollMode=$isInScrollMode, uiScale=$uiScale")
         val now = SystemClock.uptimeMillis()
         // Check freeze state but don't return early - we need to update layout
@@ -846,7 +846,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 p.rightMargin = targetRightMargin
                 p.bottomMargin = targetBottomMargin
 
-                // Log.d("ScrollDebug", "Applying Layout: Mode=${if(isScrollModeActive)"Scroll" else
+                // DebugLog.d("ScrollDebug", "Applying Layout: Mode=${if(isScrollModeActive)"Scroll"
+                // else
                 // "Normal"}, [${p.width} x ${p.height}], Margins: L=${p.leftMargin},
                 // R=${p.rightMargin}, B=${p.bottomMargin}")
                 webViewsContainer.layoutParams = p
@@ -1192,13 +1193,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var hoveredWindowsOverviewItem: View? = null
 
     fun showWindowsOverview() {
-        Log.d(
+        DebugLog.d(
                 "WindowsOverview",
                 "showWindowsOverview called, windowsOverviewContainer=${windowsOverviewContainer != null}"
         )
         if (windowsOverviewContainer == null) {
             createWindowsOverviewUI()
-            Log.d("WindowsOverview", "Created windows overview UI")
+            DebugLog.d("WindowsOverview", "Created windows overview UI")
         }
 
         // Populate container with current windows
@@ -1210,7 +1211,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             )
             return
         }
-        Log.d("WindowsOverview", "Container found, clearing views. Windows count: ${windows.size}")
+        DebugLog.d(
+                "WindowsOverview",
+                "Container found, clearing views. Windows count: ${windows.size}"
+        )
         container.removeAllViews()
 
         // Add "Add Window" button at the top - shorter with label
@@ -1270,7 +1274,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         addButton.addView(addIcon)
         addButton.addView(addLabel)
         container.addView(addButton)
-        Log.d("WindowsOverview", "Added 'Add Window' button")
+        DebugLog.d("WindowsOverview", "Added 'Add Window' button")
 
         // Calculate item dimensions for 3-column grid with stretching
         // Container width = 608 - 32 (padding) = 576
@@ -1281,7 +1285,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Create rows for 3-column grid
         var currentRow: LinearLayout? = null
         windows.forEachIndexed { index, win ->
-            Log.d("WindowsOverview", "Adding window item: ${win.id}, title: ${win.title}")
+            DebugLog.d("WindowsOverview", "Adding window item: ${win.id}, title: ${win.title}")
 
             // Create new row every 3 items
             if (index % columnsPerRow == 0) {
@@ -1421,7 +1425,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             currentRow?.addView(item)
         }
 
-        Log.d("WindowsOverview", "Setting container visible, total items: ${container.childCount}")
+        DebugLog.d(
+                "WindowsOverview",
+                "Setting container visible, total items: ${container.childCount}"
+        )
         windowsOverviewContainer?.visibility = View.VISIBLE
         webView.visibility = View.GONE
 
@@ -1449,7 +1456,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Log layout info after layout pass
         windowsOverviewContainer?.post {
             val woc = windowsOverviewContainer
-            Log.d(
+            DebugLog.d(
                     "WindowsOverview",
                     "Post-layout: width=${woc?.width}, height=${woc?.height}, " +
                             "x=${woc?.x}, y=${woc?.y}, visibility=${woc?.visibility}, " +
@@ -1466,7 +1473,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     private fun createWindowsOverviewUI() {
-        Log.d("WindowsOverview", "createWindowsOverviewUI called")
+        DebugLog.d("WindowsOverview", "createWindowsOverviewUI called")
         // Use explicit dimensions since MATCH_PARENT wasn't resolving
         val containerWidth = 640 - toggleBarWidthPx // 608
         val containerHeight = 480 - navBarHeightPx // 448
@@ -1483,7 +1490,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     elevation = 1500f
                     isFillViewport = true // Ensure content fills the viewport
                 }
-        Log.d("WindowsOverview", "Container created: ${containerWidth}x${containerHeight}")
+        DebugLog.d("WindowsOverview", "Container created: ${containerWidth}x${containerHeight}")
 
         val content =
                 LinearLayout(context).apply {
@@ -1500,7 +1507,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         windowsOverviewContainer?.addView(content)
         leftEyeUIContainer.addView(windowsOverviewContainer)
-        Log.d(
+        DebugLog.d(
                 "WindowsOverview",
                 "UI created: ScrollView has ${windowsOverviewContainer?.childCount} children, added to leftEyeUIContainer (${leftEyeUIContainer.childCount} children)"
         )
@@ -1702,7 +1709,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     .putString(KEY_WINDOWS_STATE, jsonString)
                     .apply()
 
-            Log.d(
+            DebugLog.d(
                     "Persistence",
                     "Saved ${windows.size} windows with state (${jsonString.length} chars)"
             )
@@ -1842,10 +1849,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             request: android.webkit.WebResourceRequest?
                     ): Boolean {
                         val url = request?.url?.toString() ?: return false
-                        Log.d("GroqUrl", "Checking URL: $url")
+                        DebugLog.d("GroqUrl", "Checking URL: $url")
 
                         if (url.startsWith("taplink://chat")) {
-                            Log.d("GroqUrl", "Intercepted taplink://chat")
+                            DebugLog.d("GroqUrl", "Intercepted taplink://chat")
                             val uri = android.net.Uri.parse(url)
                             val msg = uri.getQueryParameter("msg")
                             val history = uri.getQueryParameter("history")
@@ -1873,9 +1880,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             view: android.webkit.WebView?,
                             url: String?
                     ): Boolean {
-                        Log.d("GroqUrl", "Checking URL (deprecated): $url")
+                        DebugLog.d("GroqUrl", "Checking URL (deprecated): $url")
                         if (url != null && url.startsWith("taplink://chat")) {
-                            Log.d("GroqUrl", "Intercepted taplink://chat (deprecated)")
+                            DebugLog.d("GroqUrl", "Intercepted taplink://chat (deprecated)")
                             val uri = android.net.Uri.parse(url)
                             val msg = uri.getQueryParameter("msg")
                             val history = uri.getQueryParameter("history")
@@ -2017,10 +2024,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             visibility = View.GONE
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener {
-                // Log.d("KeyboardDebug", "leftKeyboardContainer clicked")
+                // DebugLog.d("KeyboardDebug", "leftKeyboardContainer clicked")
             }
             setOnTouchListener { _, event ->
-                // Log.d("KeyboardDebug", "leftKeyboardContainer received touch event:
+                // DebugLog.d("KeyboardDebug", "leftKeyboardContainer received touch event:
                 // ${event.action}")
                 true
             }
@@ -2111,7 +2118,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     isFocusable = true // Add this
                 }
 
-        // Log.d("ViewDebug", "Toggle bar initialized with hash: ${leftToggleBar.hashCode()}")
+        // DebugLog.d("ViewDebug", "Toggle bar initialized with hash: ${leftToggleBar.hashCode()}")
 
         setupMaskOverlayUI()
         setupFullScreenControlsUI()
@@ -2245,7 +2252,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             }
             )
             addView(leftToggleBar)
-            // Log.d("ViewDebug", "Toggle bar added to UI container with hash:
+            // DebugLog.d("ViewDebug", "Toggle bar added to UI container with hash:
             // ${leftToggleBar.hashCode()}")
 
             addView(leftNavigationBar.apply { elevation = 101f })
@@ -2485,7 +2492,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                 val clickTop = clickY - thumbHeight / 2
                                 val percent = (clickTop / trackableHeight).coerceIn(0f, 1f)
 
-                                Log.d(
+                                DebugLog.d(
                                         "ScrollDebug",
                                         "Vertical Down: y=$clickY, height=$fullHeight, percent=$percent"
                                 )
@@ -2504,7 +2511,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                 val clickTop = clickY - thumbHeight / 2
                                 val percent = (clickTop / trackableHeight).coerceIn(0f, 1f)
 
-                                // Log.d("ScrollDebug", "Vertical Move: y=$clickY,
+                                // DebugLog.d("ScrollDebug", "Vertical Move: y=$clickY,
                                 // percent=$percent")
 
                                 updateVerticalScroll(percent)
@@ -2567,14 +2574,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Remove from current parent if any
         if (view.parent is ViewGroup) {
-            // Log.d("FullscreenDebug", "  Removing view from parent: ${(view.parent as
+            // DebugLog.d("FullscreenDebug", "  Removing view from parent: ${(view.parent as
             // ViewGroup).javaClass.simpleName}")
             (view.parent as ViewGroup).removeView(view)
         }
 
         // Clear any existing children
         if (fullScreenOverlayContainer.childCount > 0) {
-            // Log.d("FullscreenDebug", "  Clearing ${fullScreenOverlayContainer.childCount}
+            // DebugLog.d("FullscreenDebug", "  Clearing ${fullScreenOverlayContainer.childCount}
             // existing children from container")
             fullScreenOverlayContainer.removeAllViews()
         }
@@ -2600,11 +2607,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             fullScreenControlsContainer.bringToFront()
         }
 
-        // Log.d("FullscreenDebug", "  View added. Container child count:
+        // DebugLog.d("FullscreenDebug", "  View added. Container child count:
         // ${fullScreenOverlayContainer.childCount}")
 
         previousFullScreenVisibility.clear()
-        Log.d("FullscreenDebug", "Hiding ${fullScreenHiddenViews.size} UI elements")
+        DebugLog.d("FullscreenDebug", "Hiding ${fullScreenHiddenViews.size} UI elements")
         fullScreenHiddenViews.forEach { target ->
             val name =
                     when (target) {
@@ -2616,7 +2623,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         urlEditText -> "urlEditText"
                         else -> "unknown"
                     }
-            // Log.d("FullscreenDebug", "  Hiding $name (was ${if (target.visibility ==
+            // DebugLog.d("FullscreenDebug", "  Hiding $name (was ${if (target.visibility ==
             // View.VISIBLE) "VISIBLE" else "GONE/INVISIBLE"})")
             previousFullScreenVisibility[target] = target.visibility
             // Use GONE for everything to maximize power saving (remove from layout)
@@ -2632,10 +2639,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             fullScreenOverlayContainer.invalidate()
             fullScreenOverlayContainer.requestLayout()
             startRefreshing()
-            // Log.d("FullscreenDebug", "  Post-show refresh triggered")
+            // DebugLog.d("FullscreenDebug", "  Post-show refresh triggered")
         }
 
-        // Log.d("FullscreenDebug", "About to call hideSystemUI()")
+        // DebugLog.d("FullscreenDebug", "About to call hideSystemUI()")
         hideSystemUI()
 
         // Power saving: reduce refresh rate and notify listener
@@ -2652,7 +2659,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 } else null
 
         if (removedView != null) {
-            // Log.d("FullscreenDebug", "  Removing view: ${removedView.javaClass.simpleName},
+            // DebugLog.d("FullscreenDebug", "  Removing view: ${removedView.javaClass.simpleName},
             // hashCode: ${removedView.hashCode()}")
         }
 
@@ -2674,7 +2681,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         urlEditText -> "urlEditText"
                         else -> "unknown"
                     }
-            // Log.d("FullscreenDebug", "  Restoring $name to ${if (visibility == View.VISIBLE)
+            // DebugLog.d("FullscreenDebug", "  Restoring $name to ${if (visibility == View.VISIBLE)
             // "VISIBLE" else "GONE/INVISIBLE"}")
             target.visibility = visibility
         }
@@ -2709,7 +2716,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     }
 
                     startRefreshing()
-                    // Log.d("FullscreenDebug", "  Post-hide refresh triggered")
+                    // DebugLog.d("FullscreenDebug", "  Post-hide refresh triggered")
                 },
                 300
         ) // Small delay to let layout settle
@@ -2720,7 +2727,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         fullscreenListener?.onExitFullscreen()
         updateRefreshRate()
 
-        // Log.d("FullscreenDebug", "hideFullScreenOverlay complete")
+        // DebugLog.d("FullscreenDebug", "hideFullScreenOverlay complete")
     }
 
     private fun updateRefreshRate() {
@@ -2778,7 +2785,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         controller.systemBarsBehavior =
                                 android.view.WindowInsetsController
                                         .BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                        Log.d("FullscreenDebug", "System UI hidden (API 30+)")
+                        DebugLog.d("FullscreenDebug", "System UI hidden (API 30+)")
                     }
                             ?: Log.w("FullscreenDebug", "WindowInsetsController is null!")
                 } else {
@@ -2791,7 +2798,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
                                     View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
                                     View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
-                    Log.d("FullscreenDebug", "System UI hidden (legacy API)")
+                    DebugLog.d("FullscreenDebug", "System UI hidden (legacy API)")
                 }
             } catch (e: Exception) {
                 Log.e("FullscreenDebug", "Error hiding system UI", e)
@@ -2821,14 +2828,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             android.view.WindowInsets.Type.statusBars() or
                                     android.view.WindowInsets.Type.navigationBars()
                     )
-                    Log.d("FullscreenDebug", "System UI shown (API 30+)")
+                    DebugLog.d("FullscreenDebug", "System UI shown (API 30+)")
                 } else {
                     // Older Android versions - Clear flags
                     @Suppress("DEPRECATION")
                     activity.window.decorView.systemUiVisibility =
                             (View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
                                     View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
-                    Log.d("FullscreenDebug", "System UI shown (legacy API)")
+                    DebugLog.d("FullscreenDebug", "System UI shown (legacy API)")
                 }
             } catch (e: Exception) {
                 Log.e("FullscreenDebug", "Error showing system UI", e)
@@ -2869,7 +2876,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val localX = screenX - location[0]
         val localY = screenY - location[1]
 
-        // Log.d("MediaControls", "dispatchMaskOverlayTouch at local ($localX, $localY), scale:
+        // DebugLog.d("MediaControls", "dispatchMaskOverlayTouch at local ($localX, $localY), scale:
         // $scale")
 
         // Check unmask button hit (account for scale in button dimensions)
@@ -2882,7 +2889,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         screenY >= unmaskLocation[1] &&
                         screenY <= unmaskLocation[1] + unmaskHeight
         ) {
-            // Log.d("MediaControls", "Unmask button pressed")
+            // DebugLog.d("MediaControls", "Unmask button pressed")
             unmaskScreen()
             return
         }
@@ -2907,25 +2914,25 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                 screenY >= btnLocation[1] &&
                                 screenY <= btnLocation[1] + btnHeight
                 ) {
-                    // Log.d("MediaControls", "Media button $i pressed")
+                    // DebugLog.d("MediaControls", "Media button $i pressed")
                     button.performClick()
                     return
                 }
             }
         }
 
-        // Log.d("MediaControls", "Touch on mask overlay but not on any button")
+        // DebugLog.d("MediaControls", "Touch on mask overlay but not on any button")
     }
 
     fun dispatchFullScreenOverlayTouch(screenX: Float, screenY: Float) {
         val scale = uiScale
-        Log.d("FullscreenTouch", "Touch at screen ($screenX, $screenY), scale: $scale")
+        DebugLog.d("FullscreenTouch", "Touch at screen ($screenX, $screenY), scale: $scale")
 
         // Check controls container if visible
         if (::fullScreenControlsContainer.isInitialized &&
                         fullScreenControlsContainer.visibility == View.VISIBLE
         ) {
-            Log.d("FullscreenTouch", "Controls container is visible")
+            DebugLog.d("FullscreenTouch", "Controls container is visible")
 
             // Check exit button
             if (::btnFsExit.isInitialized && btnFsExit.visibility == View.VISIBLE) {
@@ -2933,7 +2940,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 btnFsExit.getLocationOnScreen(btnLocation)
                 val btnWidth = btnFsExit.width * scale
                 val btnHeight = btnFsExit.height * scale
-                Log.d(
+                DebugLog.d(
                         "FullscreenTouch",
                         "Exit button: loc=(${btnLocation[0]}, ${btnLocation[1]}), size=($btnWidth, $btnHeight), raw=(${btnFsExit.width}, ${btnFsExit.height})"
                 )
@@ -2942,7 +2949,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                 screenY >= btnLocation[1] &&
                                 screenY <= btnLocation[1] + btnHeight
                 ) {
-                    Log.d("FullscreenTouch", "Exit button HIT!")
+                    DebugLog.d("FullscreenTouch", "Exit button HIT!")
                     btnFsExit.performClick()
                     return
                 }
@@ -2952,7 +2959,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             if (::fullScreenMediaControls.isInitialized &&
                             fullScreenMediaControls.visibility == View.VISIBLE
             ) {
-                Log.d(
+                DebugLog.d(
                         "FullscreenTouch",
                         "Media controls visible with ${fullScreenMediaControls.childCount} children"
                 )
@@ -2964,7 +2971,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     button.getLocationOnScreen(btnLocation)
                     val btnWidth = button.width * scale
                     val btnHeight = button.height * scale
-                    Log.d(
+                    DebugLog.d(
                             "FullscreenTouch",
                             "Button $i: loc=(${btnLocation[0]}, ${btnLocation[1]}), size=($btnWidth, $btnHeight)"
                     )
@@ -2974,18 +2981,18 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     screenY >= btnLocation[1] &&
                                     screenY <= btnLocation[1] + btnHeight
                     ) {
-                        Log.d("FullscreenTouch", "Button $i HIT!")
+                        DebugLog.d("FullscreenTouch", "Button $i HIT!")
                         button.performClick()
                         return
                     }
                 }
             }
         } else {
-            Log.d("FullscreenTouch", "Controls container NOT visible or not initialized")
+            DebugLog.d("FullscreenTouch", "Controls container NOT visible or not initialized")
         }
 
         // If no button hit, toggle controls visibility
-        Log.d("FullscreenTouch", "No button hit, toggling controls visibility")
+        DebugLog.d("FullscreenTouch", "No button hit, toggling controls visibility")
         if (::fullScreenControlsContainer.isInitialized) {
             if (fullScreenControlsContainer.visibility == View.VISIBLE) {
                 fullScreenControlsContainer.visibility = View.GONE
@@ -3027,7 +3034,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     fun toggleIsUrlEditing(isEditing: Boolean) {
         _isUrlEditing = isEditing
-        // Log.d("LinkEditing", "DualWebViewGroup isUrlEditing toggled to: $isEditing")
+        // DebugLog.d("LinkEditing", "DualWebViewGroup isUrlEditing toggled to: $isEditing")
     }
 
     fun setLinkText(text: String, newCursorPosition: Int = -1) {
@@ -3091,7 +3098,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun isUrlEditing(): Boolean {
-        // Log.d("LinkEditing", "isUrlEditing check, value: $isUrlEditing")
+        // DebugLog.d("LinkEditing", "isUrlEditing check, value: $isUrlEditing")
         return _isUrlEditing
     }
 
@@ -3160,7 +3167,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     fun handleBookmarkTap(): Boolean {
         if (leftBookmarksView.visibility != View.VISIBLE) {
-            // Log.d("BookmarksDebug", "No tap handling - bookmarks not visible")
+            // DebugLog.d("BookmarksDebug", "No tap handling - bookmarks not visible")
             return false
         }
 
@@ -3175,7 +3182,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     fun handleBookmarkDoubleTap(): Boolean {
         return if (leftBookmarksView.visibility == View.VISIBLE) {
-            // Log.d("BookmarksDebug", "handleBookmarkDoubleTap() called.
+            // DebugLog.d("BookmarksDebug", "handleBookmarkDoubleTap() called.
             // leftVisibility=${leftBookmarksView.visibility}")
             val handled = leftBookmarksView.handleDoubleTap()
             if (handled) {
@@ -3465,7 +3472,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     // Log every 2 seconds to avoid spam
                     val now = System.currentTimeMillis()
                     if (now - lastRefreshLogTime > 2000) {
-                        // Log.d("MirrorDebug", "RefreshLoop running, count=$refreshCount,
+                        // DebugLog.d("MirrorDebug", "RefreshLoop running, count=$refreshCount,
                         // isRefreshing=$isRefreshing,
                         // webViewAttached=${webView.isAttachedToWindow},
                         // fsOverlayVisible=${fullScreenOverlayContainer.visibility ==
@@ -3614,7 +3621,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Layout toggle bar - height is eyeHeight minus navBarHeight
         leftToggleBar.layout(0, 0, toggleBarWidth, eyeHeight - navBarHeight)
-        //            Log.d("ToggleBarDebug", """
+        //            DebugLog.d("ToggleBarDebug", """
         //        Toggle Bar Layout:
         //        Visibility: ${leftToggleBar.visibility}
         //        Width: $toggleBarWidth
@@ -3726,7 +3733,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             // Ensure keyboard containers are on top but below edit fields
             keyboardContainer.elevation = 1000f
         } else {
-            // Log.d("EditFieldDebug", "Skipping edit field positioning - conditions not met")
+            // DebugLog.d("EditFieldDebug", "Skipping edit field positioning - conditions not met")
 
             // Hide keyboard containers
             keyboardContainer.layout(
@@ -4001,7 +4008,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     // Add keyboard mirror handling
     fun setKeyboard(originalKeyboard: CustomKeyboardView) {
-        // Log.d("KeyboardDebug", "setKeyboard called with keyboard:
+        // DebugLog.d("KeyboardDebug", "setKeyboard called with keyboard:
         // ${originalKeyboard.hashCode()}")
 
         // Clear container
@@ -4072,7 +4079,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private fun computeAnchoredKeyboardCoordinates(): Pair<Float, Float>? {
         val keyboard = keyboardContainer
         if (keyboard.width == 0 || keyboard.height == 0) {
-            // Log.d("TouchDebug", "computeAnchoredKeyboardCoordinates: keyboard not laid out")
+            // DebugLog.d("TouchDebug", "computeAnchoredKeyboardCoordinates: keyboard not laid out")
             return null
         }
 
@@ -4119,7 +4126,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
-        // Log.d("GestureDebug", "DualWebViewGroup onInterceptTouchEvent: ${ev.action}")
+        // DebugLog.d("GestureDebug", "DualWebViewGroup onInterceptTouchEvent: ${ev.action}")
 
         // Let windows overview handle its own touch events
         if (windowsOverviewContainer?.visibility == View.VISIBLE) {
@@ -4170,7 +4177,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 ) {
                     isOverTarget = true
                     anchoredTarget = 2
-                    // Log.d("TouchDebug", "Intercepting anchored tap for bookmarks")
+                    // DebugLog.d("TouchDebug", "Intercepting anchored tap for bookmarks")
                 }
             }
 
@@ -4182,7 +4189,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         anchoredTouchStartY = cursorY
                         lastAnchoredY = cursorY
                         isAnchoredDrag = false
-                        // Log.d("TouchDebug", "Intercepting anchored ACTION_DOWN
+                        // DebugLog.d("TouchDebug", "Intercepting anchored ACTION_DOWN
                         // target=$anchoredTarget")
                         return true
                     }
@@ -4196,7 +4203,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
                 MotionEvent.ACTION_UP -> {
                     if (anchoredGestureActive || isOverTarget) {
-                        // Log.d("TouchDebug", "Intercepting anchored ACTION_UP")
+                        // DebugLog.d("TouchDebug", "Intercepting anchored ACTION_UP")
                         return true
                     }
                 }
@@ -4403,7 +4410,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     if (::leftBookmarksView.isInitialized &&
                                                     leftBookmarksView.visibility == View.VISIBLE
                                     ) {
-                                        // Log.d("TouchDebug", "Dispatching anchored tap to
+                                        // DebugLog.d("TouchDebug", "Dispatching anchored tap to
                                         // bookmarks")
                                         leftBookmarksView.handleAnchoredTap(
                                                 cursorX - leftBookmarksView.left,
@@ -4663,7 +4670,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val finalX = localX - keyboardContainer.left
         val finalY = localY - keyboardContainer.top
 
-        // Log.d("KeyboardDebug", "Keyboard tap: screen($screenX, $screenY) -> local($finalX,
+        // DebugLog.d("KeyboardDebug", "Keyboard tap: screen($screenX, $screenY) -> local($finalX,
         // $finalY)")
         kbView.handleAnchoredTap(finalX, finalY)
     }
@@ -4681,7 +4688,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun updateBrowsingMode(isDesktop: Boolean) {
-        // Log.d("ModeToggle", "Updating browsing mode to: ${if (isDesktop) "desktop" else
+        // DebugLog.d("ModeToggle", "Updating browsing mode to: ${if (isDesktop) "desktop" else
         // "mobile"}")
 
         isDesktopMode = isDesktop
@@ -4838,7 +4845,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private fun showButtonClickFeedback(button: View) {
         button.isPressed = true
-        // Log.d("buttonFeedbackDebug", "button feedback shown")
+        // DebugLog.d("buttonFeedbackDebug", "button feedback shown")
         Handler(Looper.getMainLooper())
                 .postDelayed({ button.isPressed = false }, buttonFeedbackDuration)
     }
@@ -4974,7 +4981,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 button?.isHovered = true
                 setHoverFlag()
                 clearNavigationButtonStates()
-                // Log.d("HoverDebug", "Hovering over toggle button: $name")
+                // DebugLog.d("HoverDebug", "Hovering over toggle button: $name")
                 customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
                 return // Found the hovered button, stop checking
             }
@@ -5017,7 +5024,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     val view = menu.findViewById<View>(id)
                     if (isOver(view, screenX, screenY)) {
                         view?.isHovered = true
-                        // Log.d("HoverDebug", "Hovering over settings element: $id")
+                        // DebugLog.d("HoverDebug", "Hovering over settings element: $id")
                         customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
                         return // Found the hovered element, stop checking
                     }
@@ -5036,7 +5043,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         val button = container.getChildAt(i)
                         if (isOver(button, screenX, screenY)) {
                             button.isHovered = true
-                            // Log.d("HoverDebug", "Hovering over dialog button: $i")
+                            // DebugLog.d("HoverDebug", "Hovering over dialog button: $i")
                             customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
                             return
                         }
@@ -5805,11 +5812,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun handleFling(velocityX: Float) {
-        // Log.d("Fling Debug", "Fling handled by DualWebViewGroup")
+        // DebugLog.d("Fling Debug", "Fling handled by DualWebViewGroup")
 
         // First check if bookmarks are visible (Non-Anchored Mode legacy behavior)
         if (leftBookmarksView.visibility == View.VISIBLE && !isAnchored) {
-            // Log.d("DualWebViewGroup", "Delegating fling to bookmarks: velocity=$velocityX")
+            // DebugLog.d("DualWebViewGroup", "Delegating fling to bookmarks: velocity=$velocityX")
 
             // Determine direction based on velocity and delegate to both views
             val isForward = velocityX > 0
@@ -5850,7 +5857,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     private fun initializeToggleButtons() {
-        Log.d(
+        DebugLog.d(
                 "ViewDebug",
                 """
     Toggle bar parent: ${leftToggleBar.parent?.javaClass?.simpleName}
@@ -5988,7 +5995,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun showSettings() {
-        // Log.d("SettingsDebug", "showSettings() called, isSettingsVisible: $isSettingsVisible")
+        // DebugLog.d("SettingsDebug", "showSettings() called, isSettingsVisible:
+        // $isSettingsVisible")
 
         if (settingsMenu == null) {
             settingsMenu =
@@ -6002,7 +6010,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
             // Add click handler for close button
             settingsMenu?.findViewById<View>(R.id.btnCloseSettings)?.setOnClickListener {
-                // Log.d("SettingsDebug", "Close button clicked")
+                // DebugLog.d("SettingsDebug", "Close button clicked")
                 isSettingsVisible = false
                 settingsMenu?.visibility = View.GONE
                 settingsScrim?.visibility = View.GONE
@@ -6011,7 +6019,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
             // Add click handler for help button
             settingsMenu?.findViewById<ImageButton>(R.id.btnHelp)?.setOnClickListener {
-                // Log.d("SettingsDebug", "Help button clicked")
+                // DebugLog.d("SettingsDebug", "Help button clicked")
                 showHelpDialog()
             }
 
@@ -6025,7 +6033,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             leftEyeUIContainer.addView(settingsMenu, layoutParams)
             settingsMenu?.elevation = 1001f
 
-            // Log.d("SettingsDebug", "Menu added with height: ${settingsMenu?.measuredHeight}")
+            // DebugLog.d("SettingsDebug", "Menu added with height:
+            // ${settingsMenu?.measuredHeight}")
         }
 
         // Only initialize seekbars when we are about to SHOW settings (not when closing)
@@ -6884,7 +6893,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun setScrollMode(enabled: Boolean) {
-        android.util.Log.d(
+        DebugLog.d(
                 "NavBarDebug",
                 "setScrollMode: enabled=$enabled, current=$isInScrollMode, navHidden=$isNavBarsHidden"
         )
@@ -7395,10 +7404,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
      * @param durationMs How long to show the toast (default 2000ms)
      */
     fun showToast(message: String, durationMs: Long = 2000L) {
-        // Log.d("Toast", "showToast called with message: $message")
+        // DebugLog.d("Toast", "showToast called with message: $message")
         // Ensure we're on the UI thread
         post {
-            // Log.d("Toast", "Inside post block, creating toast view")
+            // DebugLog.d("Toast", "Inside post block, creating toast view")
             // Cancel any existing toast
             toastRunnable?.let { toastHandler?.removeCallbacks(it) }
             dialogContainer.removeAllViews()
@@ -7442,7 +7451,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             dialogContainer.bringToFront()
             dialogContainer.isClickable = false // Allow clicks to pass through
 
-            // Log.d("Toast", "Toast view added, dialogContainer visible:
+            // DebugLog.d("Toast", "Toast view added, dialogContainer visible:
             // ${dialogContainer.visibility == View.VISIBLE}, child count:
             // ${dialogContainer.childCount}")
 
@@ -7714,7 +7723,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 createMediaButton(R.string.fa_play) {
                     if (isFsPlaying) {
                         // Currently playing, so pause
-                        Log.d("FullscreenTouch", "Pause clicked, switching to play icon")
+                        DebugLog.d("FullscreenTouch", "Pause clicked, switching to play icon")
                         getMediaControlWebView()
                                 .evaluateJavascript(
                                         "document.querySelector('video, audio').pause();",
@@ -7724,7 +7733,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         isFsPlaying = false
                     } else {
                         // Currently paused, so play
-                        Log.d("FullscreenTouch", "Play clicked, switching to pause icon")
+                        DebugLog.d("FullscreenTouch", "Play clicked, switching to pause icon")
                         getMediaControlWebView()
                                 .evaluateJavascript(
                                         "document.querySelector('video, audio').play();",
@@ -7796,7 +7805,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun updateMediaState(isPlaying: Boolean) {
-        // Log.d("MediaControls", "updateMediaState called: isPlaying=$isPlaying,
+        // DebugLog.d("MediaControls", "updateMediaState called: isPlaying=$isPlaying,
         // isScreenMasked=$isScreenMasked")
 
         // Ignore updates shortly after manual interaction to prevent race conditions
@@ -7810,20 +7819,20 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
         post {
             if (isPlaying) {
-                // Log.d("MediaControls", "Setting to playing state")
+                // DebugLog.d("MediaControls", "Setting to playing state")
                 btnMaskPlay.visibility = View.GONE
                 btnMaskPause.visibility = View.VISIBLE
                 maskMediaControlsContainer.visibility = View.VISIBLE
-                // Log.d("MediaControls", "Controls container visibility:
+                // DebugLog.d("MediaControls", "Controls container visibility:
                 // ${maskMediaControlsContainer.visibility}, parent:
                 // ${maskMediaControlsContainer.parent}")
             } else {
-                // Log.d("MediaControls", "Setting to paused state")
+                // DebugLog.d("MediaControls", "Setting to paused state")
                 btnMaskPlay.visibility = View.VISIBLE
                 btnMaskPause.visibility = View.GONE
                 // Keep controls visible if we know media exists
                 maskMediaControlsContainer.visibility = View.VISIBLE
-                // Log.d("MediaControls", "Controls container visibility:
+                // DebugLog.d("MediaControls", "Controls container visibility:
                 // ${maskMediaControlsContainer.visibility}")
             }
 

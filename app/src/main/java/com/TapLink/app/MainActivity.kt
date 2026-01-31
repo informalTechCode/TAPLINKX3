@@ -296,8 +296,8 @@ class MainActivity :
     private var lastTapTime = 0L
     private var firstTapTime = 0L
     private var tapCount = 0
-    private val TRIPLE_TAP_TIMEOUT =
-            350L // Reduced from 500ms to prevent accidental double-tap crossovers
+    private val TAP_INTERVAL = 400L // Max time between consecutive taps
+    private val TRIPLE_TAP_DURATION = 800L // Max time for entire 3-tap sequence
     private var isTripleTapInProgress = false
 
     private var settingsMenu: View? = null
@@ -442,6 +442,7 @@ class MainActivity :
                         object : SimpleOnGestureListener() {
                             private var isProcessingTap = false
                             private var totalScrollDistance = 0f
+                            private var doubleTapRunnable: Runnable? = null
 
                             override fun onDown(e: MotionEvent): Boolean {
                                 totalScrollDistance = 0f
@@ -465,7 +466,7 @@ class MainActivity :
 
                                 // Triple tap detection for screen re-centering in anchored mode
                                 val currentTime = System.currentTimeMillis()
-                                if (currentTime - lastTapTime > TRIPLE_TAP_TIMEOUT) {
+                                if (currentTime - lastTapTime > TAP_INTERVAL) {
                                     DebugLog.d("TripleTapDebug", "Starting new tap sequence")
                                     tapCount = 1
                                     firstTapTime = currentTime
@@ -481,12 +482,16 @@ class MainActivity :
 
                                 // Check for triple tap
                                 if (tapCount == 3 &&
-                                                (currentTime - firstTapTime) <= TRIPLE_TAP_TIMEOUT
+                                                (currentTime - firstTapTime) <= TRIPLE_TAP_DURATION
                                 ) {
                                     DebugLog.d(
                                             "TripleTapDebug",
                                             "Triple tap detected! Time from first tap: ${currentTime - firstTapTime}ms"
                                     )
+                                    // Explicitly cancel the specific double tap runnable
+                                    doubleTapRunnable?.let { handler.removeCallbacks(it) }
+                                    doubleTapRunnable = null
+
                                     handler.removeCallbacksAndMessages(null)
                                     synchronized(doubleTapLock) { pendingDoubleTapAction = false }
                                     isTripleTapInProgress = true
@@ -939,31 +944,57 @@ class MainActivity :
                                     lastDoubleTapStartTime = currentTime
                                     pendingDoubleTapAction = true
 
-                                    handler.postDelayed(
-                                            {
-                                                synchronized(doubleTapLock) {
-                                                    try {
-                                                        if (pendingDoubleTapAction) {
-                                                            DebugLog.d(
-                                                                    "DoubleTapDebug",
-                                                                    "Executing pending double tap action"
-                                                            )
-                                                            performDoubleTapBackNavigation()
-                                                        }
-                                                    } finally {
-                                                        // Note: Do NOT reset tapCount/lastTapTime
-                                                        // here
-                                                        // as it interferes with triple-tap
-                                                        // detection
-                                                        // which manages its own state in onDown
-                                                        pendingDoubleTapAction = false
-                                                        isProcessingDoubleTap = false
-                                                        lastDoubleTapStartTime = 0L
-                                                    }
-                                                }
-                                            },
-                                            DOUBLE_TAP_CONFIRMATION_DELAY
+                                    // Calculate dynamic delay to ensure we wait until AFTER the
+                                    // triple tap window closes
+                                    val timeSinceFirstTap =
+                                            System.currentTimeMillis() - firstTapTime
+                                    val remainingTripleTapWindow =
+                                            TRIPLE_TAP_DURATION - timeSinceFirstTap
+
+                                    // Make sure we wait at least a small buffer after the window
+                                    // closes
+                                    // But cap the delay to avoid excessive waiting if the window is
+                                    // huge (though 800ms is reasonable)
+                                    val delay =
+                                            if (remainingTripleTapWindow > 0)
+                                                    remainingTripleTapWindow + 30
+                                            else DOUBLE_TAP_CONFIRMATION_DELAY
+
+                                    DebugLog.d(
+                                            "DoubleTapDebug",
+                                            "Scheduling double tap action. Delay: ${delay}ms (Window remaining: $remainingTripleTapWindow)"
                                     )
+
+                                    doubleTapRunnable = Runnable {
+                                        synchronized(doubleTapLock) {
+                                            try {
+                                                // Final check for triple tap
+                                                if (isTripleTapInProgress) {
+                                                    DebugLog.d(
+                                                            "DoubleTapDebug",
+                                                            "Aborting double tap action - triple tap in progress"
+                                                    )
+                                                    return@Runnable
+                                                }
+
+                                                if (pendingDoubleTapAction) {
+                                                    DebugLog.d(
+                                                            "DoubleTapDebug",
+                                                            "Executing pending double tap action"
+                                                    )
+                                                    performDoubleTapBackNavigation()
+                                                }
+                                            } finally {
+                                                // Note: Do NOT reset tapCount/lastTapTime here
+                                                pendingDoubleTapAction = false
+                                                isProcessingDoubleTap = false
+                                                lastDoubleTapStartTime = 0L
+                                                doubleTapRunnable = null
+                                            }
+                                        }
+                                    }
+
+                                    handler.postDelayed(doubleTapRunnable!!, delay)
                                 }
 
                                 return true
@@ -4657,15 +4688,9 @@ class MainActivity :
                     cursorJustAppeared = true
                     // Block interactions briefly to prevent stale taps from firing as the cursor
                     // reappears.
-                    isSimulatingTouchEvent = true
-                    Handler(Looper.getMainLooper())
-                            .postDelayed(
-                                    {
-                                        cursorJustAppeared = false
-                                        isSimulatingTouchEvent = false
-                                    },
-                                    300
-                            )
+                    // Note: removed isSimulatingTouchEvent = true as it causes OnTouchListener to
+                    // ALLOW events through
+                    Handler(Looper.getMainLooper()).postDelayed({ cursorJustAppeared = false }, 300)
                 } else {
                     lastKnownCursorX = lastCursorX
                     lastKnownCursorY = lastCursorY

@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.annotation.Keep
@@ -34,7 +33,7 @@ class WebAppInterface(private val context: Context, private val webView: WebView
     @JavascriptInterface
     @Keep
     fun chatWithGroq(message: String, historyJson: String) {
-        Log.d("WebAppInterface", "chatWithGroq called: $message")
+        DebugLog.d("WebAppInterface", "chatWithGroq called: $message")
         Thread {
                     try {
                         val prefs =
@@ -58,11 +57,13 @@ class WebAppInterface(private val context: Context, private val webView: WebView
                         val systemMsg = JSONObject()
                         systemMsg.put("role", "system")
 
-                        var systemContent = "You are a helpful AI assistant integrated into the TapLinkX3 dashboard."
+                        var systemContent =
+                                "You are a helpful AI assistant integrated into the TapLinkX3 dashboard."
                         val activity = findMainActivity(context)
                         val location = activity?.getLastLocation()
                         if (location != null) {
-                            systemContent += "\nCurrent Location: ${location.first}, ${location.second}"
+                            systemContent +=
+                                    "\nCurrent Location: ${location.first}, ${location.second}"
                         }
 
                         systemMsg.put("content", systemContent)
@@ -120,7 +121,7 @@ class WebAppInterface(private val context: Context, private val webView: WebView
                             }
                         }
                     } catch (e: Exception) {
-                        Log.e("GroqChat", "Chat failed", e)
+                        DebugLog.e("GroqChat", "Chat failed", e)
                         postResponse("Error: ${e.message}")
                     }
                 }
