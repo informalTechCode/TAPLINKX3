@@ -7735,6 +7735,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     }
                 }
 
+        // Sync initial state with actual media state
+        if (isMediaPlaying) {
+            btnFsPlayPause.setText(R.string.fa_pause)
+            isFsPlaying = true
+        }
+
         btnFsNext =
                 createMediaButton(R.string.fa_forward) {
                     getMediaControlWebView()
