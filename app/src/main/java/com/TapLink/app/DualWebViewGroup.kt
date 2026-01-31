@@ -210,7 +210,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 alpha = 1.0f
                 visibility = View.GONE
                 elevation = 2000f
-                setOnClickListener { setScrollMode(false) }
+                setOnClickListener {
+                    setScrollMode(false)
+                    setNavBarsHidden(false)
+                }
             }
 
     @Volatile private var isRefreshing = false
@@ -693,12 +696,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Log.d("ScrollDebug", "updateScrollBarsVisibility called. isAnchored=$isAnchored,
         // isInScrollMode=$isInScrollMode, uiScale=$uiScale")
         val now = SystemClock.uptimeMillis()
-        if (shouldFreezeScrollBars() && !isInteractingWithScrollBar) {
-            return
-        }
+        // Check freeze state but don't return early - we need to update layout
+        val isFrozen = shouldFreezeScrollBars() && !isInteractingWithScrollBar
 
         // Determine mode-specific base constraints
-        val isScrollModeActive = isInScrollMode
+        val isScrollModeActive = isInScrollMode || isNavBarsHidden
 
         // Base dimensions
         val containerWidth = 640
@@ -780,16 +782,18 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val showHorz = showHorzRaw || (now - lastHorzScrollableAt < scrollBarHoldMs)
         val showVert = showVertRaw || (now - lastVertScrollableAt < scrollBarHoldMs)
 
-        horizontalScrollBar.apply {
-            visibility = if (showHorz) View.VISIBLE else View.INVISIBLE
-            isClickable = showHorz
-            isFocusable = false
-        }
+        if (!isFrozen) {
+            horizontalScrollBar.apply {
+                visibility = if (showHorz) View.VISIBLE else View.INVISIBLE
+                isClickable = showHorz
+                isFocusable = false
+            }
 
-        verticalScrollBar.apply {
-            visibility = if (showVert) View.VISIBLE else View.INVISIBLE
-            isClickable = showVert
-            isFocusable = false
+            verticalScrollBar.apply {
+                visibility = if (showVert) View.VISIBLE else View.INVISIBLE
+                isClickable = showVert
+                isFocusable = false
+            }
         }
 
         // Apply layout adjustments
@@ -1174,6 +1178,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var _rotationZ = 0f
 
     private var isInScrollMode = false
+    private var isNavBarsHidden = false // Tracks nav bar visibility independent of scroll mode
     private var settingsScrim: View? = null
 
     // Scroll bar containers for non-anchored mode
@@ -2732,6 +2737,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         refreshInterval =
                 when {
                     isScreenMasked -> maskedRefreshIntervalMs
+                    isInScrollMode -> 16L
                     isIdle && !isMediaPlaying -> idleRefreshIntervalMs
                     isMediaPlaying -> 16L
                     isAnchored && !isFullscreen -> 16L
@@ -3511,8 +3517,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 MeasureSpec.makeMeasureSpec(toggleBarWidth, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(eyeHeight - navBarHeight, MeasureSpec.EXACTLY)
         )
-        if (leftToggleBar.visibility != View.VISIBLE) {
-            leftToggleBar.visibility = View.VISIBLE
+        if (!isInScrollMode && !isNavBarsHidden) {
+            if (leftToggleBar.visibility != View.VISIBLE) {
+                leftToggleBar.visibility = View.VISIBLE
+            }
         }
 
         // Ensure navigation bar is measured correctly
@@ -3539,7 +3547,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         val horizontalReserve = if (horizontalScrollBar.visibility == View.VISIBLE) 20 else 0
 
-        if (isInScrollMode) {
+        if (isInScrollMode || isNavBarsHidden) {
             val keyboardLimit =
                     if (isKeyboardVisible) {
                         eyeHeight - keyboardHeight // Shrink to fit above keyboard
@@ -4247,7 +4255,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // FIX: Respect the LayoutParams set by updateScrollBarsVisibility
         val lp = webViewsContainer.layoutParams
 
-        if (isInScrollMode) {
+        if (isInScrollMode || isNavBarsHidden) {
             val targetWidth = if (lp != null && lp.width > 0) lp.width else 640
             val targetHeight = if (lp != null && lp.height > 0) lp.height else 480
 
@@ -5605,7 +5613,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 showButtonClickFeedback(button.left)
                 showButtonClickFeedback(button.right)
                 if (key == "hide") {
-                    setScrollMode(true)
+                    setNavBarsHidden(true) // Hide nav bars but keep cursor visible
                 } else if (key == "chat") {
                     toggleChat()
                 } else {
@@ -6876,13 +6884,88 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun setScrollMode(enabled: Boolean) {
-        // Log.d("ScrollMode", "setScrollMode called with enabled=$enabled, current
-        // isInScrollMode=$isInScrollMode")
+        android.util.Log.d(
+                "NavBarDebug",
+                "setScrollMode: enabled=$enabled, current=$isInScrollMode, navHidden=$isNavBarsHidden"
+        )
 
         if (isInScrollMode == enabled) return
         isInScrollMode = enabled
 
         if (enabled) {
+
+            leftToggleBar.isClickable = false
+            leftNavigationBar.isClickable = false
+            leftSystemInfoView.visibility = View.GONE
+
+            // Then animate menus away
+            leftToggleBar
+                    .animate()
+                    .alpha(0f)
+                    .setDuration(200)
+                    .withEndAction { leftToggleBar.visibility = View.GONE }
+                    .start()
+
+            leftNavigationBar
+                    .animate()
+                    .alpha(0f)
+                    .setDuration(200)
+                    .withEndAction { leftNavigationBar.visibility = View.GONE }
+                    .start()
+
+            // Show force-show button
+            btnShowNavBars.visibility = View.VISIBLE
+            btnShowNavBars.bringToFront()
+            btnShowNavBars.alpha = 0f
+            btnShowNavBars.animate().alpha(1.0f).setDuration(200).start()
+            btnShowNavBars.requestLayout()
+        } else {
+            // Only restore UI if the other mode (isNavBarsHidden) is NOT active
+            if (!isNavBarsHidden) {
+                // Re-enable touch interception and show system info bar
+                leftToggleBar.isClickable = true
+                leftNavigationBar.isClickable = true
+                leftSystemInfoView.visibility = View.VISIBLE
+
+                // Then show menus with animation
+                leftToggleBar.visibility = View.VISIBLE
+                leftToggleBar.alpha = 0f
+                leftToggleBar.animate().alpha(1f).setDuration(200).start()
+
+                leftNavigationBar.visibility = View.VISIBLE
+                leftNavigationBar.alpha = 0f
+                leftNavigationBar.animate().alpha(1f).setDuration(200).start()
+
+                // Hide force-show button
+                btnShowNavBars
+                        .animate()
+                        .alpha(0f)
+                        .setDuration(200)
+                        .withEndAction { btnShowNavBars.visibility = View.GONE }
+                        .start()
+            }
+        }
+
+        // Update scrollbars and layout
+        updateScrollBarsVisibility()
+
+        // Force layout update
+        post {
+            requestLayout()
+            invalidate()
+            startRefreshing()
+        }
+    }
+
+    /**
+     * Hides or shows the navigation bars without affecting scroll mode. When hidden, cursor remains
+     * visible and movable (unlike scroll mode).
+     */
+    fun setNavBarsHidden(hidden: Boolean) {
+        if (isNavBarsHidden == hidden) return
+        isNavBarsHidden = hidden
+
+        if (hidden) {
             // Immediately disable touch interception before animating
             leftToggleBar.isClickable = false
             leftNavigationBar.isClickable = false
@@ -6910,27 +6993,30 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             btnShowNavBars.animate().alpha(1.0f).setDuration(200).start()
             btnShowNavBars.requestLayout()
         } else {
-            // Re-enable touch interception and show system info bar
-            leftToggleBar.isClickable = true
-            leftNavigationBar.isClickable = true
-            leftSystemInfoView.visibility = View.VISIBLE
+            // Only restore UI if the other mode (isInScrollMode) is NOT active
+            if (!isInScrollMode) {
+                // Re-enable touch interception and show system info bar
+                leftToggleBar.isClickable = true
+                leftNavigationBar.isClickable = true
+                leftSystemInfoView.visibility = View.VISIBLE
 
-            // Then show menus with animation
-            leftToggleBar.visibility = View.VISIBLE
-            leftToggleBar.alpha = 0f
-            leftToggleBar.animate().alpha(1f).setDuration(200).start()
+                // Then show menus with animation
+                leftToggleBar.visibility = View.VISIBLE
+                leftToggleBar.alpha = 0f
+                leftToggleBar.animate().alpha(1f).setDuration(200).start()
 
-            leftNavigationBar.visibility = View.VISIBLE
-            leftNavigationBar.alpha = 0f
-            leftNavigationBar.animate().alpha(1f).setDuration(200).start()
+                leftNavigationBar.visibility = View.VISIBLE
+                leftNavigationBar.alpha = 0f
+                leftNavigationBar.animate().alpha(1f).setDuration(200).start()
 
-            // Hide force-show button
-            btnShowNavBars
-                    .animate()
-                    .alpha(0f)
-                    .setDuration(200)
-                    .withEndAction { btnShowNavBars.visibility = View.GONE }
-                    .start()
+                // Hide force-show button
+                btnShowNavBars
+                        .animate()
+                        .alpha(0f)
+                        .setDuration(200)
+                        .withEndAction { btnShowNavBars.visibility = View.GONE }
+                        .start()
+            }
         }
 
         // Update scrollbars and layout
@@ -6942,6 +7028,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             invalidate()
             startRefreshing()
         }
+    }
+
+    fun isNavBarsHidden(): Boolean {
+        return isNavBarsHidden
     }
 
     // Custom Dialog Logic

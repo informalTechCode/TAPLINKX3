@@ -93,7 +93,7 @@
       transform: scale(var(--scale));
       padding: 0 8px 16px;
       box-sizing: border-box;
-      touch-action: none;
+      /* touch-action: none; removed to allow scrolling */
     }
 
     .topbar {
@@ -753,11 +753,7 @@
       if (e.target.closest('button')) { e.preventDefault(); }
     });
 
-    const interactiveSelector = 'button, input, textarea, select, .app, .icon-btn';
-    document.addEventListener('touchmove', (e) => {
-      if (e.target.closest(interactiveSelector)) { return; }
-      e.preventDefault();
-    }, { passive: false });
+    /* Interactive selector and touchmove blocker removed to allow scrolling */
 
     /* Theme */
 
