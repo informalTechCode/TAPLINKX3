@@ -482,9 +482,8 @@ class MainActivity :
                                 }
                                 lastTapTime = currentTime
 
-                                // Check for triple tap (only works in anchored mode)
-                                if (isAnchored &&
-                                                tapCount == 3 &&
+                                // Check for triple tap
+                                if (tapCount == 3 &&
                                                 (currentTime - firstTapTime) <= TRIPLE_TAP_TIMEOUT
                                 ) {
                                     DebugLog.d(
@@ -494,17 +493,29 @@ class MainActivity :
                                     handler.removeCallbacksAndMessages(null)
                                     synchronized(doubleTapLock) { pendingDoubleTapAction = false }
                                     isTripleTapInProgress = true
-
-                                    // Reset translations to center the view
-                                    shouldResetInitialQuaternion = true
-                                    dualWebViewGroup.updateLeftEyePosition(
-                                            0f,
-                                            0f,
-                                            0f
-                                    ) // Reset translations and rotation
-                                    dualWebViewGroup.showToast("Screen Re-centered")
-
                                     tapCount = 0
+
+                                    if (isAnchored) {
+                                        // Reset translations to center the view
+                                        shouldResetInitialQuaternion = true
+                                        dualWebViewGroup.updateLeftEyePosition(
+                                                0f,
+                                                0f,
+                                                0f
+                                        ) // Reset translations and rotation
+                                        dualWebViewGroup.showToast("Screen Re-centered")
+                                    } else {
+                                        // Non-anchored triple tap: Toggle Scroll Mode
+                                        if (dualWebViewGroup.isInScrollMode()) {
+                                            toggleCursorVisibility(forceShow = true)
+                                            dualWebViewGroup.showToast("Cursor mode activated")
+                                        } else {
+                                            toggleCursorVisibility(forceHide = true)
+                                            dualWebViewGroup.showToast(
+                                                    "Scroll mode activated, triple tap again to leave"
+                                            )
+                                        }
+                                    }
                                     return true
                                 }
 
@@ -539,8 +550,8 @@ class MainActivity :
                                                 distanceX * distanceX + distanceY * distanceY
                                         )
 
-                                // When ANCHORED: both X and Y move the page vertically
-                                if (isAnchored &&
+                                // When ANCHORED or SCROLL MODE: both X and Y move the page vertically
+                                if ((isAnchored || dualWebViewGroup.isInScrollMode()) &&
                                                 !isKeyboardVisible &&
                                                 !dualWebViewGroup.isScreenMasked()
                                 ) {
@@ -594,7 +605,7 @@ class MainActivity :
                                 // val cursorGain = 0.45f // using class member cursorGain instead
                                 val dx = -distanceX * cursorGain
                                 val dy = -distanceY * cursorGain
-                                if (!isAnchored) {
+                                if (!isAnchored && !dualWebViewGroup.isInScrollMode()) {
                                     // Clamp to single eye dimensions (640x480), not full dual
                                     // display width
                                     val maxW = 640f
