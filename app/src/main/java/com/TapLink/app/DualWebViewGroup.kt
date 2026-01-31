@@ -251,19 +251,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         }
 
                         override fun onSingleTapUp(e: MotionEvent): Boolean {
-                            if (fullScreenOverlayContainer.visibility == View.VISIBLE) {
-                                // Toggle controls visibility instead of exiting
-                                if (::fullScreenControlsContainer.isInitialized) {
-                                    if (fullScreenControlsContainer.visibility == View.VISIBLE) {
-                                        fullScreenControlsContainer.visibility = View.GONE
-                                    } else {
-                                        fullScreenControlsContainer.visibility = View.VISIBLE
-                                        fullScreenControlsContainer.bringToFront()
-                                    }
-                                }
-                                return true
-                            }
-                            return false
+                            // Controls visibility is now managed by dispatchFullScreenOverlayTouch
+                            // in MainActivity, which handles button hit-testing first.
+                            // Just consume the event here to prevent propagation.
+                            return fullScreenOverlayContainer.visibility == View.VISIBLE
                         }
                     }
             )
@@ -1169,8 +1160,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private lateinit var fullScreenMediaControls: LinearLayout
     private lateinit var btnFsPrevTrack: FontIconView
     private lateinit var btnFsPrev: FontIconView
-    private lateinit var btnFsPlay: FontIconView
-    private lateinit var btnFsPause: FontIconView
+    private lateinit var btnFsPlayPause: FontIconView // Single toggle button
+    private var isFsPlaying: Boolean = false // Track play state
     private lateinit var btnFsNext: FontIconView
     private lateinit var btnFsNextTrack: FontIconView
     private lateinit var btnFsExit: FontIconView
@@ -1645,6 +1636,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             root.put("isDesktopMode", isDesktopMode)
 
             val windowsArray = org.json.JSONArray()
+            val maxStateSize = 500_000 // 500KB per window max
+
             windows.forEach { win ->
                 // Update title from WebView if available
                 if (!win.webView.title.isNullOrEmpty()) {
@@ -1656,26 +1649,58 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 winObj.put("title", win.title)
                 winObj.put("url", win.webView.url ?: "")
 
-                // Save full WebView state (history, etc)
-                val state = Bundle()
-                win.webView.saveState(state)
-                val parcel = Parcel.obtain()
-                state.writeToParcel(parcel, 0)
-                val bytes = parcel.marshall()
-                parcel.recycle()
-                val stateString = Base64.encodeToString(bytes, Base64.DEFAULT)
-                winObj.put("state", stateString)
+                // Save full WebView state (history, etc) - with size limit
+                try {
+                    val state = Bundle()
+                    win.webView.saveState(state)
+                    val parcel = Parcel.obtain()
+                    state.writeToParcel(parcel, 0)
+                    val bytes = parcel.marshall()
+                    parcel.recycle()
+
+                    // Only save state if under size limit
+                    if (bytes.size < maxStateSize) {
+                        val stateString = Base64.encodeToString(bytes, Base64.DEFAULT)
+                        winObj.put("state", stateString)
+                    } else {
+                        Log.w(
+                                "Persistence",
+                                "Window ${win.id} state too large (${bytes.size} bytes), skipping state save"
+                        )
+                        // Don't save state, just URL - will reload on restore
+                    }
+                } catch (e: Exception) {
+                    Log.e("Persistence", "Error saving state for window ${win.id}", e)
+                    // Continue without state for this window
+                }
 
                 windowsArray.put(winObj)
             }
             root.put("windows", windowsArray)
 
+            // Final size check before saving
+            val jsonString = root.toString()
+            if (jsonString.length > 5_000_000) { // 5MB total limit
+                Log.e(
+                        "Persistence",
+                        "Total state size too large (${jsonString.length} chars), clearing old state"
+                )
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                        .edit()
+                        .remove(KEY_WINDOWS_STATE)
+                        .apply()
+                return
+            }
+
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .edit()
-                    .putString(KEY_WINDOWS_STATE, root.toString())
+                    .putString(KEY_WINDOWS_STATE, jsonString)
                     .apply()
 
-            Log.d("Persistence", "Saved ${windows.size} windows with state")
+            Log.d(
+                    "Persistence",
+                    "Saved ${windows.size} windows with state (${jsonString.length} chars)"
+            )
         } catch (e: Exception) {
             Log.e("Persistence", "Error saving window state", e)
         }
@@ -2561,7 +2586,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Add the full screen controls overlay
         if (::fullScreenControlsContainer.isInitialized) {
             // Remove from parent if it was already added (defensive)
-            (fullScreenControlsContainer.parent as? ViewGroup)?.removeView(fullScreenControlsContainer)
+            (fullScreenControlsContainer.parent as? ViewGroup)?.removeView(
+                    fullScreenControlsContainer
+            )
 
             fullScreenOverlayContainer.addView(fullScreenControlsContainer)
             fullScreenControlsContainer.visibility = View.VISIBLE
@@ -2656,13 +2683,33 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         leftEyeUIContainer.invalidate()
         leftEyeUIContainer.requestLayout()
 
-        // Restart the mirroring refresh
-        post {
-            startRefreshing()
-            // Log.d("FullscreenDebug", "  Post-hide refresh triggered")
-        }
+        // Also refresh the parent to ensure proper alignment
+        leftEyeClipParent.invalidate()
+        leftEyeClipParent.requestLayout()
 
-        showSystemUI()
+        // Force a full view hierarchy refresh
+        this.invalidate()
+        this.requestLayout()
+
+        // Restart the mirroring refresh with a slight delay to let layout complete
+        postDelayed(
+                {
+                    // Reset capture throttling so next capture runs immediately
+                    lastCaptureTime = 0L
+
+                    // Force bitmap recreation on next capture
+                    synchronized(bitmapLock) {
+                        bitmap?.recycle()
+                        bitmap = null
+                    }
+
+                    startRefreshing()
+                    // Log.d("FullscreenDebug", "  Post-hide refresh triggered")
+                },
+                300
+        ) // Small delay to let layout settle
+
+        hideSystemUI()
 
         // Restore normal refresh rate and notify listener
         fullscreenListener?.onExitFullscreen()
@@ -2762,7 +2809,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     // Android 11+ (API 30+) - Use WindowInsetsController
                     // Restore decorFitsSystemWindows
-                    @Suppress("DEPRECATION") activity.window.setDecorFitsSystemWindows(true)
+                    @Suppress("DEPRECATION") activity.window.setDecorFitsSystemWindows(false)
 
                     activity.window.insetsController?.show(
                             android.view.WindowInsets.Type.statusBars() or
@@ -2804,6 +2851,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun isScreenMasked() = isScreenMasked
+
+    fun isFullScreenOverlayVisible() = fullScreenOverlayContainer.visibility == View.VISIBLE
 
     fun dispatchMaskOverlayTouch(screenX: Float, screenY: Float) {
         val location = IntArray(2)
@@ -2860,6 +2909,85 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         // Log.d("MediaControls", "Touch on mask overlay but not on any button")
+    }
+
+    fun dispatchFullScreenOverlayTouch(screenX: Float, screenY: Float) {
+        val scale = uiScale
+        Log.d("FullscreenTouch", "Touch at screen ($screenX, $screenY), scale: $scale")
+
+        // Check controls container if visible
+        if (::fullScreenControlsContainer.isInitialized &&
+                        fullScreenControlsContainer.visibility == View.VISIBLE
+        ) {
+            Log.d("FullscreenTouch", "Controls container is visible")
+
+            // Check exit button
+            if (::btnFsExit.isInitialized && btnFsExit.visibility == View.VISIBLE) {
+                val btnLocation = IntArray(2)
+                btnFsExit.getLocationOnScreen(btnLocation)
+                val btnWidth = btnFsExit.width * scale
+                val btnHeight = btnFsExit.height * scale
+                Log.d(
+                        "FullscreenTouch",
+                        "Exit button: loc=(${btnLocation[0]}, ${btnLocation[1]}), size=($btnWidth, $btnHeight), raw=(${btnFsExit.width}, ${btnFsExit.height})"
+                )
+                if (screenX >= btnLocation[0] &&
+                                screenX <= btnLocation[0] + btnWidth &&
+                                screenY >= btnLocation[1] &&
+                                screenY <= btnLocation[1] + btnHeight
+                ) {
+                    Log.d("FullscreenTouch", "Exit button HIT!")
+                    btnFsExit.performClick()
+                    return
+                }
+            }
+
+            // Check media control buttons
+            if (::fullScreenMediaControls.isInitialized &&
+                            fullScreenMediaControls.visibility == View.VISIBLE
+            ) {
+                Log.d(
+                        "FullscreenTouch",
+                        "Media controls visible with ${fullScreenMediaControls.childCount} children"
+                )
+                for (i in 0 until fullScreenMediaControls.childCount) {
+                    val button = fullScreenMediaControls.getChildAt(i)
+                    if (button.visibility != View.VISIBLE) continue
+
+                    val btnLocation = IntArray(2)
+                    button.getLocationOnScreen(btnLocation)
+                    val btnWidth = button.width * scale
+                    val btnHeight = button.height * scale
+                    Log.d(
+                            "FullscreenTouch",
+                            "Button $i: loc=(${btnLocation[0]}, ${btnLocation[1]}), size=($btnWidth, $btnHeight)"
+                    )
+
+                    if (screenX >= btnLocation[0] &&
+                                    screenX <= btnLocation[0] + btnWidth &&
+                                    screenY >= btnLocation[1] &&
+                                    screenY <= btnLocation[1] + btnHeight
+                    ) {
+                        Log.d("FullscreenTouch", "Button $i HIT!")
+                        button.performClick()
+                        return
+                    }
+                }
+            }
+        } else {
+            Log.d("FullscreenTouch", "Controls container NOT visible or not initialized")
+        }
+
+        // If no button hit, toggle controls visibility
+        Log.d("FullscreenTouch", "No button hit, toggling controls visibility")
+        if (::fullScreenControlsContainer.isInitialized) {
+            if (fullScreenControlsContainer.visibility == View.VISIBLE) {
+                fullScreenControlsContainer.visibility = View.GONE
+            } else {
+                fullScreenControlsContainer.visibility = View.VISIBLE
+                fullScreenControlsContainer.bringToFront()
+            }
+        }
     }
 
     private fun drawBitmapToSurface() {
@@ -7415,54 +7543,59 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private fun setupFullScreenControlsUI() {
         // Container for controls (Bottom bar)
-        fullScreenControlsContainer = FrameLayout(context).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.BOTTOM
-            }
-            setBackgroundColor(Color.parseColor("#80000000")) // Semi-transparent black
-            setPadding(16, 16, 16, 16)
-            visibility = View.GONE // Hidden by default
-            isClickable = true // Consume clicks
-        }
+        fullScreenControlsContainer =
+                FrameLayout(context).apply {
+                    layoutParams =
+                            FrameLayout.LayoutParams(
+                                            FrameLayout.LayoutParams.MATCH_PARENT,
+                                            FrameLayout.LayoutParams.WRAP_CONTENT
+                                    )
+                                    .apply { gravity = Gravity.BOTTOM }
+                    // No background - just floating buttons
+                    setPadding(0, 0, 0, 0)
+                    visibility = View.GONE // Hidden by default
+                    isClickable = true // Consume clicks
+                }
 
         // Media Controls Container (Center)
-        fullScreenMediaControls = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.CENTER
-            }
-        }
+        fullScreenMediaControls =
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER
+                    layoutParams =
+                            FrameLayout.LayoutParams(
+                                            FrameLayout.LayoutParams.WRAP_CONTENT,
+                                            FrameLayout.LayoutParams.WRAP_CONTENT
+                                    )
+                                    .apply { gravity = Gravity.CENTER }
+                }
         fullScreenControlsContainer.addView(fullScreenMediaControls)
 
         // Exit Button (Right)
-        btnFsExit = FontIconView(context).apply {
-            setText(R.string.fa_compress)
-            setTextColor(Color.WHITE)
-            textSize = 24f
-            setPadding(16, 16, 16, 16)
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            }
-            setOnClickListener {
-                 (context as? AppCompatActivity)?.onBackPressedDispatcher?.onBackPressed()
-            }
-        }
+        btnFsExit =
+                FontIconView(context).apply {
+                    setText(R.string.fa_compress)
+                    setTextColor(Color.WHITE)
+                    textSize = 24f
+                    setPadding(16, 16, 16, 16)
+                    layoutParams =
+                            FrameLayout.LayoutParams(
+                                            FrameLayout.LayoutParams.WRAP_CONTENT,
+                                            FrameLayout.LayoutParams.WRAP_CONTENT
+                                    )
+                                    .apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL }
+                    setOnClickListener {
+                        (context as? AppCompatActivity)?.onBackPressedDispatcher?.onBackPressed()
+                    }
+                }
         fullScreenControlsContainer.addView(btnFsExit)
 
         // Create Media Buttons (reusing logic from mask controls)
-        btnFsPrevTrack = createMediaButton(R.string.fa_backward_step) {
-            getMediaControlWebView().evaluateJavascript(
-                """
+        btnFsPrevTrack =
+                createMediaButton(R.string.fa_backward_step) {
+                    getMediaControlWebView()
+                            .evaluateJavascript(
+                                    """
                 (function() {
                     var prevBtn = document.querySelector('.ytp-prev-button') ||
                                   document.querySelector('[aria-label*="previous" i]') ||
@@ -7472,43 +7605,60 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     var media = document.querySelector('video, audio');
                     if (media) media.currentTime = 0;
                 })();
-                """.trimIndent(), null
-            )
-        }
+                """.trimIndent(),
+                                    null
+                            )
+                }
 
-        btnFsPrev = createMediaButton(R.string.fa_backward) {
-             getMediaControlWebView().evaluateJavascript(
-                 "document.querySelector('video, audio').currentTime -= 10;", null
-             )
-        }
+        btnFsPrev =
+                createMediaButton(R.string.fa_backward) {
+                    getMediaControlWebView()
+                            .evaluateJavascript(
+                                    "document.querySelector('video, audio').currentTime -= 10;",
+                                    null
+                            )
+                }
 
-        btnFsPlay = createMediaButton(R.string.fa_play) {
-            getMediaControlWebView().evaluateJavascript(
-                "document.querySelector('video, audio').play();", null
-            )
-            // Local toggle for immediate feedback
-            btnFsPlay.visibility = View.GONE
-            btnFsPause.visibility = View.VISIBLE
-        }
+        // Single Play/Pause toggle button
+        btnFsPlayPause =
+                createMediaButton(R.string.fa_play) {
+                    if (isFsPlaying) {
+                        // Currently playing, so pause
+                        Log.d("FullscreenTouch", "Pause clicked, switching to play icon")
+                        getMediaControlWebView()
+                                .evaluateJavascript(
+                                        "document.querySelector('video, audio').pause();",
+                                        null
+                                )
+                        btnFsPlayPause.setText(R.string.fa_play)
+                        isFsPlaying = false
+                    } else {
+                        // Currently paused, so play
+                        Log.d("FullscreenTouch", "Play clicked, switching to pause icon")
+                        getMediaControlWebView()
+                                .evaluateJavascript(
+                                        "document.querySelector('video, audio').play();",
+                                        null
+                                )
+                        btnFsPlayPause.setText(R.string.fa_pause)
+                        isFsPlaying = true
+                    }
+                }
 
-        btnFsPause = createMediaButton(R.string.fa_pause) {
-            getMediaControlWebView().evaluateJavascript(
-                "document.querySelector('video, audio').pause();", null
-            )
-            // Local toggle for immediate feedback
-            btnFsPause.visibility = View.GONE
-            btnFsPlay.visibility = View.VISIBLE
-        }
+        btnFsNext =
+                createMediaButton(R.string.fa_forward) {
+                    getMediaControlWebView()
+                            .evaluateJavascript(
+                                    "document.querySelector('video, audio').currentTime += 10;",
+                                    null
+                            )
+                }
 
-        btnFsNext = createMediaButton(R.string.fa_forward) {
-             getMediaControlWebView().evaluateJavascript(
-                 "document.querySelector('video, audio').currentTime += 10;", null
-             )
-        }
-
-        btnFsNextTrack = createMediaButton(R.string.fa_forward_step) {
-            getMediaControlWebView().evaluateJavascript(
-                """
+        btnFsNextTrack =
+                createMediaButton(R.string.fa_forward_step) {
+                    getMediaControlWebView()
+                            .evaluateJavascript(
+                                    """
                 (function() {
                     var nextBtn = document.querySelector('.ytp-next-button') ||
                                   document.querySelector('[aria-label*="next" i]') ||
@@ -7518,16 +7668,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     var media = document.querySelector('video, audio');
                     if (media) media.currentTime = media.duration;
                 })();
-                """.trimIndent(), null
-            )
-        }
-
-        btnFsPause.visibility = View.GONE
+                """.trimIndent(),
+                                    null
+                            )
+                }
 
         fullScreenMediaControls.addView(btnFsPrevTrack)
         fullScreenMediaControls.addView(btnFsPrev)
-        fullScreenMediaControls.addView(btnFsPlay)
-        fullScreenMediaControls.addView(btnFsPause)
+        fullScreenMediaControls.addView(btnFsPlayPause)
         fullScreenMediaControls.addView(btnFsNext)
         fullScreenMediaControls.addView(btnFsNextTrack)
     }
@@ -7584,13 +7732,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             }
 
             // Update full screen controls as well
-            if (::btnFsPlay.isInitialized && ::btnFsPause.isInitialized) {
+            if (::btnFsPlayPause.isInitialized) {
                 if (isPlaying) {
-                    btnFsPlay.visibility = View.GONE
-                    btnFsPause.visibility = View.VISIBLE
+                    btnFsPlayPause.setText(R.string.fa_pause)
+                    isFsPlaying = true
                 } else {
-                    btnFsPlay.visibility = View.VISIBLE
-                    btnFsPause.visibility = View.GONE
+                    btnFsPlayPause.setText(R.string.fa_play)
+                    isFsPlaying = false
                 }
             }
         }
