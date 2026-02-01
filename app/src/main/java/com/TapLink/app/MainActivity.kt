@@ -3613,6 +3613,27 @@ class MainActivity :
                             }
                         }
 
+                        override fun onRenderProcessGone(
+                                view: WebView?,
+                                detail: android.webkit.RenderProcessGoneDetail?
+                        ): Boolean {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                if (detail?.didCrash() == true) {
+                                    DebugLog.e("WebView", "Render process crashed!")
+                                    dualWebViewGroup.showConfirmDialog(
+                                            "The web page crashed. Reload?",
+                                            { view?.reload() },
+                                            { /* Do nothing */ }
+                                    )
+                                } else {
+                                    DebugLog.e("WebView", "Render process killed by system (OOM).")
+                                    // If system killed it, we can just return true and let the OS handle it,
+                                    // or offer a reload.
+                                }
+                            }
+                            return true // Prevent app crash
+                        }
+
                         override fun shouldOverrideUrlLoading(
                                 view: WebView?,
                                 request: WebResourceRequest?
@@ -3894,6 +3915,22 @@ class MainActivity :
                                     { result?.cancel() }
                             )
                             return true
+                        }
+
+                        override fun onCreateWindow(
+                                view: WebView?,
+                                isDialog: Boolean,
+                                isUserGesture: Boolean,
+                                resultMsg: android.os.Message?
+                        ): Boolean {
+                            val newWebView = dualWebViewGroup.createNewWindow()
+                            val transport = resultMsg?.obj as? WebView.WebViewTransport
+                            if (transport != null) {
+                                transport.webView = newWebView
+                                resultMsg.sendToTarget()
+                                return true
+                            }
+                            return false
                         }
                     }
         }

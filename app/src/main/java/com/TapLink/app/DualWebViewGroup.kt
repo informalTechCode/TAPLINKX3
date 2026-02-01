@@ -1543,7 +1543,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
-    fun createNewWindow() {
+    fun createNewWindow(): WebView {
         val newWebView = InternalWebView(context)
         configureWebView(newWebView)
         applyBrowsingModeToWebView(newWebView, isDesktopMode)
@@ -1565,6 +1565,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         windows.add(newWindow)
         switchToWindow(newWindow.id)
         saveAllWindowsState()
+        return newWebView
     }
 
     fun switchToWindow(id: String) {
