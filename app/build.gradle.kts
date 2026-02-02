@@ -62,6 +62,7 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.webkit)
+    implementation(libs.mozilla.geckoview)
 
     // Google
     implementation(libs.material)

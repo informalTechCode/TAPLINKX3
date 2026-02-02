@@ -47,6 +47,14 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".GeckoViewActivity"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustNothing"
+            android:hardwareAccelerated="true"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
