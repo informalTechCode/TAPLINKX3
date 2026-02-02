@@ -15,7 +15,7 @@ fragmentKtx = "1.8.6"
 recyclerview = "1.4.0"
 coroutines = "1.10.0"
 gson = "2.11.0"
-geckoview = "126.0.20240423190034"
+geckoview = "126.0.20240509170740"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
