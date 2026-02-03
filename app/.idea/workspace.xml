@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="NONE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="5b15bce8-0771-4bbd-8436-1a4d38ab1bd0" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/BookmarksView.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/ChatView.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/ColorWheelView.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/Constants.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/CustomKeyboardView.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/DebugLog.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/DualWebViewGroup.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/FontIconView.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/GeckoViewActivity.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/GroqAudioService.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/GroqInterface.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/MainActivity.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/MyApplication.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/NotificationService.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/SystemInfoView.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/TapLink/app/WebAppInterface.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/res/layout/activity_main.xml" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/res/layout/activity_main.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../gradle/libs.versions.toml" beforeDir="false" afterPath="$PROJECT_DIR$/../gradle/libs.versions.toml" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+  </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "informalTechCode"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "git@github.com:informalTechCode/TAPLINKX3.git",
+    "accountId": "8db20223-8488-4c7b-9f36-9b99d8271341"
+  }
+}]]></component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 0
+}]]></component>
+  <component name="ProjectId" id="398E48acEk9PmsM50WEOJUsmqWV" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "android.gradle.sync.needed": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "git-widget-placeholder": "#120 on codex/find-modern-alternatives-to-webview",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "C:/Users/conno/Desktop/TAPLINKX3/app"
+  }
+}]]></component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="5b15bce8-0771-4bbd-8436-1a4d38ab1bd0" name="Changes" comment="" />
+      <created>1770069104064</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1770069104064</updated>
+    </task>
+    <servers />
+  </component>
+</project>
