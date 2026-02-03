@@ -1140,8 +1140,11 @@ class MainActivity :
             handled
         }
 
-        // Disable the default keyboard
+        // Enable storage + JS features required by modern web apps (auth/session state, etc.).
         webView.settings.javaScriptEnabled = true
+        webView.settings.domStorageEnabled = true
+        @Suppress("DEPRECATION")
+        run { webView.settings.databaseEnabled = true }
 
         webView.webViewClient =
                 object : WebViewClient() {
@@ -3381,8 +3384,7 @@ class MainActivity :
                     @Suppress("DEPRECATION") forceDark = WebSettings.FORCE_DARK_ON
                 }
 
-                val wvVersion = getWebViewVersion() ?: "114.0.0.0"
-
+                val wvVersion = "145.0.0.0"
                 // Store default UA for sites that require it (like Netflix)
                 if (defaultUserAgent == null) {
                     defaultUserAgent = WebSettings.getDefaultUserAgent(this@MainActivity)
