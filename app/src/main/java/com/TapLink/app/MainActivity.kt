@@ -1785,6 +1785,26 @@ class MainActivity :
         }
     }
 
+    private fun isStreamingSite(url: String?): Boolean {
+        if (url == null) return false
+        val streamingDomains = listOf(
+            "netflix.com",
+            "disneyplus.com",
+            "hulu.com",
+            "primevideo.com",
+            "amazon.com/gp/video",
+            "max.com",
+            "peacocktv.com",
+            "apple.com/tv",
+            "tv.apple.com",
+            "tubitv.com",
+            "pluto.tv",
+            "paramountplus.com",
+            "discoveryplus.com"
+        )
+        return streamingDomains.any { url.contains(it, ignoreCase = true) }
+    }
+
     private fun initializeSpeechRecognition() {
         // Check if speech recognition is available
         val isAvailable = SpeechRecognizer.isRecognitionAvailable(this)
@@ -3422,14 +3442,14 @@ class MainActivity :
 
                             dualWebViewGroup.clearExternalScrollMetrics()
 
-                            // Netflix Fix: Force default User Agent to ensure Widevine CDM works
-                            val isNetflix = url?.contains("netflix.com") == true
-                            if (isNetflix) {
+                            // Streaming Fix: Force default User Agent to ensure Widevine CDM works
+                            val isStreaming = isStreamingSite(url)
+                            if (isStreaming) {
                                 if (view?.settings?.userAgentString != defaultUserAgent) {
                                     view?.settings?.userAgentString = defaultUserAgent
                                     DebugLog.d(
-                                            "NetflixFix",
-                                            "Switched to default User Agent for Netflix"
+                                            "StreamingFix",
+                                            "Switched to default User Agent for Streaming Site"
                                     )
                                 }
                             } else {
@@ -3593,6 +3613,27 @@ class MainActivity :
                                         null
                                 )
                             }
+                        }
+
+                        override fun onRenderProcessGone(
+                                view: WebView?,
+                                detail: android.webkit.RenderProcessGoneDetail?
+                        ): Boolean {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                if (detail?.didCrash() == true) {
+                                    DebugLog.e("WebView", "Render process crashed!")
+                                    dualWebViewGroup.showConfirmDialog(
+                                            "The web page crashed. Reload?",
+                                            { view?.reload() },
+                                            { /* Do nothing */ }
+                                    )
+                                } else {
+                                    DebugLog.e("WebView", "Render process killed by system (OOM).")
+                                    // If system killed it, we can just return true and let the OS handle it,
+                                    // or offer a reload.
+                                }
+                            }
+                            return true // Prevent app crash
                         }
 
                         override fun shouldOverrideUrlLoading(
@@ -3876,6 +3917,22 @@ class MainActivity :
                                     { result?.cancel() }
                             )
                             return true
+                        }
+
+                        override fun onCreateWindow(
+                                view: WebView?,
+                                isDialog: Boolean,
+                                isUserGesture: Boolean,
+                                resultMsg: android.os.Message?
+                        ): Boolean {
+                            val newWebView = dualWebViewGroup.createNewWindow()
+                            val transport = resultMsg?.obj as? WebView.WebViewTransport
+                            if (transport != null) {
+                                transport.webView = newWebView
+                                resultMsg.sendToTarget()
+                                return true
+                            }
+                            return false
                         }
                     }
         }
