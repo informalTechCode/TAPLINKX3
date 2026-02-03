@@ -13,8 +13,8 @@ android {
         applicationId = "com.TapLinkX3.app"
         minSdk = 29
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.4.1"
+        versionCode = 12
+        versionName = "1.4.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
