@@ -3381,7 +3381,7 @@ class MainActivity :
                     @Suppress("DEPRECATION") forceDark = WebSettings.FORCE_DARK_ON
                 }
 
-                val wvVersion = getWebViewVersion() ?: "114.0.0.0"
+                val wvVersion = getWebViewVersion() ?: "126.0.0.0"
 
                 // Store default UA for sites that require it (like Netflix)
                 if (defaultUserAgent == null) {
