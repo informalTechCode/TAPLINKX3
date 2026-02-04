@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.LinearLayout
@@ -79,6 +80,36 @@ class ChatView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
 
                 webViewClient =
                         object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(
+                                    view: WebView?,
+                                    request: WebResourceRequest?
+                            ): Boolean {
+                                val url = request?.url?.toString() ?: return false
+                                return handleUrl(url)
+                            }
+
+                            @Deprecated("Deprecated in Java")
+                            override fun shouldOverrideUrlLoading(
+                                    view: WebView?,
+                                    url: String?
+                            ): Boolean {
+                                return handleUrl(url ?: return false)
+                            }
+
+                            private fun handleUrl(url: String): Boolean {
+                                if (url.startsWith("http://") || url.startsWith("https://")) {
+                                    val activity = context as? MainActivity
+                                    if (activity != null) {
+                                        val newWebView =
+                                                activity.dualWebViewGroup.createNewWindow()
+                                        newWebView.loadUrl(url)
+                                        closeMenu() // Hide the chat window
+                                        return true
+                                    }
+                                }
+                                return false
+                            }
+
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 super.onPageFinished(view, url)
                                 injectInputFocusHook()
