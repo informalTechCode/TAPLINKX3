@@ -124,6 +124,57 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
+        .chat-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            margin: 6px 2px 10px;
+        }
+
+        .tts-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .tts-toggle input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .toggle-track {
+            position: relative;
+            width: 36px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 999px;
+            transition: background 0.2s ease;
+        }
+
+        .toggle-track::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 16px;
+            height: 16px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.2s ease;
+        }
+
+        .tts-toggle input:checked + .toggle-track {
+            background: rgba(105, 240, 174, 0.8);
+        }
+
+        .tts-toggle input:checked + .toggle-track::after {
+            transform: translateX(16px);
+        }
+
         #chatInput {
             flex: 1;
             background: transparent;
@@ -222,6 +273,14 @@
         <div class="msg ai">Hello! I am TapLink AI, your personal assistant. How can I help you today?</div>
     </div>
 
+    <div class="chat-toolbar">
+        <label class="tts-toggle" for="ttsToggle">
+            <input id="ttsToggle" type="checkbox" />
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span>Speak replies</span>
+        </label>
+    </div>
+
     <div class="chat-input-area">
         <input id="chatInput" type="text" placeholder="Ask anything..." autocomplete="off" />
         <button id="summarizeBtn" type="button" aria-label="Summarize this webpage">Summarize</button>
@@ -233,11 +292,40 @@
         const chatInput = document.getElementById('chatInput');
         const sendBtn = document.getElementById('sendBtn');
         const summarizeBtn = document.getElementById('summarizeBtn');
+        const ttsToggle = document.getElementById('ttsToggle');
 
         let messages = [];
+        let ttsEnabled = false;
+        let activeTtsAudio = null;
 
         // Auto-scroll to bottom on load
         chatHistory.scrollTop = chatHistory.scrollHeight;
+
+        function requestTts(text) {
+            if (!ttsEnabled) return;
+            if (window.GroqBridge && window.GroqBridge.speakWithOrpheus) {
+                window.GroqBridge.speakWithOrpheus(text);
+            } else {
+                console.warn("GroqBridge TTS not found");
+            }
+        }
+
+        window.receiveGroqTtsAudio = function (base64Audio, mimeType) {
+            const audioSrc = `data:${mimeType || 'audio/mpeg'};base64,${base64Audio}`;
+            if (activeTtsAudio) {
+                activeTtsAudio.pause();
+                activeTtsAudio = null;
+            }
+            const audio = new Audio(audioSrc);
+            activeTtsAudio = audio;
+            audio.play().catch((err) => {
+                console.warn('Unable to autoplay TTS audio', err);
+            });
+        };
+
+        window.receiveGroqTtsError = function (message) {
+            console.warn('TTS error', message);
+        };
 
         function appendMessage(role, text) {
             // Map 'assistant' to 'ai' for CSS styling
@@ -271,6 +359,7 @@
                 appendMessage('error', text);
             } else {
                 appendMessage('assistant', text);
+                requestTts(text);
             }
         };
 
@@ -331,6 +420,19 @@
         summarizeBtn.addEventListener('click', sendSummary);
         chatInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendChat();
+        });
+        ttsToggle.addEventListener('change', (e) => {
+            ttsEnabled = e.target.checked;
+        });
+        document.addEventListener('click', (e) => {
+            const link = e.target.closest && e.target.closest('a');
+            if (!link || !link.href) return;
+            e.preventDefault();
+            if (window.GroqBridge && window.GroqBridge.openUrlInNewTab) {
+                window.GroqBridge.openUrlInNewTab(link.href);
+            } else {
+                window.open(link.href, '_blank', 'noopener');
+            }
         });
 
         // Prevent context menu

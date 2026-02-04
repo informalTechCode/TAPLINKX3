@@ -1437,6 +1437,13 @@ class MainActivity :
         return dualWebViewGroup.getWebView().url ?: Constants.DEFAULT_URL
     }
 
+    fun openUrlInNewTab(url: String) {
+        if (!::dualWebViewGroup.isInitialized) return
+        val formattedUrl = formatUrl(url)
+        val newWebView = dualWebViewGroup.createNewWindow()
+        newWebView.loadUrl(formattedUrl)
+    }
+
     fun getActiveWebViewUrlOrNull(): String? {
         if (!::dualWebViewGroup.isInitialized) return null
         return dualWebViewGroup.getWebView().url

@@ -7,6 +7,7 @@ import android.os.Looper
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.annotation.Keep
+import android.util.Base64
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -86,7 +87,7 @@ class GroqInterface(private val context: Context, private val webView: WebView) 
 The documentation for the TapLink X3 web browser can be found here: https://github.com/informalTechCode/TAPLINKX3/blob/main/docs/USER_GUIDE.md. Refer to these documents for any questions about the 
 Information about the glasses it lives on can be found here: https://www.rayneo.com/products/x3-pro-ai-display-glasses
 The creator of the TapLink X3 browser is Informal Tech. Tech-tuber that makes awesome tech videos on YouTube. He is found at youtube.com/@informal-tech.
-Answer questions concisely and keep all responses human readable."""
+Answer questions concisely and keep all responses human readable. Keep replies concise."""
 
                         val activity = findMainActivity(context)
                         val location = activity?.getLastLocation()
@@ -162,11 +163,89 @@ Answer questions concisely and keep all responses human readable."""
                 .start()
     }
 
+    @JavascriptInterface
+    @Keep
+    fun speakWithOrpheus(text: String) {
+        Thread {
+                    try {
+                        val prefs =
+                                context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                        val apiKey = prefs.getString("groq_api_key", null)
+
+                        if (apiKey.isNullOrBlank()) {
+                            postTtsError("Error: API Key not found. Please set it in Settings.")
+                            return@Thread
+                        }
+
+                        val jsonBody = JSONObject()
+                        jsonBody.put("model", "orpheus")
+                        jsonBody.put("input", text)
+                        jsonBody.put("voice", "Orpheus")
+                        jsonBody.put("response_format", "mp3")
+
+                        val requestBody =
+                                jsonBody.toString()
+                                        .toRequestBody(
+                                                "application/json; charset=utf-8".toMediaType()
+                                        )
+
+                        val request =
+                                Request.Builder()
+                                        .url("https://api.groq.com/openai/v1/audio/speech")
+                                        .addHeader("Authorization", "Bearer $apiKey")
+                                        .post(requestBody)
+                                        .build()
+
+                        client.newCall(request).execute().use { response ->
+                            if (!response.isSuccessful) {
+                                postTtsError("Error: ${response.code} - ${response.message}")
+                                return@use
+                            }
+
+                            val bytes = response.body?.bytes()
+                            if (bytes != null && bytes.isNotEmpty()) {
+                                val base64Audio =
+                                        Base64.encodeToString(bytes, Base64.NO_WRAP)
+                                postTtsAudio(base64Audio, "audio/mpeg")
+                            } else {
+                                postTtsError("Error: Empty TTS response body.")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        DebugLog.e("GroqInterface", "TTS failed", e)
+                        postTtsError("Error: ${e.message}")
+                    }
+                }
+                .start()
+    }
+
+    @JavascriptInterface
+    @Keep
+    fun openUrlInNewTab(url: String) {
+        val activity = findMainActivity(context) ?: return
+        activity.runOnUiThread { activity.openUrlInNewTab(url) }
+    }
+
     private fun postResponse(text: String) {
         mainHandler.post {
             // Escape single quotes and backslashes for JS string
             val escapedText = text.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
             webView.evaluateJavascript("receiveGroqResponse('$escapedText')", null)
+        }
+    }
+
+    private fun postTtsAudio(base64Audio: String, mimeType: String) {
+        mainHandler.post {
+            val quotedAudio = JSONObject.quote(base64Audio)
+            val quotedMime = JSONObject.quote(mimeType)
+            webView.evaluateJavascript("receiveGroqTtsAudio($quotedAudio, $quotedMime)", null)
+        }
+    }
+
+    private fun postTtsError(message: String) {
+        mainHandler.post {
+            val quotedMessage = JSONObject.quote(message)
+            webView.evaluateJavascript("receiveGroqTtsError($quotedMessage)", null)
         }
     }
 
