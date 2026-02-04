@@ -86,7 +86,7 @@ class GroqInterface(private val context: Context, private val webView: WebView) 
 The documentation for the TapLink X3 web browser can be found here: https://github.com/informalTechCode/TAPLINKX3/blob/main/docs/USER_GUIDE.md. Refer to these documents for any questions about the 
 Information about the glasses it lives on can be found here: https://www.rayneo.com/products/x3-pro-ai-display-glasses
 The creator of the TapLink X3 browser is Informal Tech. Tech-tuber that makes awesome tech videos on YouTube. He is found at youtube.com/@informal-tech.
-Answer questions concisely and keep all responses human readable."""
+Answer questions concisely and keep all responses human readable. Please keep your answers concise."""
 
                         val activity = findMainActivity(context)
                         val location = activity?.getLastLocation()
@@ -147,6 +147,11 @@ Answer questions concisely and keep all responses human readable."""
                                                     .getJSONObject("message")
                                                     .getString("content")
                                     postResponse(content)
+
+                                    // TTS check
+                                    if (prefs.getBoolean("tts_enabled", false)) {
+                                        CanopyAudioService.speak(context, content)
+                                    }
                                 } else {
                                     postResponse("Error: No response from AI.")
                                 }

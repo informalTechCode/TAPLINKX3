@@ -44,6 +44,18 @@ class ChatView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
                 setOnClickListener { closeMenu() }
             }
 
+    private val ttsButton =
+            FontIconView(context).apply {
+                setText(R.string.fa_headphones)
+                textSize = 18f
+                setTextColor(Color.GRAY)
+                setPadding(16, 8, 16, 8)
+                setBackgroundResource(R.drawable.nav_button_background)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { toggleTts() }
+            }
+
     private val headerView =
             LinearLayout(context).apply {
                 orientation = HORIZONTAL
@@ -52,6 +64,7 @@ class ChatView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
                 gravity = Gravity.CENTER_VERTICAL
 
                 addView(titleText)
+                addView(ttsButton)
                 addView(closeButton)
             }
 
@@ -133,6 +146,46 @@ class ChatView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         // Ensure touch events are consumed
         isClickable = true
         isFocusable = true
+
+        updateTtsButtonState()
+    }
+
+    private fun toggleTts() {
+        val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+        val newState = !prefs.getBoolean("tts_enabled", false)
+
+        if (newState) {
+            val apiKey = prefs.getString("canopy_api_key", null)
+            if (apiKey.isNullOrBlank()) {
+                // Prompt for API Key
+                (context as? MainActivity)?.dualWebViewGroup?.showPromptDialog(
+                    "Enter Canopy/HF API Key",
+                    null,
+                    { key ->
+                        if (key.isNotBlank()) {
+                            prefs.edit().putString("canopy_api_key", key.trim()).putBoolean("tts_enabled", true).apply()
+                            updateTtsButtonState()
+                            (context as? MainActivity)?.dualWebViewGroup?.showToast("TTS Enabled")
+                        }
+                    },
+                    {
+                        // Cancelled
+                    }
+                )
+                return
+            }
+        }
+
+        prefs.edit().putBoolean("tts_enabled", newState).apply()
+        updateTtsButtonState()
+        val status = if (newState) "Enabled" else "Disabled"
+        (context as? MainActivity)?.dualWebViewGroup?.showToast("TTS $status")
+    }
+
+    private fun updateTtsButtonState() {
+        val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+        val enabled = prefs.getBoolean("tts_enabled", false)
+        ttsButton.setTextColor(if (enabled) Color.GREEN else Color.GRAY)
     }
 
     fun disableSystemKeyboard() {
