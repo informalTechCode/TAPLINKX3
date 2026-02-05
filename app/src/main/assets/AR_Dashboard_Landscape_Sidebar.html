@@ -1125,8 +1125,7 @@
       bindActivate(app, () => {
         if (isEditing) return;
         if (!meta.url) return;
-        const w = window.open(meta.url, '_blank', 'noopener');
-        if (!w || w.closed) { window.location.href = meta.url; }
+        window.location.href = meta.url;
       });
       return app;
     }

@@ -84,11 +84,27 @@ class GroqInterface(private val context: Context, private val webView: WebView) 
                         systemMsg.put("role", "system")
 
                         var systemContent =
-                                """Your name is TapLink AI. You are a helpful AI assistant built into the TapLink X3 web browser for RayNeo X3 Pro glasses.
-The documentation for the TapLink X3 web browser can be found here: https://github.com/informalTechCode/TAPLINKX3/blob/main/docs/USER_GUIDE.md. Refer to these documents for any questions about the 
-Information about the glasses it lives on can be found here: https://www.rayneo.com/products/x3-pro-ai-display-glasses
-The creator of the TapLink X3 browser is Informal Tech. Tech-tuber that makes awesome tech videos on YouTube. He is found at youtube.com/@informal-tech.
-Answer questions concisely and keep all responses human readable. You cannot control features of the glasses. Keep replies concise."""
+                                """You are TapLink AI, the in-browser assistant for the TapLink X3 web browser on RayNeo X3 Pro glasses.
+
+Primary behavior:
+- Give direct, useful answers in plain language.
+- Keep responses concise by default (1-4 short paragraphs or brief bullets).
+- Prioritize actionable steps when the user asks for help.
+- Ask a short clarifying question when the request is ambiguous.
+
+Constraints:
+- Do not claim to perform actions you cannot perform.
+- You cannot directly control hardware or system settings of the glasses.
+- Do not add a "How this was determined" section unless the user explicitly asks for it.
+- Do not include internal reasoning traces or chain-of-thought.
+
+When relevant:
+- For TapLink X3 browser feature questions, use this reference: https://github.com/informalTechCode/TAPLINKX3/blob/main/docs/USER_GUIDE.md
+- For device context, RayNeo X3 Pro: https://www.rayneo.com/products/x3-pro-ai-display-glasses
+
+Style:
+- Be accurate, neutral, and practical.
+- If uncertain, say so briefly and suggest the next best step."""
 
                         val activity = findMainActivity(context)
                         val location = activity?.getLastLocation()
@@ -247,6 +263,7 @@ Answer questions concisely and keep all responses human readable. You cannot con
 
     private fun postTtsAudio(base64Audio: String, mimeType: String) {
         mainHandler.post {
+            findMainActivity(context)?.prepareAudioForTtsPlayback()
             val quotedAudio = JSONObject.quote(base64Audio)
             val quotedMime = JSONObject.quote(mimeType)
             webView.evaluateJavascript("receiveGroqTtsAudio($quotedAudio, $quotedMime)", null)
@@ -317,6 +334,9 @@ Answer questions concisely and keep all responses human readable. You cannot con
 
     private fun postResponseWithTts(text: String, base64Audio: String?, mimeType: String?) {
         mainHandler.post {
+            if (base64Audio != null) {
+                findMainActivity(context)?.prepareAudioForTtsPlayback()
+            }
             val escapedText = text.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
             val audioArg = if (base64Audio != null) JSONObject.quote(base64Audio) else "null"
             val mimeArg = if (mimeType != null) JSONObject.quote(mimeType) else "null"

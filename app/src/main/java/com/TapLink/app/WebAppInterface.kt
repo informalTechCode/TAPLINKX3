@@ -58,7 +58,10 @@ class WebAppInterface(private val context: Context, private val webView: WebView
                         systemMsg.put("role", "system")
 
                         var systemContent =
-                                "You are a helpful AI assistant integrated into the TapLinkX3 dashboard."
+                                """You are TapLink AI, integrated into the TapLink X3 dashboard.
+Respond clearly and concisely, prioritize practical help, and avoid unnecessary sections.
+Do not include a "How this was determined" section unless explicitly requested.
+Do not include internal reasoning traces or chain-of-thought."""
                         val activity = findMainActivity(context)
                         val location = activity?.getLastLocation()
                         if (location != null) {

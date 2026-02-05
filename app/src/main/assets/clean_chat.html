@@ -330,6 +330,7 @@
         let messages = [];
         let ttsEnabled = false;
         let activeTtsAudio = null;
+        let pendingTtsAudio = null;
         let isMicActive = false;
 
         // Auto-scroll to bottom on load
@@ -373,15 +374,7 @@
 
         window.receiveGroqTtsAudio = function (base64Audio, mimeType) {
             const audioSrc = `data:${mimeType || 'audio/mpeg'};base64,${base64Audio}`;
-            if (activeTtsAudio) {
-                activeTtsAudio.pause();
-                activeTtsAudio = null;
-            }
-            const audio = new Audio(audioSrc);
-            activeTtsAudio = audio;
-            audio.play().catch((err) => {
-                console.warn('Unable to autoplay TTS audio', err);
-            });
+            playTtsAudio(audioSrc);
         };
 
         window.receiveGroqTtsError = function (message) {
@@ -439,15 +432,39 @@
             // Play audio if provided
             if (base64Audio) {
                 const audioSrc = `data:${mimeType || 'audio/mpeg'};base64,${base64Audio}`;
-                if (activeTtsAudio) {
-                    activeTtsAudio.pause();
-                    activeTtsAudio = null;
-                }
-                const audio = new Audio(audioSrc);
-                activeTtsAudio = audio;
-                audio.play().catch(err => console.warn('TTS playback failed', err));
+                playTtsAudio(audioSrc);
+            } else if (ttsEnabled) {
+                // Native bundled TTS audio may occasionally fail to arrive on some devices;
+                // fall back to a separate TTS request so speech still plays.
+                requestTts(text);
             }
         };
+
+        function playTtsAudio(audioSrc) {
+            if (!audioSrc) return;
+            if (activeTtsAudio) {
+                activeTtsAudio.pause();
+                activeTtsAudio = null;
+            }
+            const audio = new Audio(audioSrc);
+            audio.preload = 'auto';
+            activeTtsAudio = audio;
+            pendingTtsAudio = null;
+            audio.play().catch((err) => {
+                console.warn('TTS playback failed', err);
+                pendingTtsAudio = audio;
+            });
+        }
+
+        function resumePendingTtsPlayback() {
+            if (!pendingTtsAudio) return;
+            const queuedAudio = pendingTtsAudio;
+            pendingTtsAudio = null;
+            queuedAudio.play().catch((err) => {
+                console.warn('Queued TTS playback failed', err);
+                pendingTtsAudio = queuedAudio;
+            });
+        }
 
         function showLoading() {
             // Add loading indicator
@@ -512,6 +529,7 @@
             ttsEnabled = e.target.checked;
         });
         document.addEventListener('click', (e) => {
+            resumePendingTtsPlayback();
             const link = e.target.closest && e.target.closest('a');
             if (!link || !link.href) return;
             e.preventDefault();
@@ -524,6 +542,7 @@
 
         // Prevent context menu
         document.addEventListener('contextmenu', e => e.preventDefault());
+        document.addEventListener('keydown', resumePendingTtsPlayback);
 
     </script>
 </body>

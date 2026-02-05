@@ -213,6 +213,8 @@ class MainActivity :
     private var preMaskCursorState = false
     private var preMaskCursorX = 0f
     private var preMaskCursorY = 0f
+    private var closeChatOnNextPageStart = false
+    private var closeChatOnNextPageStartDeadlineMs = 0L
 
     private val uiHandler = Handler(Looper.getMainLooper())
     private var pendingCursorUpdate = false
@@ -335,6 +337,34 @@ class MainActivity :
     private var touchScrollDownTime = 0L
     private var touchScrollCurrentY = 240f // Start at center
     private var accumulatedScrollY = 0f // Accumulate small scroll deltas
+
+    private fun cancelActiveTouchScrollGesture() {
+        pendingTouchRunnable?.let { pendingTouchHandler?.removeCallbacks(it) }
+        pendingTouchRunnable = null
+        accumulatedScrollY = 0f
+
+        if (!isTouchScrollActive || !::webView.isInitialized) return
+
+        val now = SystemClock.uptimeMillis()
+        val cancelEvent =
+                MotionEvent.obtain(
+                        touchScrollDownTime,
+                        now,
+                        MotionEvent.ACTION_CANCEL,
+                        lastCursorX,
+                        touchScrollCurrentY,
+                        0
+                )
+        cancelEvent.source = InputDevice.SOURCE_TOUCHSCREEN
+        isSimulatingTouchEvent = true
+        try {
+            webView.dispatchTouchEvent(cancelEvent)
+        } finally {
+            isSimulatingTouchEvent = false
+        }
+        cancelEvent.recycle()
+        isTouchScrollActive = false
+    }
 
     private val notificationReceiver =
             object : BroadcastReceiver() {
@@ -552,9 +582,17 @@ class MainActivity :
                                                 distanceX * distanceX + distanceY * distanceY
                                         )
 
+                                if (isAnchored && isCursorVisible) {
+                                    // In anchored cursor mode, cursor movement should not become
+                                    // a synthetic touch swipe on the page.
+                                    cancelActiveTouchScrollGesture()
+                                    return true
+                                }
+
                                 // When ANCHORED or SCROLL MODE: both X and Y move the page
                                 // vertically
-                                if ((isAnchored || dualWebViewGroup.isInScrollMode()) &&
+                                if ((!isCursorVisible &&
+                                                (isAnchored || dualWebViewGroup.isInScrollMode())) &&
                                                 !isKeyboardVisible &&
                                                 !dualWebViewGroup.isScreenMasked()
                                 ) {
@@ -832,6 +870,10 @@ class MainActivity :
                                 // When masked, don't consume the tap - let it reach the unmask
                                 // button and media controls
                                 // The mask overlay itself will block touches to web content
+                                if (dualWebViewGroup.isScreenMasked()) {
+                                    dispatchTouchEventAtCursor()
+                                    return true
+                                }
 
                                 if (isProcessingTap) return true
 
@@ -1448,6 +1490,10 @@ class MainActivity :
         if (!::dualWebViewGroup.isInitialized) return
         val formattedUrl = formatUrl(url)
         val newWebView = dualWebViewGroup.createNewWindow()
+        if (dualWebViewGroup.isChatVisible()) {
+            closeChatOnNextPageStart = true
+            closeChatOnNextPageStartDeadlineMs = SystemClock.uptimeMillis() + 5000L
+        }
         newWebView.loadUrl(formattedUrl)
     }
 
@@ -2141,6 +2187,26 @@ class MainActivity :
     private var groqAudioService: GroqAudioService? = null
     private var lastMicPressTime = 0L
 
+    private fun setVoiceAssistantAudioRoute(enabled: Boolean) {
+        val value = if (enabled) "voiceassistant" else "off"
+        try {
+            audioManager?.mode = AudioManager.MODE_NORMAL
+            audioManager?.adjustStreamVolume(
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.ADJUST_UNMUTE,
+                    0
+            )
+            audioManager?.setParameters("audio_source_record=$value")
+            DebugLog.d("AudioRoute", "audio_source_record=$value")
+        } catch (e: Exception) {
+            DebugLog.e("AudioRoute", "Failed to set audio route: $value", e)
+        }
+    }
+
+    fun prepareAudioForTtsPlayback() {
+        runOnUiThread { setVoiceAssistantAudioRoute(true) }
+    }
+
     override fun onMicrophonePressed() {
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastMicPressTime < 500) {
@@ -2178,12 +2244,12 @@ class MainActivity :
                 // Stop listening
                 DebugLog.d("SpeechRecognition", "Stopping Groq recording")
                 groqAudioService?.stopRecording()
-                audioManager?.setParameters("audio_source_record=off")
+                setVoiceAssistantAudioRoute(false)
                 dualWebViewGroup.showToast("Processing...")
             } else {
                 // Start listening
                 DebugLog.d("SpeechRecognition", "Starting Groq recording")
-                audioManager?.setParameters("audio_source_record=voiceassistant")
+                setVoiceAssistantAudioRoute(true)
                 groqAudioService?.startRecording()
                 dualWebViewGroup.showToast("Listening...")
             }
@@ -2215,6 +2281,9 @@ class MainActivity :
                                 override fun onTranscriptionResult(text: String) {
                                     DebugLog.d("SpeechRecognition", "Groq result: $text")
                                     runOnUiThread {
+                                        // Restore playback route after recording so chat TTS is
+                                        // audible.
+                                        setVoiceAssistantAudioRoute(true)
                                         // If chat is visible, insert text there
                                         if (dualWebViewGroup.isChatVisible()) {
                                             dualWebViewGroup.insertVoiceToChatInput(text)
@@ -2230,7 +2299,7 @@ class MainActivity :
                                 override fun onError(message: String) {
                                     DebugLog.e("SpeechRecognition", "Groq error: $message")
                                     runOnUiThread {
-                                        audioManager?.setParameters("audio_source_record=off")
+                                        setVoiceAssistantAudioRoute(false)
                                         dualWebViewGroup.showToast("Voice Error: $message")
                                         keyboardView?.setMicActive(false)
                                         dualWebViewGroup.setChatMicActive(false)
@@ -3463,6 +3532,16 @@ class MainActivity :
                             super.onPageStarted(view, url, favicon)
                             DebugLog.d("WebViewDebug", "Page started loading: $url")
 
+                            if (closeChatOnNextPageStart) {
+                                val now = SystemClock.uptimeMillis()
+                                if (now > closeChatOnNextPageStartDeadlineMs) {
+                                    closeChatOnNextPageStart = false
+                                } else if (!url.isNullOrBlank() && !url.startsWith("about:blank")) {
+                                    closeChatOnNextPageStart = false
+                                    dualWebViewGroup.hideChat()
+                                }
+                            }
+
                             dualWebViewGroup.clearExternalScrollMetrics()
 
                             // Streaming Fix: Force default User Agent to ensure Widevine CDM works
@@ -3949,7 +4028,8 @@ class MainActivity :
                                 isUserGesture: Boolean,
                                 resultMsg: android.os.Message?
                         ): Boolean {
-                            val newWebView = dualWebViewGroup.createNewWindow()
+                            // Must provide a pristine WebView here; Chromium will navigate it.
+                            val newWebView = dualWebViewGroup.createNewWindow(loadDefaultUrl = false)
                             val transport = resultMsg?.obj as? WebView.WebViewTransport
                             if (transport != null) {
                                 transport.webView = newWebView
@@ -4760,6 +4840,8 @@ class MainActivity :
                 dualWebViewGroup.setScrollMode(!isCursorVisible)
 
                 if (isCursorVisible) {
+                    cancelActiveTouchScrollGesture()
+
                     if (!isAnchored) {
                         lastCursorX = lastKnownCursorX
                         lastCursorY = lastKnownCursorY

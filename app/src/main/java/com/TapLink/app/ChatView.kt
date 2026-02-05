@@ -78,6 +78,7 @@ class ChatView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
                 layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
+                settings.mediaPlaybackRequiresUserGesture = false
                 settings.useWideViewPort = true
                 settings.loadWithOverviewMode = true
 
@@ -379,7 +380,11 @@ class ChatView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
 
                 function isInput(el) {
                     if (!el) return false;
-                    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return true;
+                    if (el.tagName === 'INPUT') {
+                        var type = el.type ? el.type.toLowerCase() : 'text';
+                        return type !== 'checkbox' && type !== 'radio' && type !== 'button' && type !== 'submit' && type !== 'reset' && type !== 'range' && type !== 'color';
+                    }
+                    if (el.tagName === 'TEXTAREA') return true;
                     return !!el.isContentEditable;
                 }
 
