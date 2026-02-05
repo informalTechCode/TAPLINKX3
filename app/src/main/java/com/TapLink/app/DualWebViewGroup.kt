@@ -234,7 +234,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var isBookmarkEditing = false
 
     private lateinit var mobileUserAgent: String
-    private val desktopUserAgent: String = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+    private val desktopUserAgent: String =
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
 
     private val verticalScrollFraction = 0.25f // Scroll vertically by 25% of the viewport per tap
 
@@ -361,6 +362,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             }
         }
 
+    var micListener: ChatView.MicListener? = null
+        set(value) {
+            field = value
+            if (::chatView.isInitialized) {
+                chatView.micListener = value
+            }
+        }
+
     private var navButtons: Map<String, NavButton>
 
     var listener: DualWebViewGroupListener? = null
@@ -376,6 +385,18 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     fun isActiveWebView(webView: WebView): Boolean {
         return this.webView == webView
+    }
+
+    fun setChatMicActive(active: Boolean) {
+        if (::chatView.isInitialized) {
+            chatView.setMicActive(active)
+        }
+    }
+
+    fun insertVoiceToChatInput(text: String) {
+        if (::chatView.isInitialized) {
+            chatView.insertVoiceText(text)
+        }
     }
 
     fun pauseBackgroundMedia(sourceWebView: WebView) {
@@ -1132,6 +1153,24 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
+    private fun refreshHoverAtCurrentCursor() {
+        if (!isAttachedToWindow) return
+
+        val containerLocation = IntArray(2)
+        getLocationOnScreen(containerLocation)
+
+        val transX = if (isAnchored) 0f else leftEyeUIContainer.translationX
+        val transY = if (isAnchored) 0f else leftEyeUIContainer.translationY
+
+        val visualX = 320f + (lastCursorX - 320f) * uiScale + transX
+        val visualY = 240f + (lastCursorY - 240f) * uiScale + transY
+
+        val screenX = visualX + containerLocation[0]
+        val screenY = visualY + containerLocation[1]
+
+        updateButtonHoverStates(screenX, screenY)
+    }
+
     private var isScreenMasked = false
     private var isHoveringMaskToggle = false
     private var maskOverlay: FrameLayout =
@@ -1144,9 +1183,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 isFocusable = true
 
                 // Consume all touch events to prevent propagation to navbar/webview behind
-                // Child buttons (unmask, media controls) will still work because they handle events
-                // first
-                setOnTouchListener { _, _ -> true }
+                // and route taps into mask overlay controls.
+                setOnTouchListener { _, event ->
+                    if (event.actionMasked == MotionEvent.ACTION_UP) {
+                        dispatchMaskOverlayTouch(event.rawX, event.rawY)
+                    }
+                    true
+                }
             }
 
     // Mask mode UI elements
@@ -1215,6 +1258,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 "Container found, clearing views. Windows count: ${windows.size}"
         )
         container.removeAllViews()
+        hoveredWindowsOverviewItem = null
 
         // Add "Add Window" button at the top - shorter with label
         val addButton =
@@ -1461,6 +1505,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             "x=${woc?.x}, y=${woc?.y}, visibility=${woc?.visibility}, " +
                             "layoutParams=${woc?.layoutParams?.width}x${woc?.layoutParams?.height}"
             )
+            refreshHoverAtCurrentCursor()
         }
     }
 
@@ -1542,12 +1587,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
-    fun createNewWindow(): WebView {
+    fun createNewWindow(loadDefaultUrl: Boolean = true): WebView {
         val newWebView = InternalWebView(context)
         configureWebView(newWebView)
         applyBrowsingModeToWebView(newWebView, isDesktopMode)
-        // Load default URL for fresh windows
-        newWebView.loadUrl(Constants.DEFAULT_URL)
+        // Popup windows supplied via WebViewTransport must be pristine (not pre-navigated).
+        if (loadDefaultUrl) {
+            newWebView.loadUrl(Constants.DEFAULT_URL)
+        }
         val newWindow = BrowserWindow(webView = newWebView, title = "New Tab")
 
         // Add to container but invisible
@@ -3120,6 +3167,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
+    fun hideChat() {
+        if (!::chatView.isInitialized || chatView.visibility != View.VISIBLE) return
+        chatView.visibility = View.GONE
+        post {
+            requestLayout()
+            invalidate()
+        }
+    }
+
     private fun maybePromptForGroqApiKey() {
         if (dialogContainer.visibility == View.VISIBLE) return
         val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
@@ -3208,8 +3264,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val settings = this.settings
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            @Suppress("DEPRECATION")
-            run { settings.databaseEnabled = true }
+            @Suppress("DEPRECATION") run { settings.databaseEnabled = true }
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
             settings.setSupportZoom(true)
@@ -5555,11 +5610,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun performWindowsOverviewClick() {
-        val item = hoveredWindowsOverviewItem ?: return
-        if (item.isHovered) {
-            showButtonClickFeedback(item)
-            item.performClick()
+        val current = hoveredWindowsOverviewItem
+        if (current == null || !current.isAttachedToWindow || !current.isHovered) {
+            refreshHoverAtCurrentCursor()
         }
+
+        val item = hoveredWindowsOverviewItem ?: return
+        if (!item.isAttachedToWindow || !item.isHovered) return
+
+        showButtonClickFeedback(item)
+        item.performClick()
     }
 
     private fun isOver(button: View?, screenX: Float, screenY: Float): Boolean {
@@ -7513,15 +7573,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     setBackgroundColor(Color.TRANSPARENT)
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     setPadding(8, 8, 8, 8)
-                    setOnTouchListener { view, event ->
-                        when (event.action) {
-                            MotionEvent.ACTION_UP -> {
-                                view.performClick()
-                                unmaskScreen()
-                            }
-                        }
-                        true // Consume the event to prevent propagation
-                    }
+                    setOnClickListener { unmaskScreen() }
                 }
         val unmaskParams =
                 FrameLayout.LayoutParams(40, 40).apply {

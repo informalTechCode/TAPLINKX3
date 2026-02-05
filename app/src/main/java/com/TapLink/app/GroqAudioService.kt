@@ -5,6 +5,7 @@ import android.media.MediaRecorder
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -22,6 +23,7 @@ class GroqAudioService(private val context: Context) {
     private var mediaRecorder: MediaRecorder? = null
     private var outputFile: File? = null
     private var isRecording = false
+    private var recordingStartedAtMs: Long = 0L
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -85,6 +87,7 @@ class GroqAudioService(private val context: Context) {
                 start()
             }
 
+            recordingStartedAtMs = SystemClock.elapsedRealtime()
             isRecording = true
             mainHandler.post { listener?.onRecordingStart() }
             DebugLog.d(TAG, "Recording started")
@@ -112,6 +115,11 @@ class GroqAudioService(private val context: Context) {
 
             // Transcribe immediately after stopping
             outputFile?.let { file ->
+                val durationMs = SystemClock.elapsedRealtime() - recordingStartedAtMs
+                DebugLog.d(
+                        TAG,
+                        "Recorded audio stats: durationMs=$durationMs, bytes=${file.length()}"
+                )
                 if (file.exists() && file.length() > 0) {
                     transcribeAudio(file)
                 } else {
