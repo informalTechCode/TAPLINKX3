@@ -37,6 +37,12 @@ When Scroll Mode is active, a small transparent **Show** button appears in the b
 
 ## Core Browser How-Tos
 
+### Scan a QR Code
+1. Tap **Dashboard** (glasses icon) on the left toggle bar.
+2. In the dashboard page, tap **QR Scanner**.
+3. If prompted, allow camera permission.
+4. Point at a QR code; supported web links open automatically in the browser.
+
 ### Open a URL
 1. Tap the **URL** (link) button on the bottom navigation bar.
 2. The URL field appears at the top of the view (to the right of the left toggle bar).
@@ -147,6 +153,7 @@ When Scroll Mode is active, a small transparent **Show** button appears in the b
 
 ### Audio and Display
 - **Volume** and **Brightness** sliders are in the left column.
+- **Force Dark: On/Off** toggles forced dark rendering for webpages.
 - **Anchor Smoothness** controls anchored tracking stiffness.
 - **Screen Size** changes the UI scale; use **Reset 100%** to restore.
 
@@ -167,4 +174,5 @@ When Scroll Mode is active, a small transparent **Show** button appears in the b
 ## Voice Control and AI
 - **Speech-to-Text**: Tap the **Mic** key on the on-screen keyboard to dictate into the active field.
 - **TapLink AI**: Tap **Chat** (comment icon) on the bottom navigation bar to open the AI window. Tap again to close it.
+- **Speak replies**: In the TapLink AI window, enable the **Speak replies** toggle to read assistant answers aloud.
 - **Summarize**: Use the **Summarize** button in TapLink AI to recap the active webpage (dashboard/about:blank are not supported).

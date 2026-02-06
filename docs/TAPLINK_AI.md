@@ -23,6 +23,7 @@ TapLink X3 includes a dedicated, floating TapLink AI window powered by the **Gro
 *   **Context-Aware**: The AI is aware it is running on the RayNeo X3 Pro glasses and TapLink browser.
 *   **High Performance**: Uses the `groq/compound` model for fast inference and advanced reasoning.
 *   **Persistent History**: Chat history is maintained during the session.
+*   **Speak Replies Toggle**: Enable **Speak replies** in the chat UI to play assistant responses with text-to-speech.
 *   **Summarize Button**: Sends the active webpage URL for a quick summary (dashboard/about:blank are ignored).
 
 ## Architecture

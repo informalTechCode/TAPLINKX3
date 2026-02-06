@@ -29,9 +29,11 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
 - **Temple Gestures (Anchored Mode)**:
   - **Double Tap (Right Temple)**: Go back.
   - **Triple Tap (Right Temple)**: Re-center the display.
+- **QR Scanner**: Open the Dashboard (glasses icon), then use **QR Scanner** to launch native camera scanning and open scanned web links.
 - **Media Mode (Blank Screen)**: Toggle the "Eye" icon to black out the screen for audio-only consumption while keeping media controls accessible.
 - **Scroll Mode**: Automatically hides UI elements for immersive reading; restore by tapping the transparent button in the bottom-right.
-- **Enhanced Settings**: Centralized control for volume, brightness, smoothness, screen size, and typography.
+- **Enhanced Settings**: Centralized control for volume, brightness, **Force Dark** toggle, smoothness, screen size, and typography.
+- **TapLink AI Speech Replies**: In the chat window, enable **Speak replies** to have assistant responses read aloud.
 - **Screen Drift**: If you run into a screen drift issue, reboot the glasses.
 - **Brightness Limitation**: Due to a RayNeo limitation, we do not recommend running the glasses at max brightness while using TapLink X3.
 - **Location Services**: To use location features in web apps, ensure the **RayNeo AR companion app** on your phone has **Location permission** granted. The glasses stream GPS data from the connected phone.
