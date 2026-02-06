@@ -7,7 +7,6 @@ The original TapLink builds and documentation were published through the release
 - **Source code**: Repository current
 - **Release readiness**:
   - Removed dead `ChatView` members that were not used at runtime (`TAG`, stale hover ID tracking, and an unused touch-dispatch helper).
-  - Completed a broader Kotlin source audit and removed additional unused imports in non-chat modules (`ColorWheelView`, `GroqAudioService`).
   - Improved hover reset handling for the AI chat panel by explicitly clearing WebView hover state when the panel hover is cleared.
 - **Versioning**:
   - Bumped Android app version to **1.5.0** with incremented `versionCode` for release distribution.

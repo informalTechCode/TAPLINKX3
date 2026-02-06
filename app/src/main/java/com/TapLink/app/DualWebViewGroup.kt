@@ -7227,8 +7227,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 
                 UTILITIES:
                 • Volume & Brightness Sliders.
+                • Force Dark: Toggle dark rendering for supported webpages.
                 • UI Scale: Adjust the global interface size.
                 • Web Zoom (+/-): Content zoom level.
+                • QR Scanner: Open Dashboard (glasses icon) and tap QR Scanner.
 
                 VOICE / STT:
                 • Uses device speech-to-text when supported.
@@ -7264,6 +7266,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 • Requires a Groq API Key (Settings -> Enter Groq API Key).
                 • Ask questions or use Summarize to recap the current webpage.
                 • Summarize works only when a normal webpage is open.
+                • Speak replies: Toggle in chat to read assistant responses aloud.
                 """.trimIndent(),
                                     false,
                                     true
