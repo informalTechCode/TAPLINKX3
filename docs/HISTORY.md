@@ -5,11 +5,50 @@ The original TapLink builds and documentation were published through the release
 ### TapLink 1.5.0 (February 6, 2026)
 
 - **Source code**: Repository current
+- **New Features**:
+  - **QR Scanner**: Added a dashboard-first QR scanner flow backed by a native ZXing scanner overlay, replacing prior WebView-based QR detection.
+  - **TapLink AI Speech Replies**: Added TTS playback support so AI responses can be spoken aloud via the chat UI.
+  - **Settings Force Dark Toggle**: Added `Force Dark: On/Off` control in Settings and enabled force-dark rendering by default for webpages.
+- **TapLink AI Improvements**:
+  - Open links from AI responses in new tabs.
+  - Improved chat/window interaction behavior and tightened prompt handling.
 - **Release readiness**:
-  - Removed dead `ChatView` members that were not used at runtime (`TAG`, stale hover ID tracking, and an unused touch-dispatch helper).
-  - Improved hover reset handling for the AI chat panel by explicitly clearing WebView hover state when the panel hover is cleared.
+  - Removed dead `ChatView` members not used at runtime (`TAG`, stale hover ID tracking, and an unused touch-dispatch helper).
+  - Expanded release audit and refreshed release docs.
 - **Versioning**:
   - Bumped Android app version to **1.5.0** with incremented `versionCode` for release distribution.
+
+### TapLink 1.4.4 (February 2, 2026)
+
+- **Source code**: Repository current
+- **WebView & Compatibility**:
+  - Enforced default User Agent paths to improve streaming-site compatibility.
+  - Modernized WebView setup with crash-handling and multi-window support.
+  - Updated default User Agent version metadata.
+- **Maintenance**:
+  - Updated in-app browser release/update metadata.
+
+### TapLink 1.4.3 (January 31, 2026)
+
+- **Source code**: Repository current
+- **Interaction updates**:
+  - Added triple-tap toggle support for Scroll Mode in non-anchored view.
+  - Shipped full-screen media controls and related interaction updates.
+
+### TapLink 1.4.2 (January 29, 2026)
+
+- **Source code**: Repository current
+- **Display & Power**:
+  - Updated WebView dark-mode handling to support `prefers-color-scheme` on Android 13+.
+  - Added power optimizations by throttling scroll/media polling and stopping idle GPS work.
+  - Hardened dark-mode behavior after a temporary forced-dark removal and rollback.
+
+### TapLink 1.4.1 (January 27, 2026)
+
+- **Source code**: Repository current
+- **Bug fixes**:
+  - Fixed custom scrollbar overlap on top of WebView content.
+  - Fixed right-eye refresh loop dead-state behavior.
 
 ### TapLink 1.4.0 (January 26, 2026)
 
