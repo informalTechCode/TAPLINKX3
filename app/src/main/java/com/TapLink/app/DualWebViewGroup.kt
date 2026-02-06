@@ -1204,6 +1204,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     // Fullscreen Mode UI elements
     private lateinit var fullScreenControlsContainer: FrameLayout
     private lateinit var fullScreenMediaControls: LinearLayout
+    private var suppressFullscreenMediaControls = false
     private lateinit var btnFsPrevTrack: FontIconView
     private lateinit var btnFsPrev: FontIconView
     private lateinit var btnFsPlayPause: FontIconView // Single toggle button
@@ -2651,6 +2652,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
             fullScreenOverlayContainer.addView(fullScreenControlsContainer)
             fullScreenControlsContainer.visibility = View.VISIBLE
+            if (::fullScreenMediaControls.isInitialized) {
+                fullScreenMediaControls.visibility =
+                        if (suppressFullscreenMediaControls) View.GONE else View.VISIBLE
+            }
             fullScreenControlsContainer.bringToFront()
         }
 
@@ -7941,7 +7946,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             }
 
             // Update full screen controls as well
-            if (::btnFsPlayPause.isInitialized) {
+            if (::btnFsPlayPause.isInitialized && !suppressFullscreenMediaControls) {
                 if (isPlaying) {
                     btnFsPlayPause.setText(R.string.fa_pause)
                     isFsPlaying = true
@@ -7959,6 +7964,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     fun hideMediaControls() {
         post { maskMediaControlsContainer.visibility = View.GONE }
+    }
+
+    fun setSuppressFullscreenMediaControls(suppress: Boolean) {
+        suppressFullscreenMediaControls = suppress
+        post {
+            if (::fullScreenMediaControls.isInitialized) {
+                fullScreenMediaControls.visibility = if (suppress) View.GONE else View.VISIBLE
+            }
+        }
     }
 
     private fun handleMediaStateChanged(sourceWebView: WebView, isPlaying: Boolean) {

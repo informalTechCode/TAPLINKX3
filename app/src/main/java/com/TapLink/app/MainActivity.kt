@@ -14,6 +14,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.Camera
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
@@ -61,6 +62,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.edit
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.ResultPoint
+import com.journeyapps.barcodescanner.BarcodeCallback
+import com.journeyapps.barcodescanner.BarcodeResult
+import com.journeyapps.barcodescanner.CameraPreview
+import com.journeyapps.barcodescanner.DecoratedBarcodeView
+import com.journeyapps.barcodescanner.DefaultDecoderFactory
+import com.journeyapps.barcodescanner.camera.CameraConfigurationUtils
 import com.ffalconxr.mercury.ipc.Launcher
 import com.ffalconxr.mercury.ipc.helpers.GPSIPCHelper
 import java.io.ByteArrayOutputStream
@@ -195,6 +204,11 @@ class MainActivity :
 
     private val PERMISSIONS_REQUEST_CODE = 123
     private var pendingPermissionRequest: PermissionRequest? = null
+    private var qrScanCallbackWebView: WebView? = null
+    private var isQrScanInProgress = false
+    private var pendingNativeQrStart = false
+    private var nativeQrScannerView: DecoratedBarcodeView? = null
+    private val defaultQrZoomRatio = 3.0
     private var audioManager: AudioManager? = null
     private var speechRecognizer: SpeechRecognizer? = null
     private lateinit var cameraManager: CameraManager
@@ -1387,6 +1401,12 @@ class MainActivity :
 
     override fun onPause() {
         super.onPause()
+
+        if (nativeQrScannerView != null || isQrScanInProgress) {
+            isQrScanInProgress = false
+            pendingNativeQrStart = false
+            stopNativeQrScannerOverlay()
+        }
 
         try {
             unregisterReceiver(notificationReceiver)
@@ -4326,6 +4346,132 @@ class MainActivity :
         customViewCallback = null
     }
 
+    private fun startNativeQrScanner(sourceWebView: WebView) {
+        if (isQrScanInProgress) {
+            val quotedMessage = JSONObject.quote("A scan is already in progress.")
+            sourceWebView.evaluateJavascript("window.__taplinkOnNativeQrError($quotedMessage);", null)
+            return
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
+                        PackageManager.PERMISSION_GRANTED
+        ) {
+            qrScanCallbackWebView = sourceWebView
+            pendingNativeQrStart = true
+            requestPermissions(arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_CODE)
+            return
+        }
+
+        qrScanCallbackWebView = sourceWebView
+        isQrScanInProgress = true
+        pendingNativeQrStart = false
+
+        val scannerContainer =
+                FrameLayout(this).apply {
+                    setBackgroundColor(Color.BLACK)
+                    layoutParams =
+                            FrameLayout.LayoutParams(
+                                    FrameLayout.LayoutParams.MATCH_PARENT,
+                                    FrameLayout.LayoutParams.MATCH_PARENT
+                            )
+                }
+
+        val scannerView =
+                DecoratedBarcodeView(this).apply {
+                    layoutParams =
+                            FrameLayout.LayoutParams(
+                                    FrameLayout.LayoutParams.MATCH_PARENT,
+                                    FrameLayout.LayoutParams.MATCH_PARENT
+                            )
+                    barcodeView.decoderFactory =
+                            DefaultDecoderFactory(listOf(BarcodeFormat.QR_CODE))
+                    setStatusText("Point at a QR code")
+                }
+
+        scannerView.barcodeView.addStateListener(
+                object : CameraPreview.StateListener {
+                    override fun previewSized() {}
+
+                    override fun previewStarted() {
+                        applyDefaultQrZoom(scannerView)
+                    }
+
+                    override fun previewStopped() {}
+
+                    override fun cameraError(error: Exception) {}
+
+                    override fun cameraClosed() {}
+                }
+        )
+
+        scannerContainer.addView(scannerView)
+        nativeQrScannerView = scannerView
+
+        dualWebViewGroup.setSuppressFullscreenMediaControls(true)
+        showFullScreenCustomView(scannerContainer, null)
+
+        scannerView.decodeContinuous(
+                object : BarcodeCallback {
+                    override fun barcodeResult(result: BarcodeResult?) {
+                        val value = result?.text?.trim().orEmpty()
+                        if (value.isEmpty() || !isQrScanInProgress) {
+                            return
+                        }
+
+                        runOnUiThread {
+                            if (!isQrScanInProgress) {
+                                return@runOnUiThread
+                            }
+                            isQrScanInProgress = false
+                            stopNativeQrScannerOverlay()
+                            dispatchNativeQrResult(value)
+                        }
+                    }
+
+                    override fun possibleResultPoints(resultPoints: MutableList<ResultPoint>?) {
+                        // No-op.
+                    }
+                }
+        )
+        scannerView.resume()
+    }
+
+    private fun applyDefaultQrZoom(scannerView: DecoratedBarcodeView) {
+        scannerView.changeCameraParameters { parameters: Camera.Parameters ->
+            try {
+                CameraConfigurationUtils.setZoom(parameters, defaultQrZoomRatio)
+            } catch (e: Exception) {
+                DebugLog.w("QRScanner", "Unable to apply default camera zoom: ${e.message}")
+            }
+            parameters
+        }
+    }
+
+    private fun dispatchNativeQrResult(contents: String) {
+        val targetWebView = qrScanCallbackWebView ?: webView
+        val quotedContents = JSONObject.quote(contents)
+        targetWebView.evaluateJavascript("window.__taplinkOnNativeQrResult($quotedContents);", null)
+        qrScanCallbackWebView = null
+    }
+
+    private fun dispatchNativeQrError(message: String, target: WebView? = qrScanCallbackWebView) {
+        val targetWebView = target ?: webView
+        val quotedMessage = JSONObject.quote(message)
+        targetWebView.evaluateJavascript("window.__taplinkOnNativeQrError($quotedMessage);", null)
+        pendingNativeQrStart = false
+        isQrScanInProgress = false
+        qrScanCallbackWebView = null
+    }
+
+    private fun stopNativeQrScannerOverlay() {
+        nativeQrScannerView?.pause()
+        nativeQrScannerView = null
+        dualWebViewGroup.setSuppressFullscreenMediaControls(false)
+        if (fullScreenCustomView != null) {
+            hideFullScreenCustomView()
+        }
+    }
+
     @Suppress("DEPRECATION")
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -4493,6 +4639,12 @@ class MainActivity :
                             "alert('Camera permission is required for image search');",
                             null
                     )
+                    if (pendingNativeQrStart) {
+                        dispatchNativeQrError("Camera permission denied.")
+                    }
+                } else if (pendingNativeQrStart) {
+                    val targetWebView = qrScanCallbackWebView ?: webView
+                    startNativeQrScanner(targetWebView)
                 }
             }
         }
@@ -5377,6 +5529,11 @@ class MainActivity :
         @JavascriptInterface
         fun onCaptureComplete() {
             activity.runOnUiThread { activity.isCapturing = false }
+        }
+
+        @JavascriptInterface
+        fun startNativeQrScanner() {
+            activity.runOnUiThread { activity.startNativeQrScanner(webView) }
         }
     }
 }

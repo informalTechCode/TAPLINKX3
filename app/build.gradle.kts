@@ -67,6 +67,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.core)
     implementation(libs.gson)
+    implementation(libs.zxing.embedded)
 
     // Kotlin Coroutines
     implementation(libs.kotlinx.coroutines.android)
