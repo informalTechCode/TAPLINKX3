@@ -791,7 +791,6 @@
     <div class="topbar">
       <strong>QR Scanner</strong>
       <div style="flex:1"></div>
-      <button class="btn" id="closeQrScanner" type="button">Back</button>
     </div>
     <div class="qr-video-wrap">
       <video id="qrVideo" class="qr-video" autoplay playsinline muted></video>
@@ -1121,7 +1120,9 @@
     bindImmediate(editToggle, () => setEditingMode(!isEditing));
     bindImmediate(addLink, () => openModal('add'));
     bindImmediate(openQrScanner, () => openQrPage());
-    bindActivate(closeQrScanner, () => closeQrPage());
+    if (closeQrScanner) {
+      bindActivate(closeQrScanner, () => closeQrPage());
+    }
     bindActivate(cancelLink, () => closeModal());
     ['pointerdown', 'pointerup', 'click', 'touchstart', 'touchend'].forEach((type) => {
       qrPage.addEventListener(type, (event) => {
@@ -1244,6 +1245,9 @@
     }
 
     function closeQrPage() {
+      if (window.AndroidInterface && typeof window.AndroidInterface.stopNativeQrScanner === 'function') {
+        window.AndroidInterface.stopNativeQrScanner();
+      }
       armInputGuard(450);
       qrPage.classList.add('hidden');
       qrPage.setAttribute('aria-hidden', 'true');

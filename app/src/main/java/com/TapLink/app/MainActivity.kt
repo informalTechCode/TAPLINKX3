@@ -4315,6 +4315,17 @@ class MainActivity :
         if (fullScreenCustomView == null) {
             return
         }
+
+        // If the fullscreen view is the native QR scanner, clear scanner state on exit.
+        if (nativeQrScannerView != null || isQrScanInProgress) {
+            nativeQrScannerView?.pause()
+            nativeQrScannerView = null
+            pendingNativeQrStart = false
+            isQrScanInProgress = false
+            qrScanCallbackWebView = null
+            dualWebViewGroup.setSuppressFullscreenMediaControls(false)
+        }
+
         dualWebViewGroup.hideFullScreenOverlay()
         fullScreenCustomView = null
 
@@ -4470,6 +4481,16 @@ class MainActivity :
         if (fullScreenCustomView != null) {
             hideFullScreenCustomView()
         }
+    }
+
+    private fun stopNativeQrScannerSession() {
+        if (nativeQrScannerView == null && !isQrScanInProgress && !pendingNativeQrStart) {
+            return
+        }
+        pendingNativeQrStart = false
+        isQrScanInProgress = false
+        qrScanCallbackWebView = null
+        stopNativeQrScannerOverlay()
     }
 
     @Suppress("DEPRECATION")
@@ -5534,6 +5555,11 @@ class MainActivity :
         @JavascriptInterface
         fun startNativeQrScanner() {
             activity.runOnUiThread { activity.startNativeQrScanner(webView) }
+        }
+
+        @JavascriptInterface
+        fun stopNativeQrScanner() {
+            activity.runOnUiThread { activity.stopNativeQrScannerSession() }
         }
     }
 }
