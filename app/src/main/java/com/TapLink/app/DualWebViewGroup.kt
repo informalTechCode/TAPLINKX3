@@ -1170,6 +1170,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         updateButtonHoverStates(screenX, screenY)
     }
 
+    fun updatePointerHover(screenX: Float, screenY: Float) {
+        if (!isAttachedToWindow) return
+        updateButtonHoverStates(screenX, screenY)
+    }
+
+    fun clearPointerHover() {
+        if (!isAttachedToWindow) return
+        clearAllHoverStates()
+    }
+
     private var isScreenMasked = false
     private var isHoveringMaskToggle = false
     private var maskOverlay: FrameLayout =
@@ -2151,6 +2161,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 visibility = View.VISIBLE
                 isClickable = true
                 isFocusable = true
+            }
+        }
+
+        // Ensure physical pointer clicks (mouse/touch) work on all nav buttons, not only via
+        // cursor hit-testing.
+        navButtons.forEach { (key, navButton) ->
+            navButton.left.setOnClickListener { triggerNavigationAction(key, navButton) }
+            if (navButton.right !== navButton.left) {
+                navButton.right.setOnClickListener { triggerNavigationAction(key, navButton) }
             }
         }
 
@@ -5704,26 +5723,32 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (leftNavigationBar.visibility == View.VISIBLE) {
             navButtons.entries.firstOrNull { isOver(it.value.left, screenX, screenY) }?.let {
                     (key, button) ->
-                keyboardListener?.onHideKeyboard()
-                showButtonClickFeedback(button.left)
-                showButtonClickFeedback(button.right)
-                if (key == "hide") {
-                    setNavBarsHidden(true) // Hide nav bars but keep cursor visible
-                } else if (key == "chat") {
-                    toggleChat()
-                } else {
-                    navigationListener?.let { listener ->
-                        when (key) {
-                            "back" -> listener.onNavigationBackPressed()
-                            "forward" -> listener.onNavigationForwardPressed()
-                            "home" -> listener.onHomePressed()
-                            "link" -> listener.onHyperlinkPressed()
-                            "settings" -> listener.onSettingsPressed()
-                            "refresh" -> listener.onRefreshPressed()
-                            "quit" -> listener.onQuitPressed()
-                        }
-                    }
-                }
+                triggerNavigationAction(key, button)
+            }
+        }
+    }
+
+    private fun triggerNavigationAction(key: String, button: NavButton) {
+        keyboardListener?.onHideKeyboard()
+        showButtonClickFeedback(button.left)
+        showButtonClickFeedback(button.right)
+        if (key == "hide") {
+            setNavBarsHidden(true) // Hide nav bars but keep cursor visible
+            return
+        }
+        if (key == "chat") {
+            toggleChat()
+            return
+        }
+        navigationListener?.let { listener ->
+            when (key) {
+                "back" -> listener.onNavigationBackPressed()
+                "forward" -> listener.onNavigationForwardPressed()
+                "home" -> listener.onHomePressed()
+                "link" -> listener.onHyperlinkPressed()
+                "settings" -> listener.onSettingsPressed()
+                "refresh" -> listener.onRefreshPressed()
+                "quit" -> listener.onQuitPressed()
             }
         }
     }

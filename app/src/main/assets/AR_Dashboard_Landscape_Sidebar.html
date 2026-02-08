@@ -817,6 +817,7 @@
       discord: { name: 'Discord', url: 'https://discord.com/app' },
       whatsapp: { name: 'WhatsApp', url: 'https://web.whatsapp.com' },
       instagram: { name: 'Instagram', url: 'https://www.instagram.com' },
+      reddit: { name: 'Reddit', url: 'https://www.reddit.com' },
       telegram: { name: 'Telegram', url: 'https://web.telegram.org' },
       tiktok: { name: 'TikTok', url: 'https://www.tiktok.com' },
 
@@ -880,7 +881,7 @@
     const defaultGroups = [
       { title: 'Navigation / Entertainment', cls: 'sec-nav', keys: ['youtube', 'informaltech', 'gmaps', 'minijuegos', 'tiktok'] },
       { title: 'AI / Chatbots', cls: 'sec-llm', keys: ['gemini', 'googleaistudio', 'jules', 'perplexity', 'chatgpt', 'claude', 'deepseek', 'grok'] },
-      { title: 'Social / Communication', cls: 'sec-social', keys: ['gmessages', 'discord', 'whatsapp', 'instagram', 'telegram'] },
+      { title: 'Social / Communication', cls: 'sec-social', keys: ['gmessages', 'discord', 'whatsapp', 'instagram', 'reddit', 'telegram'] },
       { title: 'Music / Streaming', cls: 'sec-music', keys: ['ytmusic', 'spotify', 'applemusic', 'tidal', 'deezer', 'audiomack', 'soundcloud'] },
       { title: 'Creativity / Multimedia', cls: 'sec-creative', keys: ['photopea', 'clipchamp', 'bandlab', 'wireframe', 'kleki'] },
       { title: 'Productivity / Documents', cls: 'sec-prod', keys: ['todoist', 'stackedit', 'sejda'] },
@@ -934,6 +935,25 @@
       return base;
     }
 
+    function ensureRedditMigration(dashboardState) {
+      let changed = false;
+      if (!dashboardState.apps.reddit) {
+        dashboardState.apps.reddit = { ...defaultApps.reddit };
+        changed = true;
+      }
+
+      const social = dashboardState.groups.find(
+        group => normalizeTitle(group.title).toLowerCase() === 'social / communication'
+      );
+
+      if (social && Array.isArray(social.keys) && !social.keys.includes('reddit')) {
+        social.keys.push('reddit');
+        changed = true;
+      }
+
+      return changed;
+    }
+
     function loadState() {
       const fallbackGroups = JSON.parse(JSON.stringify(defaultGroups));
       fallbackGroups.forEach(g => {
@@ -960,7 +980,8 @@
     }
 
     let state = loadState();
-    if (sanitizeGroups(state.groups)) {
+    const migratedReddit = ensureRedditMigration(state);
+    if (sanitizeGroups(state.groups) || migratedReddit) {
       persistState();
     }
 

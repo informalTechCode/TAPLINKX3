@@ -126,8 +126,24 @@ class MainActivity :
     private lateinit var webView: WebView
     private lateinit var mainContainer: FrameLayout
     private lateinit var gestureDetector: GestureDetector
+    private lateinit var templeDoubleTapDetector: GestureDetector
     private var isSimulatingTouchEvent = false
     private var isCursorVisible = true
+    private var isMouseTapMode = false
+    private var lastMouseRawX = Float.NaN
+    private var lastMouseRawY = Float.NaN
+    private var lastMouseMappedX = Float.NaN
+    private var lastMouseMappedY = Float.NaN
+    private var mouseGestureDownTime = 0L
+    private var mouseGestureActive = false
+    private var mouseSwipeTracking = false
+    private var mouseSwipeStartedOnCustomUi = false
+    private var mouseSwipeDownDispatched = false
+    private var mouseSwipeStartX = 0f
+    private var mouseSwipeStartY = 0f
+    private var mouseSwipeLastX = 0f
+    private var mouseSwipeLastY = 0f
+    private var mouseSwipeDownTime = 0L
 
     private fun refreshCursor() {
         dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, isCursorVisible)
@@ -143,6 +159,54 @@ class MainActivity :
         lastCursorY = 240f
         isCursorVisible = visible
         refreshCursor()
+    }
+
+    private fun isMousePointerEvent(event: MotionEvent): Boolean {
+        if (event.isFromSource(InputDevice.SOURCE_MOUSE)) return true
+        if (event.pointerCount <= 0) return false
+        return event.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE
+    }
+
+    private fun toggleMouseTapMode() {
+        val enableMouseTapMode = !isMouseTapMode
+        isMouseTapMode = enableMouseTapMode
+
+        if (enableMouseTapMode) {
+            cancelActiveTouchScrollGesture()
+            if (::dualWebViewGroup.isInitialized && dualWebViewGroup.isInScrollMode()) {
+                dualWebViewGroup.setScrollMode(false)
+            }
+            isCursorVisible = false
+            cursorJustAppeared = false
+            if (::cursorLeftView.isInitialized) {
+                cursorLeftView.visibility = View.GONE
+            }
+            if (::cursorRightView.isInitialized) {
+                cursorRightView.visibility = View.GONE
+            }
+            refreshCursor(false)
+            dualWebViewGroup.showToast("Mouse tap mode enabled")
+        } else {
+            isCursorVisible = true
+            refreshCursor(true)
+            dualWebViewGroup.showToast("Cursor mode enabled")
+        }
+    }
+
+    private fun ensureMouseTapModeEnabled() {
+        if (isMouseTapMode) return
+        toggleMouseTapMode()
+    }
+
+    private fun ensureMouseTapModeDisabled() {
+        if (!isMouseTapMode) return
+        toggleMouseTapMode()
+    }
+
+    private fun autoEnterMouseModeForMudraInput(event: MotionEvent) {
+        val deviceName = event.device?.name ?: InputDevice.getDevice(event.deviceId)?.name ?: return
+        if (!deviceName.contains("Mudra", ignoreCase = true)) return
+        ensureMouseTapModeEnabled()
     }
     private var isToggling = false
     private var lastCursorX = 320f
@@ -509,7 +573,7 @@ class MainActivity :
                                 potentialTapEvent = MotionEvent.obtain(e)
 
                                 // Triple tap detection for screen re-centering in anchored mode
-                                val currentTime = System.currentTimeMillis()
+                                val currentTime = e.eventTime
                                 if (currentTime - lastTapTime > TAP_INTERVAL) {
                                     DebugLog.d("TripleTapDebug", "Starting new tap sequence")
                                     tapCount = 1
@@ -977,7 +1041,7 @@ class MainActivity :
                                 synchronized(doubleTapLock) {
                                     // Safety check: Reset if flag has been stuck for too long
                                     // (>500ms)
-                                    val currentTime = System.currentTimeMillis()
+                                    val currentTime = SystemClock.uptimeMillis()
                                     if (isProcessingDoubleTap &&
                                                     lastDoubleTapStartTime > 0 &&
                                                     currentTime - lastDoubleTapStartTime > 500
@@ -1002,8 +1066,7 @@ class MainActivity :
 
                                     // Calculate dynamic delay to ensure we wait until AFTER the
                                     // triple tap window closes
-                                    val timeSinceFirstTap =
-                                            System.currentTimeMillis() - firstTapTime
+                                    val timeSinceFirstTap = SystemClock.uptimeMillis() - firstTapTime
                                     val remainingTripleTapWindow =
                                             TRIPLE_TAP_DURATION - timeSinceFirstTap
 
@@ -1074,6 +1137,19 @@ class MainActivity :
                                 }
 
                                 onNavigationBackPressed()
+                            }
+                        }
+                )
+
+        templeDoubleTapDetector =
+                GestureDetector(
+                        this,
+                        object : SimpleOnGestureListener() {
+                            override fun onDown(e: MotionEvent): Boolean = true
+
+                            override fun onDoubleTap(e: MotionEvent): Boolean {
+                                toggleMouseTapMode()
+                                return true
                             }
                         }
                 )
@@ -1150,6 +1226,7 @@ class MainActivity :
         webView = dualWebViewGroup.getWebView()
 
         webView.setOnTouchListener { _, event ->
+            val isMouseEvent = isMousePointerEvent(event)
 
             // Clear any pending touch events when a new touch starts
             // or when touch ends/cancels
@@ -1166,6 +1243,10 @@ class MainActivity :
             }
 
             if (isSimulatingTouchEvent) {
+                return@setOnTouchListener false
+            }
+
+            if (isMouseTapMode && isMouseEvent) {
                 return@setOnTouchListener false
             }
 
@@ -1195,7 +1276,7 @@ class MainActivity :
                 return@setOnTouchListener false
             }
 
-            if (isCursorVisible) {
+            if (isCursorVisible && !isMouseEvent) {
                 return@setOnTouchListener true
             }
 
@@ -3223,6 +3304,363 @@ class MainActivity :
         }
     }
 
+    private fun maybeShowKeyboardForMouseClick(rawScreenX: Float, rawScreenY: Float) {
+        if (!::webView.isInitialized || !::dualWebViewGroup.isInitialized) return
+
+        val webViewLocation = IntArray(2)
+        webView.getLocationOnScreen(webViewLocation)
+
+        val translatedX = rawScreenX - webViewLocation[0]
+        val translatedY = rawScreenY - webViewLocation[1]
+        if (translatedX < 0f ||
+                        translatedY < 0f ||
+                        translatedX > webView.width ||
+                        translatedY > webView.height
+        ) {
+            return
+        }
+
+        val scale = dualWebViewGroup.uiScale
+        val adjustedX: Float
+        val adjustedY: Float
+
+        if (isAnchored) {
+            val rotationRad = Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
+            val cos = Math.cos(rotationRad).toFloat()
+            val sin = Math.sin(rotationRad).toFloat()
+            val unscaledX = translatedX * cos + translatedY * sin
+            val unscaledY = -translatedX * sin + translatedY * cos
+            adjustedX = unscaledX / scale
+            adjustedY = unscaledY / scale
+        } else {
+            adjustedX = translatedX / scale
+            adjustedY = translatedY / scale
+        }
+
+        checkAndShowKeyboard(adjustedX.toInt(), adjustedY.toInt())
+    }
+
+    private fun mapMousePointForVirtualTap(rawScreenX: Float, rawScreenY: Float): Pair<Float, Float> {
+        if (!isMouseTapMode) return rawScreenX to rawScreenY
+        val fallbackEyeWidth = 640f
+        if (!::dualWebViewGroup.isInitialized) {
+            if (rawScreenX < fallbackEyeWidth) return rawScreenX to rawScreenY
+            return (rawScreenX - fallbackEyeWidth) to rawScreenY
+        }
+
+        val groupLocation = IntArray(2)
+        dualWebViewGroup.getLocationOnScreen(groupLocation)
+        val groupLeft = groupLocation[0].toFloat()
+        val groupWidth = dualWebViewGroup.width.toFloat().takeIf { it > 0f } ?: (fallbackEyeWidth * 2f)
+        val eyeWidth = (groupWidth / 2f).coerceAtLeast(1f)
+
+        val xWithinGroup = rawScreenX - groupLeft
+        if (xWithinGroup < 0f || xWithinGroup >= groupWidth) {
+            // Outside dual-eye surface: do not remap.
+            return rawScreenX to rawScreenY
+        }
+
+        if (xWithinGroup < eyeWidth) {
+            return rawScreenX to rawScreenY
+        }
+
+        return (rawScreenX - eyeWidth) to rawScreenY
+    }
+
+    private fun mapScreenPointToWebViewTouch(screenX: Float, screenY: Float): Pair<Float, Float>? {
+        if (!::webView.isInitialized || !::dualWebViewGroup.isInitialized) return null
+        val scale = dualWebViewGroup.uiScale
+        val webViewLocation = IntArray(2)
+        webView.getLocationOnScreen(webViewLocation)
+
+        val translatedX = screenX - webViewLocation[0]
+        val translatedY = screenY - webViewLocation[1]
+        if (translatedX < 0f ||
+                        translatedY < 0f ||
+                        translatedX > webView.width ||
+                        translatedY > webView.height
+        ) {
+            return null
+        }
+
+        val adjustedX: Float
+        val adjustedY: Float
+        if (isAnchored) {
+            val rotationRad = Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
+            val cos = Math.cos(rotationRad).toFloat()
+            val sin = Math.sin(rotationRad).toFloat()
+            val unscaledX = translatedX * cos + translatedY * sin
+            val unscaledY = -translatedX * sin + translatedY * cos
+            adjustedX = unscaledX / scale
+            adjustedY = unscaledY / scale
+        } else {
+            adjustedX = translatedX / scale
+            adjustedY = translatedY / scale
+        }
+
+        return adjustedX to adjustedY
+    }
+
+    private fun dispatchWebTouchFromScreen(
+            action: Int,
+            screenX: Float,
+            screenY: Float,
+            eventTime: Long = SystemClock.uptimeMillis(),
+            downTime: Long = mouseSwipeDownTime
+    ): Boolean {
+        val mapped = mapScreenPointToWebViewTouch(screenX, screenY) ?: return false
+        val adjustedX = mapped.first
+        val adjustedY = mapped.second
+
+        val event =
+                MotionEvent.obtain(
+                                downTime,
+                                eventTime,
+                                action,
+                                adjustedX,
+                                adjustedY,
+                                0
+                        )
+                        .apply { source = InputDevice.SOURCE_TOUCHSCREEN }
+        isSimulatingTouchEvent = true
+        try {
+            webView.dispatchTouchEvent(event)
+        } finally {
+            isSimulatingTouchEvent = false
+            event.recycle()
+        }
+        return true
+    }
+
+    private fun isPointOnCustomUi(screenX: Float, screenY: Float): Boolean {
+        if (!::dualWebViewGroup.isInitialized) return false
+        if (dualWebViewGroup.isScreenMasked()) return true
+        if (dualWebViewGroup.isFullScreenOverlayVisible()) return true
+        if (dualWebViewGroup.isDialogAction(screenX, screenY)) return true
+
+        if (dualWebViewGroup.isSettingsVisible()) {
+            val settingsMenuLocation = IntArray(2)
+            dualWebViewGroup.getSettingsMenuLocation(settingsMenuLocation)
+            val settingsMenuSize = dualWebViewGroup.getSettingsMenuSize()
+            if (screenX >= settingsMenuLocation[0] &&
+                            screenX <= settingsMenuLocation[0] + settingsMenuSize.first &&
+                            screenY >= settingsMenuLocation[1] &&
+                            screenY <= settingsMenuLocation[1] + settingsMenuSize.second
+            ) {
+                return true
+            }
+        }
+
+        if (dualWebViewGroup.isPointInRestoreButton(screenX, screenY)) return true
+        if (dualWebViewGroup.isChatVisible() && dualWebViewGroup.isPointInChat(screenX, screenY)) return true
+        if (isKeyboardVisible && dualWebViewGroup.isPointInKeyboard(screenX, screenY)) return true
+        if (dualWebViewGroup.isWindowsOverviewVisible() &&
+                        dualWebViewGroup.isPointInWindowsOverview(screenX, screenY)
+        ) {
+            return true
+        }
+        if (dualWebViewGroup.isToggleBarVisible() && dualWebViewGroup.isPointInToggleBar(screenX, screenY)) {
+            return true
+        }
+        if (dualWebViewGroup.isNavBarVisible() && dualWebViewGroup.isPointInNavBar(screenX, screenY)) {
+            return true
+        }
+        if (dualWebViewGroup.isPointInScrollbar(screenX, screenY)) return true
+        return false
+    }
+
+    private fun resolveMouseScreenPoint(ev: MotionEvent): Pair<Float, Float> {
+        var screenX = ev.rawX
+        var screenY = ev.rawY
+
+        if (!screenX.isFinite() || !screenY.isFinite()) {
+            val rootLoc = IntArray(2)
+            window.decorView.getLocationOnScreen(rootLoc)
+            screenX = ev.x + rootLoc[0]
+            screenY = ev.y + rootLoc[1]
+        }
+
+        return screenX to screenY
+    }
+
+    private fun dispatchWebTapAtScreenCoordinates(screenX: Float, screenY: Float) {
+        if (!::webView.isInitialized || !::dualWebViewGroup.isInitialized) return
+        if (isSimulatingTouchEvent) return
+
+        val scale = dualWebViewGroup.uiScale
+        val webViewLocation = IntArray(2)
+        webView.getLocationOnScreen(webViewLocation)
+
+        val translatedX = screenX - webViewLocation[0]
+        val translatedY = screenY - webViewLocation[1]
+        if (translatedX < 0f ||
+                        translatedY < 0f ||
+                        translatedX > webView.width ||
+                        translatedY > webView.height
+        ) {
+            return
+        }
+
+        val adjustedX: Float
+        val adjustedY: Float
+        if (isAnchored) {
+            val rotationRad = Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
+            val cos = Math.cos(rotationRad).toFloat()
+            val sin = Math.sin(rotationRad).toFloat()
+            val unscaledX = translatedX * cos + translatedY * sin
+            val unscaledY = -translatedX * sin + translatedY * cos
+            adjustedX = unscaledX / scale
+            adjustedY = unscaledY / scale
+        } else {
+            adjustedX = translatedX / scale
+            adjustedY = translatedY / scale
+        }
+
+        val eventTime = SystemClock.uptimeMillis()
+        isSimulatingTouchEvent = true
+        try {
+            val downEvent =
+                    MotionEvent.obtain(
+                                    eventTime,
+                                    eventTime,
+                                    MotionEvent.ACTION_DOWN,
+                                    adjustedX,
+                                    adjustedY,
+                                    1
+                            )
+                            .apply { source = InputDevice.SOURCE_TOUCHSCREEN }
+            webView.dispatchTouchEvent(downEvent)
+            downEvent.recycle()
+
+            Handler(Looper.getMainLooper())
+                    .postDelayed(
+                            {
+                                val upEvent =
+                                        MotionEvent.obtain(
+                                                        eventTime,
+                                                        SystemClock.uptimeMillis(),
+                                                        MotionEvent.ACTION_UP,
+                                                        adjustedX,
+                                                        adjustedY,
+                                                        1
+                                                )
+                                                .apply { source = InputDevice.SOURCE_TOUCHSCREEN }
+                                webView.dispatchTouchEvent(upEvent)
+                                upEvent.recycle()
+                                checkAndShowKeyboard(adjustedX.toInt(), adjustedY.toInt())
+                                isSimulatingTouchEvent = false
+                            },
+                            16
+                    )
+        } catch (e: Exception) {
+            isSimulatingTouchEvent = false
+            DebugLog.e("MouseTap", "Failed to dispatch virtual web tap: ${e.message}")
+        }
+    }
+
+    private fun handleMouseClickForCustomUi(rawScreenX: Float, rawScreenY: Float): Boolean {
+        if (!::dualWebViewGroup.isInitialized) return false
+
+        val scale = dualWebViewGroup.uiScale
+
+        if (dualWebViewGroup.isScreenMasked()) {
+            dualWebViewGroup.dispatchMaskOverlayTouch(rawScreenX, rawScreenY)
+            return true
+        }
+
+        if (dualWebViewGroup.isFullScreenOverlayVisible()) {
+            dualWebViewGroup.dispatchFullScreenOverlayTouch(rawScreenX, rawScreenY)
+            return true
+        }
+
+        if (dualWebViewGroup.isDialogAction(rawScreenX, rawScreenY)) {
+            val dialogContainer = dualWebViewGroup.dialogContainer
+            val location = IntArray(2)
+            dialogContainer.getLocationOnScreen(location)
+            val localX = (rawScreenX - location[0]) / scale
+            val localY = (rawScreenY - location[1]) / scale
+
+            val downEvent =
+                    MotionEvent.obtain(
+                            SystemClock.uptimeMillis(),
+                            SystemClock.uptimeMillis(),
+                            MotionEvent.ACTION_DOWN,
+                            localX,
+                            localY,
+                            0
+                    )
+            dialogContainer.dispatchTouchEvent(downEvent)
+            downEvent.recycle()
+
+            val upEvent =
+                    MotionEvent.obtain(
+                            SystemClock.uptimeMillis(),
+                            SystemClock.uptimeMillis(),
+                            MotionEvent.ACTION_UP,
+                            localX,
+                            localY,
+                            0
+                    )
+            dialogContainer.dispatchTouchEvent(upEvent)
+            upEvent.recycle()
+            return true
+        }
+
+        if (dualWebViewGroup.isSettingsVisible()) {
+            val settingsMenuLocation = IntArray(2)
+            dualWebViewGroup.getSettingsMenuLocation(settingsMenuLocation)
+            val settingsMenuSize = dualWebViewGroup.getSettingsMenuSize()
+            if (rawScreenX >= settingsMenuLocation[0] &&
+                            rawScreenX <= settingsMenuLocation[0] + settingsMenuSize.first &&
+                            rawScreenY >= settingsMenuLocation[1] &&
+                            rawScreenY <= settingsMenuLocation[1] + settingsMenuSize.second
+            ) {
+                dualWebViewGroup.dispatchSettingsTouchEvent(rawScreenX, rawScreenY)
+                return true
+            }
+        }
+
+        if (dualWebViewGroup.isPointInRestoreButton(rawScreenX, rawScreenY)) {
+            dualWebViewGroup.performRestoreButtonClick()
+            return true
+        }
+
+        if (dualWebViewGroup.isChatVisible() && dualWebViewGroup.isPointInChat(rawScreenX, rawScreenY)) {
+            dualWebViewGroup.dispatchChatTouchEvent(rawScreenX, rawScreenY)
+            return true
+        }
+
+        if (isKeyboardVisible && dualWebViewGroup.isPointInKeyboard(rawScreenX, rawScreenY)) {
+            dualWebViewGroup.dispatchKeyboardTap(rawScreenX, rawScreenY)
+            return true
+        }
+
+        if (dualWebViewGroup.isWindowsOverviewVisible() &&
+                        dualWebViewGroup.isPointInWindowsOverview(rawScreenX, rawScreenY)
+        ) {
+            dualWebViewGroup.performWindowsOverviewClick()
+            return true
+        }
+
+        val toggleHit =
+                dualWebViewGroup.isToggleBarVisible() &&
+                        dualWebViewGroup.isPointInToggleBar(rawScreenX, rawScreenY)
+        val navHit =
+                dualWebViewGroup.isNavBarVisible() &&
+                        dualWebViewGroup.isPointInNavBar(rawScreenX, rawScreenY)
+        if (toggleHit || navHit) {
+            dualWebViewGroup.handleNavigationClick(rawScreenX, rawScreenY)
+            return true
+        }
+
+        if (dualWebViewGroup.isPointInScrollbar(rawScreenX, rawScreenY)) {
+            dualWebViewGroup.dispatchScrollbarTouch(rawScreenX, rawScreenY)
+            return true
+        }
+
+        return false
+    }
+
     private fun sendEnterToWebView() {
         if (dualWebViewGroup.isUrlEditing()) {
             sendEnterInLinkEditText()
@@ -3369,10 +3807,15 @@ class MainActivity :
 
     private fun attachTouchListener(targetWebView: WebView) {
         targetWebView.setOnTouchListener { _, event ->
+            val isMouseEvent = isMousePointerEvent(event)
             // Allow simulated events to pass through immediately (used for scrolling)
             // CRITICAL: Check this FIRST to prevent infinite loops where simulated events
             // are fed back into gestureDetector, triggering more scrolls.
             if (isSimulatingTouchEvent) {
+                return@setOnTouchListener false
+            }
+
+            if (isMouseTapMode && isMouseEvent) {
                 return@setOnTouchListener false
             }
 
@@ -3416,7 +3859,7 @@ class MainActivity :
                 return@setOnTouchListener true
             }
 
-            if (isCursorVisible) {
+            if (isCursorVisible && !isMouseEvent) {
                 // If cursor is visible, we are in "mouse mode" - block direct touches.
                 return@setOnTouchListener true
             }
@@ -5072,6 +5515,7 @@ class MainActivity :
 
     override fun onCursorPositionChanged(x: Float, y: Float, isVisible: Boolean) {
         val scale = dualWebViewGroup.uiScale
+        val shouldRenderCursor = isVisible && !isMouseTapMode
 
         // Calculate visual position scaled around center (320, 240) and translated (only in
         // non-anchored mode)
@@ -5089,8 +5533,8 @@ class MainActivity :
         // visibility at edges,
         // but strictly preventing wrapping means keeping it to the 640 boundary.
 
-        val showLeft = isVisible && visualX < 640f
-        val showRight = isVisible && visualX >= 0f
+        val showLeft = shouldRenderCursor && visualX < 640f
+        val showRight = shouldRenderCursor && visualX >= 0f
 
         // Left screen cursor - pivot at top-left so scaling happens from cursor tip
         cursorLeftView.pivotX = 0f
@@ -5261,10 +5705,20 @@ class MainActivity :
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        // Ignore touches from cyttsp6_mt device
+        val deviceName = ev.device?.name ?: InputDevice.getDevice(ev.deviceId)?.name
+        if (deviceName?.contains("cyttsp5_mt", ignoreCase = true) == true) {
+            ensureMouseTapModeDisabled()
+        }
+
+        // Temple arm input should only be used for mode-toggle double taps.
         if (ev.device?.name == "cyttsp6_mt") {
+            templeDoubleTapDetector.onTouchEvent(ev)
             return true
         }
+
+        autoEnterMouseModeForMudraInput(ev)
+
+        val isMouseEvent = isMousePointerEvent(ev)
 
         // Track state at start of touch to prevent double-dispatch issues
         if (ev.action == MotionEvent.ACTION_DOWN) {
@@ -5312,11 +5766,244 @@ class MainActivity :
 
         // Let gestureDetector see the event for global gestures (like double-tap back)
         // regardless of whether a child view consumes it.
-        isDispatchingTouchEvent = true
-        try {
-            isGestureHandled = gestureDetector.onTouchEvent(ev)
-        } finally {
-            isDispatchingTouchEvent = false
+        if (!isMouseEvent) {
+            isDispatchingTouchEvent = true
+            try {
+                isGestureHandled = gestureDetector.onTouchEvent(ev)
+            } finally {
+                isDispatchingTouchEvent = false
+            }
+        } else {
+            val mousePoint = resolveMouseScreenPoint(ev)
+            val rawX = mousePoint.first
+            val rawY = mousePoint.second
+            val mappedPoint = mapMousePointForVirtualTap(rawX, rawY)
+            val mappedX = mappedPoint.first
+            val mappedY = mappedPoint.second
+            val usedRightEyeMapping = isMouseTapMode && mappedX != rawX
+
+            lastMouseRawX = rawX
+            lastMouseRawY = rawY
+            lastMouseMappedX = mappedX
+            lastMouseMappedY = mappedY
+
+            val useMouseForGestures = !isMouseTapMode
+            if (useMouseForGestures) {
+                val gestureAction =
+                        when (ev.actionMasked) {
+                            MotionEvent.ACTION_BUTTON_PRESS -> MotionEvent.ACTION_DOWN
+                            MotionEvent.ACTION_BUTTON_RELEASE -> MotionEvent.ACTION_UP
+                            else -> ev.actionMasked
+                        }
+
+                val shouldSendToGestureDetector =
+                        gestureAction == MotionEvent.ACTION_DOWN ||
+                                gestureAction == MotionEvent.ACTION_MOVE ||
+                                gestureAction == MotionEvent.ACTION_UP ||
+                                gestureAction == MotionEvent.ACTION_CANCEL
+
+                isDispatchingTouchEvent = true
+                try {
+                    if (shouldSendToGestureDetector) {
+                        val injectDownBeforeUp =
+                                gestureAction == MotionEvent.ACTION_UP && !mouseGestureActive
+
+                        if (injectDownBeforeUp) {
+                            val syntheticDownTime =
+                                    if (ev.downTime > 0L && ev.downTime <= ev.eventTime) ev.downTime
+                                    else ev.eventTime
+                            val syntheticDown =
+                                    MotionEvent.obtain(
+                                            syntheticDownTime,
+                                            syntheticDownTime,
+                                            MotionEvent.ACTION_DOWN,
+                                            mappedX,
+                                            mappedY,
+                                            ev.metaState
+                                    )
+                            syntheticDown.source = InputDevice.SOURCE_TOUCHSCREEN
+                            try {
+                                gestureDetector.onTouchEvent(syntheticDown)
+                            } finally {
+                                syntheticDown.recycle()
+                            }
+                            mouseGestureDownTime = syntheticDownTime
+                            mouseGestureActive = true
+                        }
+
+                        if (gestureAction == MotionEvent.ACTION_DOWN) {
+                            mouseGestureDownTime = ev.eventTime
+                            mouseGestureActive = true
+                        }
+
+                        val gestureDownTime =
+                                if (gestureAction == MotionEvent.ACTION_DOWN) ev.eventTime
+                                else if (mouseGestureActive) mouseGestureDownTime
+                                else ev.downTime
+
+                        val gestureEvent =
+                                MotionEvent.obtain(
+                                        gestureDownTime,
+                                        ev.eventTime,
+                                        gestureAction,
+                                        mappedX,
+                                        mappedY,
+                                        ev.metaState
+                                )
+                        gestureEvent.source = InputDevice.SOURCE_TOUCHSCREEN
+                        try {
+                            isGestureHandled = gestureDetector.onTouchEvent(gestureEvent)
+                        } finally {
+                            gestureEvent.recycle()
+                        }
+
+                        if (gestureAction == MotionEvent.ACTION_UP ||
+                                        gestureAction == MotionEvent.ACTION_CANCEL
+                        ) {
+                            mouseGestureActive = false
+                        }
+                    } else {
+                        isGestureHandled = false
+                    }
+                } finally {
+                    isDispatchingTouchEvent = false
+                }
+            } else {
+                isGestureHandled = false
+            }
+
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_HOVER_MOVE,
+                MotionEvent.ACTION_HOVER_ENTER,
+                MotionEvent.ACTION_MOVE -> {
+                    if (::dualWebViewGroup.isInitialized) {
+                        dualWebViewGroup.updatePointerHover(mappedX, mappedY)
+                    }
+                }
+                MotionEvent.ACTION_HOVER_EXIT,
+                MotionEvent.ACTION_CANCEL -> {
+                    if (::dualWebViewGroup.isInitialized) {
+                        dualWebViewGroup.clearPointerHover()
+                    }
+                }
+            }
+
+            if (ev.actionMasked == MotionEvent.ACTION_UP ||
+                            ev.actionMasked == MotionEvent.ACTION_BUTTON_RELEASE
+            ) {
+                if (!useMouseForGestures) {
+                    val dragSlop = 10f
+                    val movedSinceDown =
+                            kotlin.math.abs(mappedX - mouseSwipeStartX) >= dragSlop ||
+                                    kotlin.math.abs(mappedY - mouseSwipeStartY) >= dragSlop
+                    val longPressLike =
+                            mouseSwipeTracking &&
+                                    (ev.eventTime - mouseSwipeDownTime) >= 120L &&
+                                    !mouseSwipeStartedOnCustomUi
+                    val dragLikeRelease = movedSinceDown || longPressLike
+
+                    if (mouseSwipeDownDispatched) {
+                        dispatchWebTouchFromScreen(
+                                MotionEvent.ACTION_CANCEL,
+                                mappedX,
+                                mappedY,
+                                ev.eventTime
+                        )
+                        mouseSwipeTracking = false
+                        mouseSwipeStartedOnCustomUi = false
+                        mouseSwipeDownDispatched = false
+                        return true
+                    }
+
+                    if (dragLikeRelease && !mouseSwipeStartedOnCustomUi) {
+                        mouseSwipeTracking = false
+                        mouseSwipeStartedOnCustomUi = false
+                        mouseSwipeDownDispatched = false
+                        return true
+                    }
+
+                    if (handleMouseClickForCustomUi(mappedX, mappedY)) {
+                        mouseSwipeTracking = false
+                        mouseSwipeStartedOnCustomUi = false
+                        mouseSwipeDownDispatched = false
+                        return true
+                    }
+                    if (usedRightEyeMapping) {
+                        dispatchWebTapAtScreenCoordinates(mappedX, mappedY)
+                        mouseSwipeTracking = false
+                        mouseSwipeStartedOnCustomUi = false
+                        mouseSwipeDownDispatched = false
+                        return true
+                    }
+                    maybeShowKeyboardForMouseClick(mappedX, mappedY)
+                    mouseSwipeTracking = false
+                    mouseSwipeStartedOnCustomUi = false
+                    mouseSwipeDownDispatched = false
+                }
+            }
+
+            if (!useMouseForGestures) {
+                when (ev.actionMasked) {
+                    MotionEvent.ACTION_DOWN,
+                    MotionEvent.ACTION_BUTTON_PRESS -> {
+                        mouseSwipeTracking = true
+                        mouseSwipeStartedOnCustomUi = isPointOnCustomUi(mappedX, mappedY)
+                        mouseSwipeDownDispatched = false
+                        mouseSwipeStartX = mappedX
+                        mouseSwipeStartY = mappedY
+                        mouseSwipeLastX = mappedX
+                        mouseSwipeLastY = mappedY
+                        mouseSwipeDownTime = ev.eventTime
+                    }
+                    MotionEvent.ACTION_MOVE,
+                    MotionEvent.ACTION_HOVER_MOVE -> {
+                        if (mouseSwipeTracking && !mouseSwipeStartedOnCustomUi) {
+                            val dragSlop = 10f
+                            val movedEnough =
+                                    kotlin.math.abs(mappedX - mouseSwipeStartX) >= dragSlop ||
+                                            kotlin.math.abs(mappedY - mouseSwipeStartY) >= dragSlop
+
+                            if (!mouseSwipeDownDispatched && movedEnough) {
+                                mouseSwipeDownDispatched =
+                                        dispatchWebTouchFromScreen(
+                                                MotionEvent.ACTION_DOWN,
+                                                mouseSwipeStartX,
+                                                mouseSwipeStartY,
+                                                mouseSwipeDownTime,
+                                                mouseSwipeDownTime
+                                        )
+                            }
+
+                            if (mouseSwipeDownDispatched) {
+                                dispatchWebTouchFromScreen(
+                                        MotionEvent.ACTION_MOVE,
+                                        mappedX,
+                                        mappedY,
+                                        ev.eventTime,
+                                        mouseSwipeDownTime
+                                )
+                                mouseSwipeLastX = mappedX
+                                mouseSwipeLastY = mappedY
+                                return true
+                            }
+                        }
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        if (mouseSwipeDownDispatched) {
+                            dispatchWebTouchFromScreen(
+                                    MotionEvent.ACTION_CANCEL,
+                                    mouseSwipeLastX,
+                                    mouseSwipeLastY,
+                                    ev.eventTime,
+                                    mouseSwipeDownTime
+                            )
+                        }
+                        mouseSwipeTracking = false
+                        mouseSwipeStartedOnCustomUi = false
+                        mouseSwipeDownDispatched = false
+                    }
+                }
+            }
         }
 
         // Reset idle timer on any touch to restore full refresh rate
@@ -5327,7 +6014,41 @@ class MainActivity :
         return super.dispatchTouchEvent(ev)
     }
 
+    override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
+        autoEnterMouseModeForMudraInput(ev)
+
+        if (isMousePointerEvent(ev) && ::dualWebViewGroup.isInitialized) {
+            val mousePoint = resolveMouseScreenPoint(ev)
+            val rawX = mousePoint.first
+            val rawY = mousePoint.second
+            val mappedPoint = mapMousePointForVirtualTap(rawX, rawY)
+            val mappedX = mappedPoint.first
+            val mappedY = mappedPoint.second
+
+            lastMouseRawX = rawX
+            lastMouseRawY = rawY
+            lastMouseMappedX = mappedX
+            lastMouseMappedY = mappedY
+
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_HOVER_MOVE,
+                MotionEvent.ACTION_HOVER_ENTER,
+                MotionEvent.ACTION_MOVE -> {
+                    dualWebViewGroup.updatePointerHover(mappedX, mappedY)
+                }
+                MotionEvent.ACTION_HOVER_EXIT,
+                MotionEvent.ACTION_CANCEL -> {
+                    dualWebViewGroup.clearPointerHover()
+                }
+            }
+        }
+
+        return super.dispatchGenericMotionEvent(ev)
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        autoEnterMouseModeForMudraInput(event)
+
         DebugLog.d(
                 "RingInput",
                 """
