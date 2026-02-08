@@ -35,6 +35,14 @@ When Scroll Mode is active, a small transparent **Show** button appears in the b
 - **Double Tap**: Navigation "Back" (same as the Back button).
 - **Triple Tap** (Anchored Mode only): Re-center the display in front of your current view.
 
+## Mouse Mode (Mudra)
+- **Auto-enter**: Any input event from a device name containing `Mudra` switches TapLink into mouse tap mode automatically.
+- **Auto-exit**: Any input event from `cyttsp5_mt` switches out of mouse tap mode and returns to cursor mode.
+- **Cursor visibility**: In mouse tap mode, the visual TapLink cursor is hidden.
+- **Right-eye remap**: Right-eye pointer coordinates are translated to the left-eye interaction plane so hover/click targets align with the shared UI.
+- **Click and drag scroll**: In mouse tap mode, press-drag-release over webpage content performs touch-style swipe scrolling.
+- **No accidental click on release**: Releasing after a drag-scroll does not activate links underneath.
+
 ## Core Browser How-Tos
 
 ### Scan a QR Code

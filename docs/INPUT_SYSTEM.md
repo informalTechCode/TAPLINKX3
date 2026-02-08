@@ -6,6 +6,16 @@ TapLink exposes three complementary input modes:
 - **Free (focus) mode**: The keyboard is navigated via horizontal drags and flings that move the focus highlight before triggering `performFocusedTap()`. 【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1650-L1664】【F:app/src/main/java/com/TapLink/app/DualWebViewGroup.kt†L1785-L1803】【F:app/src/main/java/com/TapLink/app/CustomKeyboardView.kt†L648-L716】
 - **Voice Control**: High-accuracy speech-to-text powered by the Groq API. Activate it by pressing the microphone key on the custom keyboard. An API key is required and can be entered via the settings menu. 【F:app/src/main/java/com/TapLink/app/GroqAudioService.kt】【F:app/src/main/java/com/TapLink/app/MainActivity.kt†L3740-L3845】
 
+## Mouse tap mode
+
+TapLink also supports a pointer-driven mouse tap mode for wearable mouse devices such as Mudra:
+
+- Input from device names containing `Mudra` auto-enables mouse tap mode.
+- Input from `cyttsp5_mt` auto-disables mouse tap mode and restores cursor mode.
+- While active, TapLink hides the visual cursor and routes pointer hover/click through custom control hit-testing.
+- Right-eye pointer coordinates are translated onto the left-eye interaction plane for consistent targeting.
+- Press-drag-release over web content is converted into touch-style swipe scroll, and drag release is consumed to avoid accidental link activation.
+
 ## Anchored tap pipeline
 
 ```mermaid
