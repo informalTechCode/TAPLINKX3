@@ -7990,6 +7990,32 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return isMediaPlaying
     }
 
+    fun toggleMediaPlayback() {
+        if (isMediaPlaying) {
+             pauseMedia()
+        } else {
+             playMedia()
+        }
+    }
+
+    fun playMedia() {
+        val webView = getMediaControlWebView()
+        webView.evaluateJavascript(
+            "var m = document.querySelector('video, audio'); if (m) m.play();",
+            null
+        )
+        updateMediaState(true)
+    }
+
+    fun pauseMedia() {
+        val webView = getMediaControlWebView()
+        webView.evaluateJavascript(
+            "var m = document.querySelector('video, audio'); if (m) m.pause();",
+            null
+        )
+        updateMediaState(false)
+    }
+
     fun hideMediaControls() {
         post { maskMediaControlsContainer.visibility = View.GONE }
     }

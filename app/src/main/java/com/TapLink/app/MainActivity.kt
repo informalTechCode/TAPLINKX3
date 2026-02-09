@@ -5704,6 +5704,26 @@ class MainActivity :
                 )
     }
 
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                    dualWebViewGroup.toggleMediaPlayback()
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                    dualWebViewGroup.playMedia()
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                    dualWebViewGroup.pauseMedia()
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         val deviceName = ev.device?.name ?: InputDevice.getDevice(ev.deviceId)?.name
         if (deviceName?.contains("cyttsp5_mt", ignoreCase = true) == true) {
