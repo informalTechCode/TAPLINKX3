@@ -3833,8 +3833,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             }
         }
 
-        // Hide system info bar in scroll mode, show otherwise
-        if (isInScrollMode) {
+        // Hide system info bar in scroll mode or when nav bars are hidden, show otherwise
+        if (isInScrollMode || isNavBarsHidden) {
             leftSystemInfoView.visibility = View.GONE
         } else {
             leftSystemInfoView.visibility = View.VISIBLE
@@ -4059,7 +4059,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun showInfoBars() {
-        leftSystemInfoView.visibility = View.VISIBLE
+        if (!isNavBarsHidden) {
+            leftSystemInfoView.visibility = View.VISIBLE
+        }
     }
 
     fun hideInfoBars() {
