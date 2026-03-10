@@ -4345,9 +4345,9 @@ class MainActivity :
                                         requiredAndroidPermissions.add(
                                                 android.Manifest.permission.RECORD_AUDIO
                                         )
-                                        // Configure AR glasses microphone for voice assistant mode
+                                        // Configure AR glasses microphone for general recording/streaming
                                         audioManager?.setParameters(
-                                                "audio_source_record=voiceassistant"
+                                                "audio_source_record=camcorder"
                                         )
                                     }
                                     PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
@@ -4565,7 +4565,7 @@ class MainActivity :
                         when (type) {
                             "audio" ->
                                     audioManager?.setParameters(
-                                            "audio_source_record=voiceassistant"
+                                            "audio_source_record=camcorder"
                                     )
                             "video" -> {
                                 /* Handle camera initialization if needed */
