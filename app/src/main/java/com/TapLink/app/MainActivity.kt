@@ -4337,6 +4337,7 @@ class MainActivity :
 
                             val permissions = mutableListOf<String>()
                             val requiredAndroidPermissions = mutableListOf<String>()
+                            var needsAudioRoute = false
 
                             request.resources.forEach { resource ->
                                 when (resource) {
@@ -4345,10 +4346,7 @@ class MainActivity :
                                         requiredAndroidPermissions.add(
                                                 android.Manifest.permission.RECORD_AUDIO
                                         )
-                                        // Configure AR glasses microphone for voice assistant mode
-                                        audioManager?.setParameters(
-                                                "audio_source_record=voiceassistant"
-                                        )
+                                        needsAudioRoute = true
                                     }
                                     PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
                                         permissions.add(resource)
@@ -4375,9 +4373,17 @@ class MainActivity :
                                         )
                                     } else {
                                         request.grant(permissions.toTypedArray())
+                                        // Configure AR glasses mic AFTER granting so
+                                        // WebView can initialise its audio capture first.
+                                        if (needsAudioRoute) {
+                                            setVoiceAssistantAudioRoute(true)
+                                        }
                                     }
                                 } else {
                                     request.grant(permissions.toTypedArray())
+                                    if (needsAudioRoute) {
+                                        setVoiceAssistantAudioRoute(true)
+                                    }
                                 }
                             }
                         }
@@ -4385,7 +4391,7 @@ class MainActivity :
                         override fun onPermissionRequestCanceled(request: PermissionRequest) {
                             pendingPermissionRequest = null
                             // Reset audio source when permissions are cancelled
-                            audioManager?.setParameters("audio_source_record=off")
+                            setVoiceAssistantAudioRoute(false)
                         }
 
                         override fun onGeolocationPermissionsShowPrompt(
@@ -4563,10 +4569,7 @@ class MainActivity :
                     @JavascriptInterface
                     fun onMediaStart(type: String) {
                         when (type) {
-                            "audio" ->
-                                    audioManager?.setParameters(
-                                            "audio_source_record=voiceassistant"
-                                    )
+                            "audio" -> setVoiceAssistantAudioRoute(true)
                             "video" -> {
                                 /* Handle camera initialization if needed */
                             }
@@ -4575,7 +4578,7 @@ class MainActivity :
 
                     @JavascriptInterface
                     fun onMediaStop() {
-                        audioManager?.setParameters("audio_source_record=off")
+                        setVoiceAssistantAudioRoute(false)
                     }
                 },
                 "AndroidMediaInterface"
@@ -5095,6 +5098,32 @@ class MainActivity :
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         when (requestCode) {
+            PERMISSIONS_REQUEST_CODE -> {
+                pendingPermissionRequest?.let { request ->
+                    val grantedResources = mutableListOf<String>()
+                    var audioGranted = false
+                    permissions.forEachIndexed { index, permission ->
+                        if (grantResults[index] == PackageManager.PERMISSION_GRANTED) {
+                            if (permission == Manifest.permission.RECORD_AUDIO) {
+                                grantedResources.add(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+                                audioGranted = true
+                            } else if (permission == Manifest.permission.CAMERA) {
+                                grantedResources.add(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                            }
+                        }
+                    }
+                    if (grantedResources.isNotEmpty()) {
+                        request.grant(grantedResources.toTypedArray())
+                        // Configure AR glasses mic AFTER granting
+                        if (audioGranted) {
+                            setVoiceAssistantAudioRoute(true)
+                        }
+                    } else {
+                        request.deny()
+                    }
+                    pendingPermissionRequest = null
+                }
+            }
             CAMERA_PERMISSION_CODE -> {
                 cameraPermissionGranted =
                         grantResults.isNotEmpty() &&
