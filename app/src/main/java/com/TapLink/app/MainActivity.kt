@@ -5095,6 +5095,26 @@ class MainActivity :
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         when (requestCode) {
+            PERMISSIONS_REQUEST_CODE -> {
+                pendingPermissionRequest?.let { request ->
+                    val grantedResources = mutableListOf<String>()
+                    permissions.forEachIndexed { index, permission ->
+                        if (grantResults[index] == PackageManager.PERMISSION_GRANTED) {
+                            if (permission == Manifest.permission.RECORD_AUDIO) {
+                                grantedResources.add(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+                            } else if (permission == Manifest.permission.CAMERA) {
+                                grantedResources.add(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                            }
+                        }
+                    }
+                    if (grantedResources.isNotEmpty()) {
+                        request.grant(grantedResources.toTypedArray())
+                    } else {
+                        request.deny()
+                    }
+                    pendingPermissionRequest = null
+                }
+            }
             CAMERA_PERMISSION_CODE -> {
                 cameraPermissionGranted =
                         grantResults.isNotEmpty() &&
