@@ -3952,6 +3952,7 @@ class MainActivity :
                 domStorageEnabled = true
                 @Suppress("DEPRECATION")
                 databaseEnabled = true
+                cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
                 javaScriptCanOpenWindowsAutomatically = false
                 mediaPlaybackRequiresUserGesture = false
 
