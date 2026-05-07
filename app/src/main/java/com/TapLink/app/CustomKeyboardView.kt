@@ -296,24 +296,6 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
         }
     }
 
-    override fun onDraw(canvas: Canvas) {
-
-        super.onDraw(canvas)
-        // Force redraw of all buttons
-        val keyboardLayout = getChildAt(0) as? LinearLayout
-        keyboardLayout?.let { layout ->
-            for (i in 0 until layout.childCount) {
-                val row = layout.getChildAt(i) as? LinearLayout
-                row?.let { rowLayout ->
-                    for (j in 0 until rowLayout.childCount) {
-                        val button = rowLayout.getChildAt(j) as? Button
-                        button?.invalidate()
-                    }
-                }
-            }
-        }
-    }
-
     private fun handleButtonClick(button: Button) {
         val buttonId = button.id
         val buttonLabel = button.text.toString()
