@@ -4118,11 +4118,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
 
-    // ⚡ Bolt: Removed overridden dispatchDraw that was causing an infinite render loop.
-    // 💡 What: Removed dispatchDraw which contained invalidate() calls.
-    // 🎯 Why: Calling invalidate() inside a drawing pass (onDraw or dispatchDraw) forces another redraw, creating an endless cycle that consumes CPU and drains battery.
-    // 📊 Impact: Eliminates infinite re-renders, dramatically lowering baseline CPU usage and preventing unnecessary battery drain.
-    // 🔬 Measurement: Observe CPU usage profiling before and after; the UI thread will no longer be constantly saturated with draw passes when idle.
     private fun getCursorInContainerCoords(): Pair<Float, Float> {
         // Calculate the actual screen position of the cursor first
         val containerLocation = IntArray(2)
@@ -7201,7 +7196,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 TOUCH GESTURES:
                 • Single Tap: Click links, buttons, and focus fields.
                 • Double Tap: Go back to the previous page.
-                
+
                 TRIPLE TAP (Anchored Mode):
                 • Re-centers the screen.
                 """.trimIndent(),
@@ -7215,7 +7210,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 ANCHORED MODE (Anchor Icon):
                 • Screen stays fixed in space relative to the world.
                 • Smoothness: Controls how rigidly the screen follows tracking.
-                
+
                 NON-ANCHORED MODE (Crossed Anchor):
                 • Screen is "locked" to your head movement.
                 • Screen Position: Shift the display H/V when UI Scale < 100%.
@@ -7230,7 +7225,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 SCROLL MODE (Full Screen Icon):
                 • Hides UI for an immersive browsing experience.
                 • Restore UI: Tap the transparent "Show" button.
-                
+
                 UTILITIES:
                 • Volume & Brightness Sliders.
                 • Force Dark: Toggle dark rendering for supported webpages.
@@ -7254,7 +7249,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 • Blacks out display while media continues playing but allows media controls.
                 • Perfect for listening to audio/podcasts.
                 • Note: Disables anchored mode while active.
-                
+
                 MEDIA CONTROLS (shown when media is playing):
                 • Play/Pause: Toggle media playback.
                 • Skip Back/Forward: Jump 10 seconds.
@@ -7671,7 +7666,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     """
                 (function() {
                     // Try common previous track selectors
-                    var prevBtn = document.querySelector('.ytp-prev-button') || 
+                    var prevBtn = document.querySelector('.ytp-prev-button') ||
                                   document.querySelector('[aria-label*="previous" i]') ||
                                   document.querySelector('[title*="previous" i]') ||
                                   document.querySelector('button[data-testid="control-button-skip-back"]');
@@ -7734,7 +7729,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     """
                 (function() {
                     // Try common next track selectors
-                    var nextBtn = document.querySelector('.ytp-next-button') || 
+                    var nextBtn = document.querySelector('.ytp-next-button') ||
                                   document.querySelector('[aria-label*="next" i]') ||
                                   document.querySelector('[title*="next" i]') ||
                                   document.querySelector('button[data-testid="control-button-skip-forward"]');
@@ -8057,7 +8052,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     },
                     timestamp: new Date().getTime()
                 };
-                
+
                 // 1. Mock Permissions API to always return 'granted'
                 if (navigator.permissions) {
                     var originalQuery = navigator.permissions.query.bind(navigator.permissions);
@@ -8068,7 +8063,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         return originalQuery(parameters);
                     };
                 }
-                
+
                 // 2. Override Geolocation API using defineProperty for robustness
                 var mockGeolocation = {
                     getCurrentPosition: function(success, error, options) {
@@ -8087,7 +8082,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         // Do nothing
                     }
                 };
-                
+
                 try {
                     Object.defineProperty(navigator, 'geolocation', {
                         value: mockGeolocation,
@@ -8100,7 +8095,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     navigator.geolocation.watchPosition = mockGeolocation.watchPosition;
                     navigator.geolocation.clearWatch = mockGeolocation.clearWatch;
                 }
-                
+
                 console.log("[TapLink] Location injected: " + $latitude + ", " + $longitude);
             })();
         """.trimIndent()
@@ -8132,7 +8127,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     function attachMediaListeners(media) {
                         if (media.__listenersAttached) return;
                         media.__listenersAttached = true;
-                        
+
                         const updateState = () => {
                             const allMedia = document.querySelectorAll('video, audio');
                             let anyPlaying = false;
@@ -8390,7 +8385,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         rescanRequested = true;
                         scheduleReport();
                     });
-                    
+
                     observer.observe(document.body, { childList: true, subtree: true });
 
                     // Immediate metrics after setup
