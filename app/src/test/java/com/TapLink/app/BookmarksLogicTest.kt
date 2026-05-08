@@ -14,10 +14,6 @@ class BookmarksLogicTest {
             fun onAction()
         }
 
-        fun setKeyboardListener(listener: Listener) {
-            keyboardListener = listener
-        }
-
         fun triggerAction() {
             keyboardListener?.onAction()
         }
@@ -33,7 +29,7 @@ class BookmarksLogicTest {
             }
         }
 
-        view.setKeyboardListener(listener)
+        view.keyboardListener = listener
         view.triggerAction()
 
         // Assert that the listener IS called
