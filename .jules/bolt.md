@@ -7,3 +7,6 @@
 ## 2025-05-08 - Infinite Re-render Loop in `DualWebViewGroup.kt`
 **Learning:** `dispatchDraw` was overridden solely to call `invalidate()` on child views. Since `dispatchDraw` is part of the drawing pass, calling `invalidate()` from it queues another drawing pass, causing an infinite loop. This severe anti-pattern saturated the UI thread and consumed unnecessary CPU/battery.
 **Action:** Removed the overridden `dispatchDraw`. Invalidations should only be triggered by external state or layout changes, never from within the rendering pipeline itself (`onDraw`, `dispatchDraw`).
+## 2025-05-09 - Avoid Local Object Allocations in Hover/Touch Event Loops
+**Learning:** Allocating collections like `listOf(...)` or lambdas inside high-frequency touch event or hover loops (like `updateButtonHoverStates`) causes high memory churn. This forces the Android Garbage Collector to run frequently, leading to skipped frames and UI jank.
+**Action:** Extract constant data structures and object arrays (e.g., arrays of Resource IDs, lists of Triples/lambdas) out of the method into class-level or instance-level properties. Reuse them to completely eliminate allocations on the hot path.
