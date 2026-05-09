@@ -54,6 +54,37 @@ class DualWebViewGroup
 constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0) :
         ViewGroup(context, attrs, defStyleAttr) {
 
+    private val settingsElements = listOf(
+        R.id.volumeSeekBar,
+        R.id.brightnessSeekBar,
+        R.id.btnToggleForceDark,
+        R.id.smoothnessSeekBar,
+        R.id.screenSizeSeekBar,
+        R.id.btnResetScreenSize,
+        R.id.fontSizeSeekBar,
+        R.id.btnResetFontSize,
+        R.id.btnResetWebpageZoom,
+        R.id.colorWheelView,
+        R.id.btnResetTextColor,
+        R.id.horizontalPosSeekBar,
+        R.id.verticalPosSeekBar,
+        R.id.btnResetPosition,
+        R.id.btnHelp,
+        R.id.btnCloseSettings,
+        R.id.btnGroqApiKey
+    )
+
+    private val toggleBarButtons = listOf(
+        Triple(R.id.btnModeToggle, "ModeToggle") { isHoveringModeToggle = true },
+        Triple(R.id.btnYouTube, "Dashboard") { isHoveringDashboardToggle = true },
+        Triple(R.id.btnBookmarks, "Bookmarks") { isHoveringBookmarksMenu = true },
+        Triple(R.id.btnZoomOut, "ZoomOut") { isHoveringZoomOut = true },
+        Triple(R.id.btnZoomIn, "ZoomIn") { isHoveringZoomIn = true },
+        Triple(R.id.btnMask, "Mask") { isHoveringMaskToggle = true },
+        Triple(R.id.btnAnchor, "Anchor") { isHoveringAnchorToggle = true }
+    )
+
+
     // Custom WebView to expose protected scroll methods
     private inner class InternalWebView(context: Context) : WebView(context) {
         fun getHorizontalScrollRange() = super.computeHorizontalScrollRange()
@@ -5046,16 +5077,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         // Check left toggle bar buttons
-        val toggleBarButtons =
-                listOf(
-                        Triple(R.id.btnModeToggle, "ModeToggle") { isHoveringModeToggle = true },
-                        Triple(R.id.btnYouTube, "Dashboard") { isHoveringDashboardToggle = true },
-                        Triple(R.id.btnBookmarks, "Bookmarks") { isHoveringBookmarksMenu = true },
-                        Triple(R.id.btnZoomOut, "ZoomOut") { isHoveringZoomOut = true },
-                        Triple(R.id.btnZoomIn, "ZoomIn") { isHoveringZoomIn = true },
-                        Triple(R.id.btnMask, "Mask") { isHoveringMaskToggle = true },
-                        Triple(R.id.btnAnchor, "Anchor") { isHoveringAnchorToggle = true }
-                )
+
 
         for ((buttonId, _, setHoverFlag) in toggleBarButtons) {
             val button = leftToggleBar.findViewById<View>(buttonId)
@@ -5083,26 +5105,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Check settings window elements if visible
         if (isSettingsVisible) {
             settingsMenu?.let { menu ->
-                val settingsElements =
-                        listOf(
-                                R.id.volumeSeekBar,
-                                R.id.brightnessSeekBar,
-                                R.id.btnToggleForceDark,
-                                R.id.smoothnessSeekBar,
-                                R.id.screenSizeSeekBar,
-                                R.id.btnResetScreenSize,
-                                R.id.fontSizeSeekBar,
-                                R.id.btnResetFontSize,
-                                R.id.btnResetWebpageZoom,
-                                R.id.colorWheelView,
-                                R.id.btnResetTextColor,
-                                R.id.horizontalPosSeekBar,
-                                R.id.verticalPosSeekBar,
-                                R.id.btnResetPosition,
-                                R.id.btnHelp,
-                                R.id.btnCloseSettings,
-                                R.id.btnGroqApiKey
-                        )
+
                 for (id in settingsElements) {
                     val view = menu.findViewById<View>(id)
                     if (isOver(view, screenX, screenY)) {
@@ -5408,26 +5411,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Clear settings hover states
         if (isSettingsVisible) {
             settingsMenu?.let { menu ->
-                val settingsElements =
-                        listOf(
-                                R.id.volumeSeekBar,
-                                R.id.brightnessSeekBar,
-                                R.id.btnToggleForceDark,
-                                R.id.smoothnessSeekBar,
-                                R.id.screenSizeSeekBar,
-                                R.id.btnResetScreenSize,
-                                R.id.fontSizeSeekBar,
-                                R.id.btnResetFontSize,
-                                R.id.btnResetWebpageZoom,
-                                R.id.colorWheelView,
-                                R.id.btnResetTextColor,
-                                R.id.horizontalPosSeekBar,
-                                R.id.verticalPosSeekBar,
-                                R.id.btnResetPosition,
-                                R.id.btnHelp,
-                                R.id.btnCloseSettings,
-                                R.id.btnGroqApiKey
-                        )
+
                 for (id in settingsElements) {
                     menu.findViewById<View>(id)?.isHovered = false
                 }
