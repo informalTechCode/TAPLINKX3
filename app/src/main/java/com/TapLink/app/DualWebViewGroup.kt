@@ -84,6 +84,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         Triple(R.id.btnAnchor, "Anchor") { isHoveringAnchorToggle = true }
     )
 
+    private val toggleBarButtonIds = intArrayOf(
+        R.id.btnModeToggle,
+        R.id.btnYouTube,
+        R.id.btnBookmarks,
+        R.id.btnZoomIn,
+        R.id.btnZoomOut,
+        R.id.btnMask,
+        R.id.btnAnchor
+    )
+
 
     // Custom WebView to expose protected scroll methods
     private inner class InternalWebView(context: Context) : WebView(context) {
@@ -1084,14 +1094,20 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val scale = if (uiScale <= 0f) 1f else 1f / uiScale
         val transX = -leftEyeUIContainer.translationX
         val transY = -leftEyeUIContainer.translationY
-        listOf(horizontalScrollBar, verticalScrollBar).forEach { bar ->
-            bar.pivotX = 0f
-            bar.pivotY = 0f
-            bar.scaleX = scale
-            bar.scaleY = scale
-            bar.translationX = transX
-            bar.translationY = transY
-        }
+
+        horizontalScrollBar.pivotX = 0f
+        horizontalScrollBar.pivotY = 0f
+        horizontalScrollBar.scaleX = scale
+        horizontalScrollBar.scaleY = scale
+        horizontalScrollBar.translationX = transX
+        horizontalScrollBar.translationY = transY
+
+        verticalScrollBar.pivotX = 0f
+        verticalScrollBar.pivotY = 0f
+        verticalScrollBar.scaleX = scale
+        verticalScrollBar.scaleY = scale
+        verticalScrollBar.translationX = transX
+        verticalScrollBar.translationY = transY
     }
 
     private fun updateHorizontalScroll(percent: Float) {
@@ -5028,14 +5044,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return isBookmarkEditing
     }
 
+    // Reusable array to prevent allocation in hot paths like updateButtonHoverStates
+    private val reusableLocationArray = IntArray(2)
+
     // Add this method to handle cursor hovering
     private fun updateButtonHoverStates(screenX: Float, screenY: Float) {
         // Clear all states initially
         clearAllHoverStates()
 
         if (::chatView.isInitialized && chatView.visibility == View.VISIBLE) {
-            val uiLocation = IntArray(2)
-            leftEyeUIContainer.getLocationOnScreen(uiLocation)
+            leftEyeUIContainer.getLocationOnScreen(reusableLocationArray)
+            val uiLocation = reusableLocationArray
 
             val translatedX = screenX - uiLocation[0]
             val translatedY = screenY - uiLocation[1]
@@ -5394,16 +5413,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         hoveredWindowsOverviewItem = null
 
         // Clear visual hover states
-        listOf(
-                        R.id.btnModeToggle,
-                        R.id.btnYouTube,
-                        R.id.btnBookmarks,
-                        R.id.btnZoomIn,
-                        R.id.btnZoomOut,
-                        R.id.btnMask,
-                        R.id.btnAnchor
-                )
-                .forEach { id -> leftToggleBar.findViewById<View>(id)?.isHovered = false }
+        for (id in toggleBarButtonIds) {
+            leftToggleBar.findViewById<View>(id)?.isHovered = false
+        }
 
         // Clear Windows button hover state (programmatically created)
         windowsButton?.isHovered = false
@@ -5658,18 +5670,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         if (leftToggleBar.visibility == View.VISIBLE) {
-            val toggleBarButtons =
-                    listOf(
-                            R.id.btnModeToggle,
-                            R.id.btnYouTube,
-                            R.id.btnBookmarks,
-                            R.id.btnZoomOut,
-                            R.id.btnZoomIn,
-                            R.id.btnMask,
-                            R.id.btnAnchor
-                    )
-
-            for (buttonId in toggleBarButtons) {
+            for (buttonId in toggleBarButtonIds) {
                 val button = leftToggleBar.findViewById<View>(buttonId)
                 if (isOver(button, screenX, screenY)) {
                     handleLeftMenuAction(buttonId)
