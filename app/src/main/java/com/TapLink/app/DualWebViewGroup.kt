@@ -1084,14 +1084,20 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val scale = if (uiScale <= 0f) 1f else 1f / uiScale
         val transX = -leftEyeUIContainer.translationX
         val transY = -leftEyeUIContainer.translationY
-        listOf(horizontalScrollBar, verticalScrollBar).forEach { bar ->
-            bar.pivotX = 0f
-            bar.pivotY = 0f
-            bar.scaleX = scale
-            bar.scaleY = scale
-            bar.translationX = transX
-            bar.translationY = transY
-        }
+
+        horizontalScrollBar.pivotX = 0f
+        horizontalScrollBar.pivotY = 0f
+        horizontalScrollBar.scaleX = scale
+        horizontalScrollBar.scaleY = scale
+        horizontalScrollBar.translationX = transX
+        horizontalScrollBar.translationY = transY
+
+        verticalScrollBar.pivotX = 0f
+        verticalScrollBar.pivotY = 0f
+        verticalScrollBar.scaleX = scale
+        verticalScrollBar.scaleY = scale
+        verticalScrollBar.translationX = transX
+        verticalScrollBar.translationY = transY
     }
 
     private fun updateHorizontalScroll(percent: Float) {
@@ -5028,17 +5034,18 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return isBookmarkEditing
     }
 
+    private val reusableLocation = IntArray(2)
+
     // Add this method to handle cursor hovering
     private fun updateButtonHoverStates(screenX: Float, screenY: Float) {
         // Clear all states initially
         clearAllHoverStates()
 
         if (::chatView.isInitialized && chatView.visibility == View.VISIBLE) {
-            val uiLocation = IntArray(2)
-            leftEyeUIContainer.getLocationOnScreen(uiLocation)
+            leftEyeUIContainer.getLocationOnScreen(reusableLocation)
 
-            val translatedX = screenX - uiLocation[0]
-            val translatedY = screenY - uiLocation[1]
+            val translatedX = screenX - reusableLocation[0]
+            val translatedY = screenY - reusableLocation[1]
 
             val localX: Float
             val localY: Float
@@ -5393,17 +5400,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         hoveredWindowsOverviewItem?.isHovered = false
         hoveredWindowsOverviewItem = null
 
-        // Clear visual hover states
-        listOf(
-                        R.id.btnModeToggle,
-                        R.id.btnYouTube,
-                        R.id.btnBookmarks,
-                        R.id.btnZoomIn,
-                        R.id.btnZoomOut,
-                        R.id.btnMask,
-                        R.id.btnAnchor
-                )
-                .forEach { id -> leftToggleBar.findViewById<View>(id)?.isHovered = false }
+        // Clear visual hover states without allocation
+        leftToggleBar.findViewById<View>(R.id.btnModeToggle)?.isHovered = false
+        leftToggleBar.findViewById<View>(R.id.btnYouTube)?.isHovered = false
+        leftToggleBar.findViewById<View>(R.id.btnBookmarks)?.isHovered = false
+        leftToggleBar.findViewById<View>(R.id.btnZoomIn)?.isHovered = false
+        leftToggleBar.findViewById<View>(R.id.btnZoomOut)?.isHovered = false
+        leftToggleBar.findViewById<View>(R.id.btnMask)?.isHovered = false
+        leftToggleBar.findViewById<View>(R.id.btnAnchor)?.isHovered = false
 
         // Clear Windows button hover state (programmatically created)
         windowsButton?.isHovered = false
