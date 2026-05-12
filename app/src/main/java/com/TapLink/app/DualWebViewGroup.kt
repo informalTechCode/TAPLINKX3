@@ -5035,6 +5035,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     private val reusableLocation = IntArray(2)
+    private val reusableRect = android.graphics.Rect()
 
     // Add this method to handle cursor hovering
     private fun updateButtonHoverStates(screenX: Float, screenY: Float) {
@@ -5072,7 +5073,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Check bottom navigation bar buttons ONLY if nav bar is visible
         if (leftNavigationBar.visibility == View.VISIBLE) {
-            navButtons.forEach { (_, navButton) ->
+            for ((_, navButton) in navButtons) {
                 if (isOver(navButton.left, screenX, screenY)) {
                     navButton.isHovered = true
                     navButton.left.isHovered = true
@@ -5641,13 +5642,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (button == null || button.visibility != View.VISIBLE) return false
 
         // Use getGlobalVisibleRect for accurate screen bounds detection
-        val rect = android.graphics.Rect()
-        if (!button.getGlobalVisibleRect(rect)) return false
+        if (!button.getGlobalVisibleRect(reusableRect)) return false
 
-        return screenX >= rect.left &&
-                screenX <= rect.right &&
-                screenY >= rect.top &&
-                screenY <= rect.bottom
+        return screenX >= reusableRect.left &&
+                screenX <= reusableRect.right &&
+                screenY >= reusableRect.top &&
+                screenY <= reusableRect.bottom
     }
 
     fun handleNavigationClick(screenX: Float, screenY: Float) {
@@ -5662,18 +5662,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         if (leftToggleBar.visibility == View.VISIBLE) {
-            val toggleBarButtons =
-                    listOf(
-                            R.id.btnModeToggle,
-                            R.id.btnYouTube,
-                            R.id.btnBookmarks,
-                            R.id.btnZoomOut,
-                            R.id.btnZoomIn,
-                            R.id.btnMask,
-                            R.id.btnAnchor
-                    )
-
-            for (buttonId in toggleBarButtons) {
+            for ((buttonId, _, _) in toggleBarButtons) {
                 val button = leftToggleBar.findViewById<View>(buttonId)
                 if (isOver(button, screenX, screenY)) {
                     handleLeftMenuAction(buttonId)
@@ -5691,9 +5680,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         if (leftNavigationBar.visibility == View.VISIBLE) {
-            navButtons.entries.firstOrNull { isOver(it.value.left, screenX, screenY) }?.let {
-                    (key, button) ->
-                triggerNavigationAction(key, button)
+            for ((key, button) in navButtons) {
+                if (isOver(button.left, screenX, screenY)) {
+                    triggerNavigationAction(key, button)
+                    break
+                }
             }
         }
     }
@@ -6004,7 +5995,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         leftAnchorButton
                 )
 
-        orderedButtons.forEach { button ->
+        for (button in orderedButtons) {
             try {
                 button?.apply {
                     layoutParams =
@@ -6038,16 +6029,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             }
         }
 
-        mapOf(
-                        leftModeToggleButton to R.id.btnModeToggle,
-                        leftDashboardButton to R.id.btnYouTube,
-                        leftBookmarksButton to R.id.btnBookmarks,
-                        leftZoomOutButton to R.id.btnZoomOut,
-                        leftZoomInButton to R.id.btnZoomIn,
-                        leftMaskButton to R.id.btnMask,
-                        leftAnchorButton to R.id.btnAnchor
-                )
-                .forEach { (button, id) -> button?.setOnClickListener { handleLeftMenuAction(id) } }
+        leftModeToggleButton?.setOnClickListener { handleLeftMenuAction(R.id.btnModeToggle) }
+        leftDashboardButton?.setOnClickListener { handleLeftMenuAction(R.id.btnYouTube) }
+        leftBookmarksButton?.setOnClickListener { handleLeftMenuAction(R.id.btnBookmarks) }
+        leftZoomOutButton?.setOnClickListener { handleLeftMenuAction(R.id.btnZoomOut) }
+        leftZoomInButton?.setOnClickListener { handleLeftMenuAction(R.id.btnZoomIn) }
+        leftMaskButton?.setOnClickListener { handleLeftMenuAction(R.id.btnMask) }
+        leftAnchorButton?.setOnClickListener { handleLeftMenuAction(R.id.btnAnchor) }
 
         leftWindowsButton.setOnClickListener {
             showButtonClickFeedback(leftWindowsButton)
