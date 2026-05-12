@@ -10,3 +10,9 @@
 ## 2025-05-09 - Avoid Local Object Allocations in Hover/Touch Event Loops
 **Learning:** Allocating collections like `listOf(...)` or lambdas inside high-frequency touch event or hover loops (like `updateButtonHoverStates`) causes high memory churn. This forces the Android Garbage Collector to run frequently, leading to skipped frames and UI jank.
 **Action:** Extract constant data structures and object arrays (e.g., arrays of Resource IDs, lists of Triples/lambdas) out of the method into class-level or instance-level properties. Reuse them to completely eliminate allocations on the hot path.
+## 2026-05-12 - Pre-allocate measurement objects in UI loops
+**Learning:** Instantiating  or using  inside high-frequency touch loops (like checking ) causes heavy garbage collection churn. Destructuring lists inline is also an invalid construct for list of integers in Kotlin.
+**Action:** Extract UI calculation objects like  and simple data structures to class-level properties. Use standard  loops instead of closures or unsupported destructuring when iterating.
+## 2026-05-12 - Pre-allocate measurement objects in UI loops
+**Learning:** Instantiating Rect or using .forEach inside high-frequency touch loops causes heavy garbage collection churn.
+**Action:** Extract UI calculation objects like Rect to class-level properties. Use standard for loops instead of closures when iterating.
