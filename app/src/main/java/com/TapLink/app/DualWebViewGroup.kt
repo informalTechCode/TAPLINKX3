@@ -4188,8 +4188,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         val keyboardLocation = IntArray(2)
         keyboard.getLocationOnScreen(keyboardLocation)
-        val uiLocation = IntArray(2)
-        leftEyeUIContainer.getLocationOnScreen(uiLocation)
+        leftEyeUIContainer.getLocationOnScreen(reusableLocation)
         val localXContainer = adjustedX - keyboard.x
         val localYContainer = adjustedY - keyboard.y
 
@@ -4643,11 +4642,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun isPointInChat(screenX: Float, screenY: Float): Boolean {
         if (!isChatVisible()) return false
 
-        val uiLocation = IntArray(2)
-        leftEyeUIContainer.getLocationOnScreen(uiLocation)
+        leftEyeUIContainer.getLocationOnScreen(reusableLocation)
 
-        val translatedX = screenX - uiLocation[0]
-        val translatedY = screenY - uiLocation[1]
+        val translatedX = screenX - reusableLocation[0]
+        val translatedY = screenY - reusableLocation[1]
 
         val localX: Float
         val localY: Float
@@ -4672,11 +4670,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun dispatchChatTouchEvent(screenX: Float, screenY: Float) {
         if (!isChatVisible()) return
 
-        val uiLocation = IntArray(2)
-        leftEyeUIContainer.getLocationOnScreen(uiLocation)
+        leftEyeUIContainer.getLocationOnScreen(reusableLocation)
 
-        val translatedX = screenX - uiLocation[0]
-        val translatedY = screenY - uiLocation[1]
+        val translatedX = screenX - reusableLocation[0]
+        val translatedY = screenY - reusableLocation[1]
 
         val localX: Float
         val localY: Float
@@ -4702,11 +4699,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val kbView = customKeyboard ?: return false
         if (kbView.visibility != View.VISIBLE) return false
 
-        val uiLocation = IntArray(2)
-        leftEyeUIContainer.getLocationOnScreen(uiLocation)
+        leftEyeUIContainer.getLocationOnScreen(reusableLocation)
 
-        val translatedX = screenX - uiLocation[0]
-        val translatedY = screenY - uiLocation[1]
+        val translatedX = screenX - reusableLocation[0]
+        val translatedY = screenY - reusableLocation[1]
 
         val localX: Float
         val localY: Float
@@ -4743,11 +4739,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Translate screen coordinates to be relative to the UI container's screen origin
         // Note: keyboardContainer is a child of leftEyeUIContainer
-        val uiLocation = IntArray(2)
-        leftEyeUIContainer.getLocationOnScreen(uiLocation)
+        leftEyeUIContainer.getLocationOnScreen(reusableLocation)
 
-        val translatedX = screenX - uiLocation[0]
-        val translatedY = screenY - uiLocation[1]
+        val translatedX = screenX - reusableLocation[0]
+        val translatedY = screenY - reusableLocation[1]
 
         val localX: Float
         val localY: Float
@@ -5366,8 +5361,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (keyboardContainer.visibility == View.VISIBLE) {
             val kbView = customKeyboard
             if (kbView != null && kbView.visibility == View.VISIBLE) {
-                val uiLocation = IntArray(2)
-                leftEyeUIContainer.getLocationOnScreen(uiLocation)
+                leftEyeUIContainer.getLocationOnScreen(reusableLocation)
 
                 // Use screen coordinates for keyboard hit testing to avoid drift
                 // Pass raw screenX/screenY and let CustomKeyboardView check against actual screen

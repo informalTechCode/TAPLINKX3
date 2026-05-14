@@ -842,6 +842,8 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
         }
     }
 
+    private val reusableRect = android.graphics.Rect()
+
     private fun getKeyAtScreenPosition(screenX: Float, screenY: Float, uiScale: Float): Button? {
         val shouldLog = false
 
@@ -855,13 +857,12 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
             if (button.visibility != View.VISIBLE) continue
 
             // Get actual visible bounds in screen coordinates
-            val rect = android.graphics.Rect()
-            if (!button.getGlobalVisibleRect(rect)) continue
+            if (!button.getGlobalVisibleRect(reusableRect)) continue
 
-            val btnLeft = rect.left.toFloat()
-            val btnTop = rect.top.toFloat()
-            val btnRight = rect.right.toFloat()
-            val btnBottom = rect.bottom.toFloat()
+            val btnLeft = reusableRect.left.toFloat()
+            val btnTop = reusableRect.top.toFloat()
+            val btnRight = reusableRect.right.toFloat()
+            val btnBottom = reusableRect.bottom.toFloat()
 
             // --- PASS 1: Strict Hit (screen space) ---
             if (screenX >= btnLeft && screenX < btnRight && screenY >= btnTop && screenY < btnBottom
