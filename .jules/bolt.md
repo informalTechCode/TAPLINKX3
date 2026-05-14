@@ -16,3 +16,6 @@
 ## 2026-05-12 - Pre-allocate measurement objects in UI loops
 **Learning:** Instantiating Rect or using .forEach inside high-frequency touch loops causes heavy garbage collection churn.
 **Action:** Extract UI calculation objects like Rect to class-level properties. Use standard for loops instead of closures when iterating.
+## 2025-05-14 - Prevent Object Allocation in Touch Methods
+**Learning:** Frequent object allocation in high-frequency methods like `dispatchChatTouchEvent`, `isPointInChat`, `dispatchKeyboardTap`, `isPointInKeyboard`, `computeAnchoredKeyboardCoordinates`, etc. causes garbage collection and UI stutter. Using `IntArray(2)` and `Rect()` allocations creates excessive churn during cursor hover loops.
+**Action:** Preallocate single instance objects like `IntArray(2)` and `android.graphics.Rect()` as class members to reduce object allocation.
