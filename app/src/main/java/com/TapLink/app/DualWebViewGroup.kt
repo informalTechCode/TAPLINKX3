@@ -1165,8 +1165,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (currentTime - lastCursorUpdateTime >= CURSOR_UPDATE_INTERVAL) {
             if (isVisible) {
                 // Convert cursor from container-local to screen coordinates
-                val containerLocation = IntArray(2)
-                getLocationOnScreen(containerLocation)
+                getLocationOnScreen(reusableLocation)
 
                 // Account for UI scale and translation when calculating screen position
                 // Visual cursor is scaled around (320, 240) and then translated (only in
@@ -1177,8 +1176,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val visualX = 320f + (x - 320f) * uiScale + transX
                 val visualY = 240f + (y - 240f) * uiScale + transY
 
-                val screenX = visualX + containerLocation[0]
-                val screenY = visualY + containerLocation[1]
+                val screenX = visualX + reusableLocation[0]
+                val screenY = visualY + reusableLocation[1]
 
                 // Pass screen coordinates - buttons also use screen coordinates
                 updateButtonHoverStates(screenX, screenY)
@@ -1191,8 +1190,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private fun refreshHoverAtCurrentCursor() {
         if (!isAttachedToWindow) return
 
-        val containerLocation = IntArray(2)
-        getLocationOnScreen(containerLocation)
+        getLocationOnScreen(reusableLocation)
 
         val transX = if (isAnchored) 0f else leftEyeUIContainer.translationX
         val transY = if (isAnchored) 0f else leftEyeUIContainer.translationY
@@ -1200,8 +1198,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val visualX = 320f + (lastCursorX - 320f) * uiScale + transX
         val visualY = 240f + (lastCursorY - 240f) * uiScale + transY
 
-        val screenX = visualX + containerLocation[0]
-        val screenY = visualY + containerLocation[1]
+        val screenX = visualX + reusableLocation[0]
+        val screenY = visualY + reusableLocation[1]
 
         updateButtonHoverStates(screenX, screenY)
     }
@@ -5298,12 +5296,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Check scrollbars if visible (UI scale < 0.99f or forced visible)
         if (horizontalScrollBar.visibility == View.VISIBLE) {
-            val location = IntArray(2)
-            horizontalScrollBar.getLocationOnScreen(location)
-            if (screenX >= location[0] &&
-                            screenX <= location[0] + horizontalScrollBar.width &&
-                            screenY >= location[1] &&
-                            screenY <= location[1] + horizontalScrollBar.height
+            horizontalScrollBar.getLocationOnScreen(reusableLocation)
+            if (screenX >= reusableLocation[0] &&
+                            screenX <= reusableLocation[0] + horizontalScrollBar.width &&
+                            screenY >= reusableLocation[1] &&
+                            screenY <= reusableLocation[1] + horizontalScrollBar.height
             ) {
 
                 // Check children (arrows and track)
@@ -5328,12 +5325,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         if (verticalScrollBar.visibility == View.VISIBLE) {
-            val location = IntArray(2)
-            verticalScrollBar.getLocationOnScreen(location)
-            if (screenX >= location[0] &&
-                            screenX <= location[0] + verticalScrollBar.width &&
-                            screenY >= location[1] &&
-                            screenY <= location[1] + verticalScrollBar.height
+            verticalScrollBar.getLocationOnScreen(reusableLocation)
+            if (screenX >= reusableLocation[0] &&
+                            screenX <= reusableLocation[0] + verticalScrollBar.width &&
+                            screenY >= reusableLocation[1] &&
+                            screenY <= reusableLocation[1] + verticalScrollBar.height
             ) {
 
                 // Check children (arrows and track)
