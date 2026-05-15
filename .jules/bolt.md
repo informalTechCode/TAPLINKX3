@@ -19,3 +19,6 @@
 ## 2025-05-14 - Prevent Object Allocation in Touch Methods
 **Learning:** Frequent object allocation in high-frequency methods like `dispatchChatTouchEvent`, `isPointInChat`, `dispatchKeyboardTap`, `isPointInKeyboard`, `computeAnchoredKeyboardCoordinates`, etc. causes garbage collection and UI stutter. Using `IntArray(2)` and `Rect()` allocations creates excessive churn during cursor hover loops.
 **Action:** Preallocate single instance objects like `IntArray(2)` and `android.graphics.Rect()` as class members to reduce object allocation.
+## 2024-05-15 - Prevent Object Allocation in Touch Methods
+**Learning:** Frequent object allocation in high-frequency methods like `updateCursorPosition`, `refreshHoverAtCurrentCursor`, `updateHoverLocal` causes garbage collection and UI stutter. Using `IntArray(2)` allocations creates excessive churn during cursor hover loops.
+**Action:** Preallocate single instance objects like `IntArray(2)` as class members to reduce object allocation.

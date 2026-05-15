@@ -160,11 +160,12 @@ class ChatView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         return vx >= 0 && vx <= view.width && vy >= 0 && vy <= view.height
     }
 
+    private val reusableLocation = IntArray(2)
+
     fun updateHover(screenX: Float, screenY: Float): Boolean {
-        val loc = IntArray(2)
-        getLocationOnScreen(loc)
-        val localX = screenX - loc[0]
-        val localY = screenY - loc[1]
+        getLocationOnScreen(reusableLocation)
+        val localX = screenX - reusableLocation[0]
+        val localY = screenY - reusableLocation[1]
 
         return updateHoverLocal(localX, localY)
     }
