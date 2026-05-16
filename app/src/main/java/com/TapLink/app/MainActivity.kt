@@ -127,6 +127,7 @@ class MainActivity :
     private lateinit var mainContainer: FrameLayout
     private lateinit var gestureDetector: GestureDetector
     private lateinit var templeDoubleTapDetector: GestureDetector
+    private val reusableLocation = IntArray(2)
     private var isSimulatingTouchEvent = false
     private var isCursorVisible = true
     private var isMouseTapMode = false
@@ -907,10 +908,9 @@ class MainActivity :
                                     lastCursorX = (lastCursorX + dx).coerceIn(0f, maxW)
                                     lastCursorY = (lastCursorY + dy).coerceIn(0f, maxH)
 
-                                    val loc = IntArray(2)
-                                    webView.getLocationOnScreen(loc)
-                                    lastKnownWebViewX = lastCursorX - loc[0]
-                                    lastKnownWebViewY = lastCursorY - loc[1]
+                                    webView.getLocationOnScreen(reusableLocation)
+                                    lastKnownWebViewX = lastCursorX - reusableLocation[0]
+                                    lastKnownWebViewY = lastCursorY - reusableLocation[1]
                                     refreshCursor(true)
                                     DebugLog.d("GestureInput", "Trapped!")
                                     return true
@@ -980,9 +980,8 @@ class MainActivity :
 
                                         // Handle regular clicks when cursor is visible
                                         if (!cursorJustAppeared && !isSimulatingTouchEvent) {
-                                            val UILocation = IntArray(2)
                                             dualWebViewGroup.leftEyeUIContainer.getLocationOnScreen(
-                                                    UILocation
+                                                    reusableLocation
                                             )
 
                                             // Dispatch the touch event at the current cursor
@@ -2831,13 +2830,12 @@ class MainActivity :
         val scale = dualWebViewGroup.uiScale
         val interactionX: Float
         val interactionY: Float
-        val groupLocation = IntArray(2)
-        dualWebViewGroup.getLocationOnScreen(groupLocation)
+        dualWebViewGroup.getLocationOnScreen(reusableLocation)
 
         if (isAnchored) {
             // In anchored mode, interaction center is always screen center of the eye
-            interactionX = 320f + groupLocation[0]
-            interactionY = 240f + groupLocation[1]
+            interactionX = 320f + reusableLocation[0]
+            interactionY = 240f + reusableLocation[1]
         } else {
             // In non-anchored mode, interaction follows the visual cursor scaled around (320, 240)
             // and translated
@@ -2847,8 +2845,8 @@ class MainActivity :
             val visualX = 320f + (lastCursorX - 320f) * scale + transX
             val visualY = 240f + (lastCursorY - 240f) * scale + transY
 
-            interactionX = visualX + groupLocation[0]
-            interactionY = visualY + groupLocation[1]
+            interactionX = visualX + reusableLocation[0]
+            interactionY = visualY + reusableLocation[1]
         }
 
         // Intercept touches for mask overlay buttons when screen is masked
@@ -2866,12 +2864,11 @@ class MainActivity :
         // Intercept touches for dialogs
         if (dualWebViewGroup.isDialogAction(interactionX, interactionY)) {
             val dialogContainer = dualWebViewGroup.dialogContainer
-            val location = IntArray(2)
-            dialogContainer.getLocationOnScreen(location)
+            dialogContainer.getLocationOnScreen(reusableLocation)
 
             // Calculate local coordinates relative to dialog container
-            val localX = (interactionX - location[0]) / scale
-            val localY = (interactionY - location[1]) / scale
+            val localX = (interactionX - reusableLocation[0]) / scale
+            val localY = (interactionY - reusableLocation[1]) / scale
 
             // Dispatch DOWN
             val downEvent =
@@ -2903,14 +2900,13 @@ class MainActivity :
 
         // Check if settings menu is visible first
         if (dualWebViewGroup.isSettingsVisible()) {
-            val settingsMenuLocation = IntArray(2)
-            dualWebViewGroup.getSettingsMenuLocation(settingsMenuLocation)
+            dualWebViewGroup.getSettingsMenuLocation(reusableLocation)
             val settingsMenuSize = dualWebViewGroup.getSettingsMenuSize()
 
-            if (interactionX >= settingsMenuLocation[0] &&
-                            interactionX <= settingsMenuLocation[0] + settingsMenuSize.first &&
-                            interactionY >= settingsMenuLocation[1] &&
-                            interactionY <= settingsMenuLocation[1] + settingsMenuSize.second
+            if (interactionX >= reusableLocation[0] &&
+                            interactionX <= reusableLocation[0] + settingsMenuSize.first &&
+                            interactionY >= reusableLocation[1] &&
+                            interactionY <= reusableLocation[1] + settingsMenuSize.second
             ) {
 
                 // Dispatch touch event to settings menu using screen coordinates
@@ -2995,11 +2991,10 @@ class MainActivity :
         // WebView click path
         isSimulatingTouchEvent = true
         try {
-            val webViewLocation = IntArray(2)
-            webView.getLocationOnScreen(webViewLocation)
+            webView.getLocationOnScreen(reusableLocation)
 
-            val translatedX = interactionX - webViewLocation[0]
-            val translatedY = interactionY - webViewLocation[1]
+            val translatedX = interactionX - reusableLocation[0]
+            val translatedY = interactionY - reusableLocation[1]
 
             val adjustedX: Float
             val adjustedY: Float
@@ -3306,11 +3301,10 @@ class MainActivity :
     private fun maybeShowKeyboardForMouseClick(rawScreenX: Float, rawScreenY: Float) {
         if (!::webView.isInitialized || !::dualWebViewGroup.isInitialized) return
 
-        val webViewLocation = IntArray(2)
-        webView.getLocationOnScreen(webViewLocation)
+        webView.getLocationOnScreen(reusableLocation)
 
-        val translatedX = rawScreenX - webViewLocation[0]
-        val translatedY = rawScreenY - webViewLocation[1]
+        val translatedX = rawScreenX - reusableLocation[0]
+        val translatedY = rawScreenY - reusableLocation[1]
         if (translatedX < 0f ||
                         translatedY < 0f ||
                         translatedX > webView.width ||
@@ -3347,9 +3341,8 @@ class MainActivity :
             return (rawScreenX - fallbackEyeWidth) to rawScreenY
         }
 
-        val groupLocation = IntArray(2)
-        dualWebViewGroup.getLocationOnScreen(groupLocation)
-        val groupLeft = groupLocation[0].toFloat()
+        dualWebViewGroup.getLocationOnScreen(reusableLocation)
+        val groupLeft = reusableLocation[0].toFloat()
         val groupWidth = dualWebViewGroup.width.toFloat().takeIf { it > 0f } ?: (fallbackEyeWidth * 2f)
         val eyeWidth = (groupWidth / 2f).coerceAtLeast(1f)
 
@@ -3369,11 +3362,10 @@ class MainActivity :
     private fun mapScreenPointToWebViewTouch(screenX: Float, screenY: Float): Pair<Float, Float>? {
         if (!::webView.isInitialized || !::dualWebViewGroup.isInitialized) return null
         val scale = dualWebViewGroup.uiScale
-        val webViewLocation = IntArray(2)
-        webView.getLocationOnScreen(webViewLocation)
+        webView.getLocationOnScreen(reusableLocation)
 
-        val translatedX = screenX - webViewLocation[0]
-        val translatedY = screenY - webViewLocation[1]
+        val translatedX = screenX - reusableLocation[0]
+        val translatedY = screenY - reusableLocation[1]
         if (translatedX < 0f ||
                         translatedY < 0f ||
                         translatedX > webView.width ||
@@ -3438,13 +3430,12 @@ class MainActivity :
         if (dualWebViewGroup.isDialogAction(screenX, screenY)) return true
 
         if (dualWebViewGroup.isSettingsVisible()) {
-            val settingsMenuLocation = IntArray(2)
-            dualWebViewGroup.getSettingsMenuLocation(settingsMenuLocation)
+            dualWebViewGroup.getSettingsMenuLocation(reusableLocation)
             val settingsMenuSize = dualWebViewGroup.getSettingsMenuSize()
-            if (screenX >= settingsMenuLocation[0] &&
-                            screenX <= settingsMenuLocation[0] + settingsMenuSize.first &&
-                            screenY >= settingsMenuLocation[1] &&
-                            screenY <= settingsMenuLocation[1] + settingsMenuSize.second
+            if (screenX >= reusableLocation[0] &&
+                            screenX <= reusableLocation[0] + settingsMenuSize.first &&
+                            screenY >= reusableLocation[1] &&
+                            screenY <= reusableLocation[1] + settingsMenuSize.second
             ) {
                 return true
             }
@@ -3473,10 +3464,9 @@ class MainActivity :
         var screenY = ev.rawY
 
         if (!screenX.isFinite() || !screenY.isFinite()) {
-            val rootLoc = IntArray(2)
-            window.decorView.getLocationOnScreen(rootLoc)
-            screenX = ev.x + rootLoc[0]
-            screenY = ev.y + rootLoc[1]
+            window.decorView.getLocationOnScreen(reusableLocation)
+            screenX = ev.x + reusableLocation[0]
+            screenY = ev.y + reusableLocation[1]
         }
 
         return screenX to screenY
@@ -3487,11 +3477,10 @@ class MainActivity :
         if (isSimulatingTouchEvent) return
 
         val scale = dualWebViewGroup.uiScale
-        val webViewLocation = IntArray(2)
-        webView.getLocationOnScreen(webViewLocation)
+        webView.getLocationOnScreen(reusableLocation)
 
-        val translatedX = screenX - webViewLocation[0]
-        val translatedY = screenY - webViewLocation[1]
+        val translatedX = screenX - reusableLocation[0]
+        val translatedY = screenY - reusableLocation[1]
         if (translatedX < 0f ||
                         translatedY < 0f ||
                         translatedX > webView.width ||
@@ -3574,10 +3563,9 @@ class MainActivity :
 
         if (dualWebViewGroup.isDialogAction(rawScreenX, rawScreenY)) {
             val dialogContainer = dualWebViewGroup.dialogContainer
-            val location = IntArray(2)
-            dialogContainer.getLocationOnScreen(location)
-            val localX = (rawScreenX - location[0]) / scale
-            val localY = (rawScreenY - location[1]) / scale
+            dialogContainer.getLocationOnScreen(reusableLocation)
+            val localX = (rawScreenX - reusableLocation[0]) / scale
+            val localY = (rawScreenY - reusableLocation[1]) / scale
 
             val downEvent =
                     MotionEvent.obtain(
@@ -3606,13 +3594,12 @@ class MainActivity :
         }
 
         if (dualWebViewGroup.isSettingsVisible()) {
-            val settingsMenuLocation = IntArray(2)
-            dualWebViewGroup.getSettingsMenuLocation(settingsMenuLocation)
+            dualWebViewGroup.getSettingsMenuLocation(reusableLocation)
             val settingsMenuSize = dualWebViewGroup.getSettingsMenuSize()
-            if (rawScreenX >= settingsMenuLocation[0] &&
-                            rawScreenX <= settingsMenuLocation[0] + settingsMenuSize.first &&
-                            rawScreenY >= settingsMenuLocation[1] &&
-                            rawScreenY <= settingsMenuLocation[1] + settingsMenuSize.second
+            if (rawScreenX >= reusableLocation[0] &&
+                            rawScreenX <= reusableLocation[0] + settingsMenuSize.first &&
+                            rawScreenY >= reusableLocation[1] &&
+                            rawScreenY <= reusableLocation[1] + settingsMenuSize.second
             ) {
                 dualWebViewGroup.dispatchSettingsTouchEvent(rawScreenX, rawScreenY)
                 return true
@@ -5531,10 +5518,9 @@ class MainActivity :
                     lastKnownCursorX = lastCursorX
                     lastKnownCursorY = lastCursorY
 
-                    val webViewLocation = IntArray(2)
-                    webView.getLocationOnScreen(webViewLocation)
-                    lastKnownWebViewX = lastCursorX - webViewLocation[0]
-                    lastKnownWebViewY = lastCursorY - webViewLocation[1]
+                    webView.getLocationOnScreen(reusableLocation)
+                    lastKnownWebViewX = lastCursorX - reusableLocation[0]
+                    lastKnownWebViewY = lastCursorY - reusableLocation[1]
 
                     webView.evaluateJavascript("window.toggleTouchEvents(false);", null)
                 }
@@ -5786,10 +5772,9 @@ class MainActivity :
                 val checkY: Float
 
                 if (isAnchored) {
-                    val groupLocation = IntArray(2)
-                    dualWebViewGroup.getLocationOnScreen(groupLocation)
-                    checkX = 320f + groupLocation[0]
-                    checkY = 240f + groupLocation[1]
+                    dualWebViewGroup.getLocationOnScreen(reusableLocation)
+                    checkX = 320f + reusableLocation[0]
+                    checkY = 240f + reusableLocation[1]
                 } else {
                     // In non-anchored mode, check if the CURSOR (not the touch) is over the
                     // bookmarks
@@ -5801,11 +5786,10 @@ class MainActivity :
                     val visualX = 320f + (lastCursorX - 320f) * scale + transX
                     val visualY = 240f + (lastCursorY - 240f) * scale + transY
 
-                    val groupLocation = IntArray(2)
-                    dualWebViewGroup.getLocationOnScreen(groupLocation)
+                    dualWebViewGroup.getLocationOnScreen(reusableLocation)
 
-                    checkX = visualX + groupLocation[0]
-                    checkY = visualY + groupLocation[1]
+                    checkX = visualX + reusableLocation[0]
+                    checkY = visualY + reusableLocation[1]
                 }
 
                 if (dualWebViewGroup.isPointInBookmarks(checkX, checkY)) {
