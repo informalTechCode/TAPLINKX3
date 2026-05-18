@@ -2955,7 +2955,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun isFullScreenOverlayVisible() = fullScreenOverlayContainer.visibility == View.VISIBLE
 
     fun dispatchMaskOverlayTouch(screenX: Float, screenY: Float) {
-        val location = IntArray(2)
+        val location = reusableLocation
         maskOverlay.getLocationOnScreen(location)
         val scale = uiScale
 
@@ -2967,7 +2967,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // $scale")
 
         // Check unmask button hit (account for scale in button dimensions)
-        val unmaskLocation = IntArray(2)
+        val unmaskLocation = reusableLocation2
         btnMaskUnmask.getLocationOnScreen(unmaskLocation)
         val unmaskWidth = btnMaskUnmask.width * scale
         val unmaskHeight = btnMaskUnmask.height * scale
@@ -2983,7 +2983,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Check media control buttons
         if (maskMediaControlsContainer.visibility == View.VISIBLE) {
-            val controlsLocation = IntArray(2)
+            val controlsLocation = reusableLocation
             maskMediaControlsContainer.getLocationOnScreen(controlsLocation)
 
             // Iterate through children (the media buttons)
@@ -2991,7 +2991,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val button = maskMediaControlsContainer.getChildAt(i)
                 if (button.visibility != View.VISIBLE) continue
 
-                val btnLocation = IntArray(2)
+                val btnLocation = reusableLocation2
                 button.getLocationOnScreen(btnLocation)
                 val btnWidth = button.width * scale
                 val btnHeight = button.height * scale
@@ -3023,7 +3023,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
             // Check exit button
             if (::btnFsExit.isInitialized && btnFsExit.visibility == View.VISIBLE) {
-                val btnLocation = IntArray(2)
+                val btnLocation = reusableLocation2
                 btnFsExit.getLocationOnScreen(btnLocation)
                 val btnWidth = btnFsExit.width * scale
                 val btnHeight = btnFsExit.height * scale
@@ -3054,7 +3054,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     val button = fullScreenMediaControls.getChildAt(i)
                     if (button.visibility != View.VISIBLE) continue
 
-                    val btnLocation = IntArray(2)
+                    val btnLocation = reusableLocation2
                     button.getLocationOnScreen(btnLocation)
                     val btnWidth = button.width * scale
                     val btnHeight = button.height * scale
@@ -3434,7 +3434,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Pass the fixed screen cursor position to hover detection
         // In anchored mode, the cursor is visually fixed at the center (320, 240)
-        val containerLocation = IntArray(2)
+        val containerLocation = reusableLocation
         getLocationOnScreen(containerLocation)
         val screenX = 320f + containerLocation[0]
         val screenY = 240f + containerLocation[1]
@@ -4160,7 +4160,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     // 🔬 Measurement: Observe CPU usage profiling before and after; the UI thread will no longer be constantly saturated with draw passes when idle.
     private fun getCursorInContainerCoords(): Pair<Float, Float> {
         // Calculate the actual screen position of the cursor first
-        val containerLocation = IntArray(2)
+        val containerLocation = reusableLocation
         getLocationOnScreen(containerLocation)
 
         val transX = if (isAnchored) 0f else leftEyeUIContainer.translationX
@@ -4184,7 +4184,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         val (adjustedX, adjustedY) = getCursorInContainerCoords()
 
-        val keyboardLocation = IntArray(2)
+        val keyboardLocation = reusableLocation2
         keyboard.getLocationOnScreen(keyboardLocation)
         leftEyeUIContainer.getLocationOnScreen(reusableLocation)
         val localXContainer = adjustedX - keyboard.x
@@ -4200,7 +4200,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private fun computeAnchoredCoordinates(screenX: Float, screenY: Float): Pair<Float, Float> {
         val parent = leftEyeUIContainer.parent as View
-        val parentLocation = IntArray(2)
+        val parentLocation = reusableLocation2
         parent.getLocationOnScreen(parentLocation)
 
         val relativeX = screenX - parentLocation[0]
@@ -4609,7 +4609,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (!::leftBookmarksView.isInitialized || leftBookmarksView.visibility != View.VISIBLE)
                 return false
 
-        val bookmarksLocation = IntArray(2)
+        val bookmarksLocation = reusableLocation
         leftBookmarksView.getLocationOnScreen(bookmarksLocation)
 
         return screenX >= bookmarksLocation[0] &&
@@ -4732,7 +4732,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val kbView = customKeyboard ?: return
         if (kbView.visibility != View.VISIBLE) return
 
-        val groupLocation = IntArray(2)
+        val groupLocation = reusableLocation
         getLocationOnScreen(groupLocation)
 
         // Translate screen coordinates to be relative to the UI container's screen origin
@@ -5027,6 +5027,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return isBookmarkEditing
     }
 
+    private val reusableLocation2 = IntArray(2)
     private val reusableLocation = IntArray(2)
     private val reusableRect = android.graphics.Rect()
 
@@ -5588,7 +5589,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     fun isPointInRestoreButton(x: Float, y: Float): Boolean {
         if (btnShowNavBars.visibility != View.VISIBLE) return false
-        val loc = IntArray(2)
+        val loc = reusableLocation
         btnShowNavBars.getLocationOnScreen(loc)
         return x >= loc[0] &&
                 x <= loc[0] + (btnShowNavBars.width * uiScale) &&
@@ -5610,7 +5611,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val woc = windowsOverviewContainer ?: return false
         if (woc.visibility != View.VISIBLE) return false
 
-        val loc = IntArray(2)
+        val loc = reusableLocation
         woc.getLocationOnScreen(loc)
         return x >= loc[0] && x <= loc[0] + woc.width && y >= loc[1] && y <= loc[1] + woc.height
     }
@@ -6006,9 +6007,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     alpha = 1f
                     isEnabled = true
                     setOnTouchListener { v, _ ->
-                        val location = IntArray(2)
+                        val location = reusableLocation
                         v.getLocationOnScreen(location)
-                        val parentLocation = IntArray(2)
+                        val parentLocation = reusableLocation2
                         leftToggleBar.getLocationOnScreen(parentLocation)
 
                         false
@@ -7586,7 +7587,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     fun isDialogAction(x: Float, y: Float): Boolean {
         if (dialogContainer.visibility != View.VISIBLE || !dialogContainer.isClickable) return false
-        val loc = IntArray(2)
+        val loc = reusableLocation
         dialogContainer.getLocationOnScreen(loc)
         return x >= loc[0] &&
                 x <= loc[0] + (dialogContainer.width * uiScale) &&
