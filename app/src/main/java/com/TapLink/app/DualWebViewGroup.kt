@@ -3279,6 +3279,19 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
+    fun showChat() {
+        if (!::chatView.isInitialized) return
+        if (chatView.visibility != View.VISIBLE) {
+            chatView.visibility = View.VISIBLE
+            chatView.bringToFront()
+            maybePromptForGroqApiKey()
+            post {
+                requestLayout()
+                invalidate()
+            }
+        }
+    }
+
     private fun maybePromptForGroqApiKey() {
         if (dialogContainer.visibility == View.VISIBLE) return
         val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)

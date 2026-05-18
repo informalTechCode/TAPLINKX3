@@ -58,7 +58,30 @@ class PhoneGroqClient {
                                         .post(body)
                                         .build()
 
-                        client.newCall(request).execute().use { response ->
+                        var actualResponse = client.newCall(request).execute()
+                        if (!actualResponse.isSuccessful) {
+                            actualResponse.close()
+
+                            val fallbackBody =
+                                    JSONObject()
+                                            .put("model", "llama-3.3-70b-versatile")
+                                            .put("messages", messages)
+                                            .toString()
+                                            .toRequestBody(
+                                                    "application/json; charset=utf-8".toMediaType()
+                                            )
+
+                            val fallbackRequest =
+                                    Request.Builder()
+                                            .url("https://api.groq.com/openai/v1/chat/completions")
+                                            .addHeader("Authorization", "Bearer $trimmedKey")
+                                            .post(fallbackBody)
+                                            .build()
+
+                            actualResponse = client.newCall(fallbackRequest).execute()
+                        }
+
+                        actualResponse.use { response ->
                             val responseBody = response.body?.string()
                             if (!response.isSuccessful) {
                                 throw IllegalStateException(

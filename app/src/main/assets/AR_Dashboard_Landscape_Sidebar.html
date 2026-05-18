@@ -1399,6 +1399,7 @@
       if (injected) return Promise.resolve(injected);
       if (window.AndroidInterface && typeof window.AndroidInterface.requestCurrentLocation === 'function') {
         window.AndroidInterface.requestCurrentLocation();
+        return waitForInjectedPosition(15000); // Wait up to 15s for the Android app to inject the location via IPC
       }
       if (!navigator.geolocation) {
         return Promise.reject(new Error('Location unavailable'));

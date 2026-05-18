@@ -84,7 +84,7 @@ Do not include internal reasoning traces or chain-of-thought."""
                         messages.put(userMsg)
 
                         val jsonBody = JSONObject()
-                        jsonBody.put("model", "llama3-70b-8192")
+                        jsonBody.put("model", "llama-3.3-70b-versatile")
                         jsonBody.put("messages", messages)
 
                         val requestBody =

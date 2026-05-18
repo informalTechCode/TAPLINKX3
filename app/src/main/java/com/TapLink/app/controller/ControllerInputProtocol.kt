@@ -8,8 +8,10 @@ interface ControllerInputListener {
     fun onControllerGroqApiKey(key: String)
     fun onControllerAirMouseRay(x: Float, y: Float, select: Boolean)
     fun onControllerTrackpadDelta(dx: Float, dy: Float)
+    fun onControllerScroll(dy: Float)
     fun onControllerTap()
     fun onControllerTouch(action: ControllerTouchAction, x: Float, y: Float)
+    fun onControllerAiPrompt(prompt: String)
 }
 
 enum class ControllerMode {

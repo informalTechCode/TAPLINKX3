@@ -9,8 +9,10 @@ import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import androidx.core.app.ActivityCompat
-import com.TapLinkX3.app.DebugLog
 import java.io.BufferedReader
 import java.io.IOException
 import java.io.InputStreamReader
@@ -29,24 +31,31 @@ class ControllerBluetoothClient(
     private var socket: BluetoothSocket? = null
     private var outputStream: OutputStream? = null
     private var workerThread: Thread? = null
+    private val handler = Handler(Looper.getMainLooper())
 
     fun start(): Boolean {
         if (isRunning.get()) return true
 
-        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        val bluetoothManager =
+                context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
 
-        if (bluetoothAdapter == null || bluetoothAdapter?.isEnabled != true || !hasPermission()) {
-            DebugLog.w(TAG, "Bluetooth controller unavailable or missing permission")
+        if (bluetoothAdapter == null) {
+            Log.w(TAG, "Bluetooth adapter is null — not available on this device")
+            return false
+        }
+        if (bluetoothAdapter?.isEnabled != true) {
+            Log.w(TAG, "Bluetooth is disabled")
+            return false
+        }
+        if (!hasPermission()) {
+            Log.w(TAG, "Missing Bluetooth permission (BLUETOOTH_CONNECT)")
             return false
         }
 
         isRunning.set(true)
-        workerThread =
-                Thread({ connectLoop() }, "TapLinkControllerBluetooth").apply {
-                    isDaemon = true
-                    start()
-                }
+        Log.d(TAG, "Starting controller client connection thread")
+        connectToPhone()
         return true
     }
 
@@ -67,98 +76,259 @@ class ControllerBluetoothClient(
         send(JSONObject().put("type", "keyboard").put("visible", visible))
     }
 
+    fun sendGroqApiKey(key: String) {
+        send(JSONObject().put("type", "groqApiKey").put("key", key))
+    }
+
     @SuppressLint("MissingPermission")
-    private fun connectLoop() {
-        while (isRunning.get()) {
-            val phone = findPairedPhone()
-            if (phone == null) {
-                sleepBeforeRetry()
-                continue
-            }
+    private fun connectToPhone() {
+        workerThread =
+                Thread(
+                                {
+                                    while (isRunning.get() && !isConnected.get()) {
+                                        val phone = findPairedPhone()
 
-            try {
-                bluetoothAdapter?.cancelDiscovery()
-                val btSocket = phone.createRfcommSocketToServiceRecord(SPP_UUID)
-                socket = btSocket
-                btSocket.connect()
-                isConnected.set(true)
-                outputStream = btSocket.outputStream
-                listener.onControllerConnected(phone.name ?: "TapLink controller", phone.address)
-                readLoop(btSocket)
-            } catch (e: Exception) {
-                DebugLog.w(TAG, "Bluetooth controller connection failed: ${e.message}")
-            } finally {
-                isConnected.set(false)
-                try {
-                    socket?.close()
-                } catch (_: IOException) {}
-                socket = null
-                outputStream = null
-                listener.onControllerDisconnected()
-            }
+                                        if (phone == null) {
+                                            Log.d(
+                                                    TAG,
+                                                    "No paired phone found — retrying in ${RETRY_DELAY_MS}ms"
+                                            )
+                                            sleepBeforeRetry()
+                                            continue
+                                        }
 
-            sleepBeforeRetry()
-        }
+                                        val deviceName = phone.name ?: phone.address
+                                        Log.d(
+                                                TAG,
+                                                "Attempting connection to $deviceName [${phone.address}]"
+                                        )
+
+                                        try {
+                                            Log.d(TAG, "Creating RFCOMM socket...")
+                                            val btSocket =
+                                                    phone.createRfcommSocketToServiceRecord(
+                                                            SPP_UUID
+                                                    )
+                                            socket = btSocket
+                                            try {
+                                                bluetoothAdapter?.cancelDiscovery()
+                                            } catch (_: SecurityException) {}
+
+                                            Log.d(TAG, "Calling connect()...")
+                                            btSocket.connect()
+                                            Log.d(
+                                                    TAG,
+                                                    "connect() returned, isConnected=${btSocket.isConnected}"
+                                            )
+
+                                            if (btSocket.isConnected) {
+                                                isConnected.set(true)
+                                                outputStream = btSocket.outputStream
+                                                Log.d(
+                                                        TAG,
+                                                        "Successfully connected to controller phone!"
+                                                )
+
+                                                listener.onControllerConnected(
+                                                        deviceName,
+                                                        phone.address
+                                                )
+
+                                                // Read messages until disconnected
+                                                readLoop(btSocket)
+                                            } else {
+                                                Log.w(
+                                                        TAG,
+                                                        "connect() returned but socket.isConnected is false"
+                                                )
+                                            }
+                                        } catch (e: IOException) {
+                                            Log.e(TAG, "Connection failed: ${e.message}")
+                                            try {
+                                                socket?.close()
+                                            } catch (_: IOException) {}
+                                            socket = null
+                                            outputStream = null
+                                            sleepBeforeRetry()
+                                        } catch (e: SecurityException) {
+                                            Log.e(
+                                                    TAG,
+                                                    "Permission error during connection: ${e.message}"
+                                            )
+                                            break
+                                        }
+                                    }
+
+                                    isConnected.set(false)
+                                    outputStream = null
+                                    try {
+                                        socket?.close()
+                                    } catch (_: IOException) {}
+                                    socket = null
+
+                                    listener.onControllerDisconnected()
+                                    Log.d(TAG, "Disconnected from controller")
+
+                                    if (isRunning.get()) {
+                                        handler.postDelayed(
+                                                {
+                                                    if (isRunning.get() && !isConnected.get()) {
+                                                        Log.d(TAG, "Auto-reconnecting...")
+                                                        connectToPhone()
+                                                    }
+                                                },
+                                                RECONNECT_DELAY_MS
+                                        )
+                                    }
+                                },
+                                "TapLinkControllerBluetooth"
+                        )
+                        .apply {
+                            isDaemon = true
+                            start()
+                        }
     }
 
     @SuppressLint("MissingPermission")
     private fun findPairedPhone(): BluetoothDevice? {
         val pairedDevices = bluetoothAdapter?.bondedDevices ?: return null
-        return pairedDevices.firstOrNull { device ->
-            val name = device.name?.lowercase().orEmpty()
-            !name.contains("rayneo") &&
-                    !name.contains("glasses") &&
-                    !name.contains("watch") &&
-                    !name.contains("buds") &&
-                    !name.contains("headphone")
-        } ?: pairedDevices.firstOrNull()
+
+        for (device in pairedDevices) {
+            Log.d(TAG, "Found paired device: ${device.name} [${device.address}]")
+        }
+
+        val likelyPhone =
+                pairedDevices.firstOrNull { device ->
+                    val name = device.name?.lowercase().orEmpty()
+                    !name.contains("rayneo") &&
+                            !name.contains("glasses") &&
+                            !name.contains("watch") &&
+                            !name.contains("buds") &&
+                            !name.contains("headphone")
+                }
+
+        Log.d(TAG, "Selected device: ${likelyPhone?.name ?: "none found (will use first paired)"}")
+        return likelyPhone ?: pairedDevices.firstOrNull()
     }
 
     private fun readLoop(btSocket: BluetoothSocket) {
-        val reader = BufferedReader(InputStreamReader(btSocket.inputStream))
-        while (isRunning.get() && isConnected.get()) {
-            val line = reader.readLine() ?: break
-            handlePacket(line)
+        try {
+            val reader = BufferedReader(InputStreamReader(btSocket.inputStream), 8192)
+
+            while (isRunning.get() && isConnected.get()) {
+                val line = reader.readLine() ?: break
+
+                val typeStart = line.indexOf("\"type\":\"")
+                if (typeStart < 0) continue
+
+                val typeValueStart = typeStart + 8
+                val typeEnd = line.indexOf('"', typeValueStart)
+                if (typeEnd < 0) continue
+
+                val type = line.substring(typeValueStart, typeEnd)
+
+                when (type) {
+                    "trackpad" -> {
+                        val dx = extractFloat(line, PREFIX_DX) ?: continue
+                        val dy = extractFloat(line, PREFIX_DY) ?: continue
+
+                        handler.post { listener.onControllerTrackpadDelta(dx, dy) }
+                    }
+                    "airMouse" -> {
+                        val x = extractFloat(line, PREFIX_X) ?: continue
+                        val y = extractFloat(line, PREFIX_Y) ?: continue
+                        val select = line.contains("\"select\":true")
+
+                        handler.post {
+                            listener.onControllerAirMouseRay(
+                                    x.coerceIn(0f, 1f),
+                                    y.coerceIn(0f, 1f),
+                                    select
+                            )
+                        }
+                    }
+                    "scroll" -> {
+                        val dy = extractFloat(line, PREFIX_DY) ?: continue
+
+                        handler.post { listener.onControllerScroll(dy) }
+                    }
+                    "tap" -> {
+                        handler.post { listener.onControllerTap() }
+                    }
+                    else -> {
+                        val json =
+                                try {
+                                    JSONObject(line)
+                                } catch (_: Exception) {
+                                    continue
+                                }
+
+                        when (type) {
+                            "hello" -> {
+                                handler.post {
+                                    listener.onControllerConnected(
+                                            json.optString("name", "TapLink controller"),
+                                            btSocket.remoteDevice?.address ?: "bluetooth"
+                                    )
+                                }
+                            }
+                            "mode" -> {
+                                val parsedMode = parseMode(json.optString("mode")) ?: continue
+
+                                handler.post { listener.onControllerModeChanged(parsedMode) }
+                            }
+                            "key" -> {
+                                val key = json.optString("key")
+
+                                handler.post { listener.onControllerKey(key) }
+                            }
+                            "groqApiKey" -> {
+                                val key = json.optString("key")
+
+                                handler.post { listener.onControllerGroqApiKey(key) }
+                            }
+                            "aiPrompt" -> {
+                                val prompt = json.optString("prompt")
+
+                                handler.post { listener.onControllerAiPrompt(prompt) }
+                            }
+                            "touch" -> {
+                                val action = parseTouchAction(json.optString("action")) ?: continue
+                                val x = json.optDouble("x", 0.5).toFloat().coerceIn(0f, 1f)
+                                val y = json.optDouble("y", 0.5).toFloat().coerceIn(0f, 1f)
+
+                                handler.post { listener.onControllerTouch(action, x, y) }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: IOException) {
+            Log.d(TAG, "Controller read loop ended: ${e.message}")
         }
     }
 
-    private fun handlePacket(payload: String) {
-        val json =
-                try {
-                    JSONObject(payload)
-                } catch (e: Exception) {
-                    DebugLog.w(TAG, "Ignoring malformed controller packet: ${e.message}")
-                    return
-                }
-
-        when (json.optString("type")) {
-            "hello" -> listener.onControllerConnected(json.optString("name", "TapLink controller"), "bluetooth")
-            "mode" -> parseMode(json.optString("mode"))?.let(listener::onControllerModeChanged)
-            "key" -> listener.onControllerKey(json.optString("key"))
-            "groqApiKey" -> listener.onControllerGroqApiKey(json.optString("key"))
-            "airMouse" -> {
-                listener.onControllerAirMouseRay(
-                        json.optDouble("x", 0.5).toFloat().coerceIn(0f, 1f),
-                        json.optDouble("y", 0.5).toFloat().coerceIn(0f, 1f),
-                        json.optBoolean("select", false)
-                )
-            }
-            "trackpad" -> {
-                listener.onControllerTrackpadDelta(
-                        json.optDouble("dx", 0.0).toFloat(),
-                        json.optDouble("dy", 0.0).toFloat()
-                )
-            }
-            "tap" -> listener.onControllerTap()
-            "touch" -> {
-                val action = parseTouchAction(json.optString("action")) ?: return
-                listener.onControllerTouch(
-                        action,
-                        json.optDouble("x", 0.5).toFloat().coerceIn(0f, 1f),
-                        json.optDouble("y", 0.5).toFloat().coerceIn(0f, 1f)
-                )
-            }
+    /** Fast float extraction using pre-allocated prefixes to avoid GC churn. */
+    private fun extractFloat(json: String, prefix: String): Float? {
+        val idx = json.indexOf(prefix)
+        if (idx < 0) return null
+        val start = idx + prefix.length
+        var end = start
+        while (end < json.length &&
+                (json[end].isDigit() ||
+                        json[end] == '.' ||
+                        json[end] == '-' ||
+                        json[end] == 'E' ||
+                        json[end] == 'e')) {
+            end++
         }
+        return if (end > start) {
+            try {
+                json.substring(start, end).toFloat()
+            } catch (e: NumberFormatException) {
+                null
+            }
+        } else null
     }
 
     private fun send(json: JSONObject) {
@@ -170,7 +340,7 @@ class ControllerBluetoothClient(
                 output.flush()
             }
         } catch (e: IOException) {
-            DebugLog.w(TAG, "Failed to send controller message: ${e.message}")
+            Log.w(TAG, "Failed to send controller message: ${e.message}")
             isConnected.set(false)
         }
     }
@@ -193,8 +363,10 @@ class ControllerBluetoothClient(
 
     private fun hasPermission(): Boolean =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
-                        PackageManager.PERMISSION_GRANTED
+                ActivityCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
             } else {
                 ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH) ==
                         PackageManager.PERMISSION_GRANTED
@@ -209,6 +381,13 @@ class ControllerBluetoothClient(
     companion object {
         private const val TAG = "ControllerBluetooth"
         private const val RETRY_DELAY_MS = 2500L
-        val SPP_UUID: UUID = UUID.fromString("a7160f20-63cb-4f61-b6bb-c9e8a35f0f5a")
+        private const val RECONNECT_DELAY_MS = 2000L
+        val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+        // Pre-allocate strings for the high-speed parser to avoid Garbage Collection frame drops
+        private const val PREFIX_DX = "\"dx\":"
+        private const val PREFIX_DY = "\"dy\":"
+        private const val PREFIX_X = "\"x\":"
+        private const val PREFIX_Y = "\"y\":"
     }
 }

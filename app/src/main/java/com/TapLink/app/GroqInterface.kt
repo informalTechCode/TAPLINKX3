@@ -58,6 +58,52 @@ class GroqInterface(private val context: Context, private val webView: WebView) 
 
     @JavascriptInterface
     @Keep
+    fun getActivePageText(): String {
+        return try {
+            val result = AtomicReference<String?>()
+            val latch = CountDownLatch(1)
+            mainHandler.post {
+                val activity = findMainActivity(context)
+                val webView = activity?.getActiveWebViewOrNull()
+                if (webView == null) {
+                    result.set("")
+                    latch.countDown()
+                    return@post
+                }
+                webView.evaluateJavascript("(function() { return document.body.innerText; })();") { value ->
+                    val cleanText = if (value != null && value != "null") {
+                        val stripped = if (value.startsWith("\"") && value.endsWith("\"") && value.length >= 2) {
+                            value.substring(1, value.length - 1)
+                                    .replace("\\n", "\n")
+                                    .replace("\\t", "\t")
+                                    .replace("\\\"", "\"")
+                                    .replace("\\\\", "\\")
+                        } else {
+                            value
+                        }
+                        stripped.trim()
+                    } else {
+                        ""
+                    }
+                    result.set(cleanText)
+                    latch.countDown()
+                }
+            }
+            latch.await(2000, TimeUnit.MILLISECONDS)
+            val fullText = result.get().orEmpty()
+            if (fullText.length > 4000) {
+                fullText.substring(0, 4000) + "\n[Content truncated due to length...]"
+            } else {
+                fullText
+            }
+        } catch (e: Exception) {
+            DebugLog.e("GroqInterface", "Failed to read active page text", e)
+            ""
+        }
+    }
+
+    @JavascriptInterface
+    @Keep
     fun chatWithGroq(message: String, historyJson: String, ttsEnabled: Boolean) {
         DebugLog.d("GroqInterface", "chatWithGroq called: $message, ttsEnabled: $ttsEnabled")
         Thread {
@@ -99,9 +145,9 @@ Constraints:
 - Do not include internal reasoning traces or chain-of-thought.
 
 When relevant:
-- For TapLink X3 browser questions, use this reference: https://github.com/informalTechCode/TAPLINKX3/blob/main/docs/USER_GUIDE.md
-- For device context, RayNeo X3 Pro: https://www.rayneo.com/products/x3-pro-ai-display-glasses
-- TapLink X3 creator: Informal Tech (YouTube: https://youtube.com/@informal-tech)
+- For TapLink X3 browser questions, use this reference: github.com/informalTechCode/TAPLINKX3/blob/main/docs/USER_GUIDE.md
+- For device context, RayNeo X3 Pro: rayneo.com/products/x3-pro-ai-display-glasses
+- TapLink X3 creator: Informal Tech (YouTube: youtube.com/@informal-tech)
 
 Style:
 - Be accurate, neutral, and practical.
@@ -150,9 +196,35 @@ Style:
                                         .post(requestBody)
                                         .build()
 
-                        client.newCall(request).execute().use { response ->
+                        var actualResponse = client.newCall(request).execute()
+                        if (!actualResponse.isSuccessful) {
+                            DebugLog.w("GroqInterface", "groq/compound failed with code ${actualResponse.code}. Retrying with llama-3.3-70b-versatile...")
+                            actualResponse.close()
+
+                            val fallbackJsonBody = JSONObject()
+                            fallbackJsonBody.put("model", "llama-3.3-70b-versatile")
+                            fallbackJsonBody.put("messages", messages)
+
+                            val fallbackRequestBody =
+                                    fallbackJsonBody.toString()
+                                            .toRequestBody(
+                                                    "application/json; charset=utf-8".toMediaType()
+                                            )
+
+                            val fallbackRequest =
+                                    Request.Builder()
+                                            .url("https://api.groq.com/openai/v1/chat/completions")
+                                            .addHeader("Authorization", "Bearer $apiKey")
+                                            .post(fallbackRequestBody)
+                                            .build()
+
+                            actualResponse = client.newCall(fallbackRequest).execute()
+                        }
+
+                        actualResponse.use { response ->
                             if (!response.isSuccessful) {
-                                postResponse("Error: ${response.code} - ${response.message}")
+                                val errBody = response.body?.string()
+                                postResponse("Error: ${response.code} - ${errBody ?: response.message}")
                                 return@use
                             }
 

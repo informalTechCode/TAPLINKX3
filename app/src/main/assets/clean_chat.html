@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-    <title>TapLink AI</title>
+    <title>TapLink X3 AI</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
@@ -301,7 +301,7 @@
 
     <div id="chatHistory" data-taplink-scroll="true">
         <!-- Messages will appear here -->
-        <div class="msg ai">Hello! I am TapLink AI, your personal assistant. How can I help you today?</div>
+        <div class="msg ai">Hello! I am TapLink X3 AI, your personal assistant. How can I help you today?</div>
     </div>
 
     <div class="chat-toolbar">
@@ -515,7 +515,18 @@
                 appendMessage('error', 'Error: No active webpage to summarize.');
                 return;
             }
-            const text = `Summarize this webpage's contents:\n${url}`;
+            let pageText = '';
+            try {
+                if (window.GroqBridge && window.GroqBridge.getActivePageText) {
+                    pageText = (window.GroqBridge.getActivePageText() || '').trim();
+                }
+            } catch (err) {
+                console.warn('getActivePageText failed', err);
+            }
+            let text = `Summarize this webpage:\nURL: ${url}`;
+            if (pageText) {
+                text += `\n\nContent:\n${pageText}`;
+            }
             sendMessage(text);
         }
 

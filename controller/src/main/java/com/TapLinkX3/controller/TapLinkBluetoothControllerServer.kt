@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
+import android.util.Log
 import java.io.IOException
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -22,6 +23,7 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
     var onConnectionChanged: ((Boolean) -> Unit)? = null
     var onStatusChanged: ((String) -> Unit)? = null
     var onKeyboardVisibilityRequested: ((Boolean) -> Unit)? = null
+    var onGroqApiKeyReceived: ((String) -> Unit)? = null
 
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var serverSocket: BluetoothServerSocket? = null
@@ -75,17 +77,19 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
     }
 
     fun sendAirMouseRay(x: Float, y: Float, select: Boolean) {
-        send(
-                JSONObject()
-                        .put("type", "airMouse")
-                        .put("x", x.coerceIn(0f, 1f).toDouble())
-                        .put("y", y.coerceIn(0f, 1f).toDouble())
-                        .put("select", select)
-        )
+        // Use raw string for high-frequency sensor events to avoid JSONObject overhead
+        val cx = x.coerceIn(0f, 1f)
+        val cy = y.coerceIn(0f, 1f)
+        sendRaw("""{"type":"airMouse","x":$cx,"y":$cy,"select":$select}""")
     }
 
     fun sendTrackpadDelta(dx: Float, dy: Float) {
-        send(JSONObject().put("type", "trackpad").put("dx", dx.toDouble()).put("dy", dy.toDouble()))
+        // Use raw string for high-frequency touch events to avoid JSONObject overhead
+        sendRaw("""{"type":"trackpad","dx":$dx,"dy":$dy}""")
+    }
+
+    fun sendScroll(dy: Float) {
+        sendRaw("""{"type":"scroll","dy":$dy}""")
     }
 
     fun sendTap() {
@@ -98,6 +102,10 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
 
     fun sendGroqApiKey(key: String) {
         send(JSONObject().put("type", "groqApiKey").put("key", key))
+    }
+
+    fun sendAiPrompt(prompt: String) {
+        send(JSONObject().put("type", "aiPrompt").put("prompt", prompt))
     }
 
     fun sendTouch(action: TouchAction, x: Float, y: Float) {
@@ -113,6 +121,7 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
     @SuppressLint("MissingPermission")
     private fun startServer(): Boolean {
         return try {
+            Log.d(TAG, "Creating RFCOMM server socket with UUID=$SPP_UUID")
             serverSocket = bluetoothAdapter?.listenUsingRfcommWithServiceRecord(SERVICE_NAME, SPP_UUID)
             isRunning.set(true)
             acceptThread =
@@ -120,9 +129,11 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
                         isDaemon = true
                         start()
                     }
+            Log.d(TAG, "Server started, waiting for glasses to connect...")
             onStatusChanged?.invoke("Waiting for TapLink glasses...")
             true
         } catch (e: Exception) {
+            Log.e(TAG, "Failed to start Bluetooth server: ${e.message}")
             onStatusChanged?.invoke("Failed to start Bluetooth server: ${e.message}")
             false
         }
@@ -131,32 +142,39 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
     private fun acceptConnections() {
         while (isRunning.get()) {
             try {
+                Log.d(TAG, "Waiting for accept()...")
                 val socket = serverSocket?.accept() ?: continue
+                Log.d(TAG, "Connection accepted from ${socket.remoteDevice?.name ?: "unknown"}")
                 clientSocket?.close()
                 clientSocket = socket
                 outputStream = socket.outputStream
                 isConnected.set(true)
                 onConnectionChanged?.invoke(true)
                 onStatusChanged?.invoke("Connected to TapLink glasses")
-                send(JSONObject().put("type", "hello").put("name", "TapLink Controller"))
-                readMessages(socket)
+                Thread { readMessages(socket) }.start()
             } catch (e: Exception) {
+                Log.e(TAG, "Accept failed: ${e.message}")
                 if (isRunning.get()) {
                     onStatusChanged?.invoke("Bluetooth connection closed.")
                 }
-            } finally {
-                isConnected.set(false)
-                outputStream = null
-                try {
-                    clientSocket?.close()
-                } catch (_: IOException) {}
-                clientSocket = null
-                onConnectionChanged?.invoke(false)
             }
         }
     }
 
+    private fun handleDisconnect(socket: BluetoothSocket) {
+        if (clientSocket != socket) return
+        isConnected.set(false)
+        outputStream = null
+        try {
+            clientSocket?.close()
+        } catch (_: IOException) {}
+        clientSocket = null
+        onConnectionChanged?.invoke(false)
+    }
+
     private fun readMessages(socket: BluetoothSocket) {
+        Log.d(TAG, "Sending hello message to glasses")
+        send(JSONObject().put("type", "hello").put("name", "TapLink Controller"))
         val reader = BufferedReader(InputStreamReader(socket.inputStream))
         while (isRunning.get() && socket.isConnected) {
             val line = reader.readLine() ?: break
@@ -168,20 +186,37 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
                     }
             if (json.optString("type") == "keyboard") {
                 onKeyboardVisibilityRequested?.invoke(json.optBoolean("visible", false))
+            } else if (json.optString("type") == "groqApiKey") {
+                onGroqApiKeyReceived?.invoke(json.optString("key"))
             }
         }
+        Log.d(TAG, "readMessages loop ended — glasses disconnected")
+        handleDisconnect(socket)
     }
 
-    private fun send(json: JSONObject) {
-        val output = outputStream ?: return
-        if (!isConnected.get()) return
-        try {
-            synchronized(output) {
-                output.write((json.toString() + "\n").toByteArray(Charsets.UTF_8))
-                output.flush()
+    private val writeExecutor: java.util.concurrent.ExecutorService =
+            java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
+                Thread(runnable, "TapLinkControllerWriter").apply { isDaemon = true }
             }
-        } catch (_: IOException) {
-            isConnected.set(false)
+
+    private fun send(json: JSONObject) {
+        sendRaw(json.toString())
+    }
+
+    /** Fast path for high-frequency messages — skips JSONObject allocation. */
+    private fun sendRaw(data: String) {
+        if (!isConnected.get()) return
+        writeExecutor.execute {
+            val output = outputStream ?: return@execute
+            try {
+                synchronized(output) {
+                    output.write(data.toByteArray(Charsets.UTF_8))
+                    output.write('\n'.code)
+                    output.flush()
+                }
+            } catch (_: IOException) {
+                isConnected.set(false)
+            }
         }
     }
 
@@ -207,7 +242,8 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "TapLinkBTServer"
         private const val SERVICE_NAME = "TapLinkController"
-        val SPP_UUID: UUID = UUID.fromString("a7160f20-63cb-4f61-b6bb-c9e8a35f0f5a")
+        val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     }
 }

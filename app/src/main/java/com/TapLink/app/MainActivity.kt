@@ -65,6 +65,9 @@ import com.TapLinkX3.app.controller.ControllerBluetoothClient
 import com.TapLinkX3.app.controller.ControllerInputListener
 import com.TapLinkX3.app.controller.ControllerMode
 import com.TapLinkX3.app.controller.ControllerTouchAction
+import com.TapLinkX3.app.controller.GlassesCursorController
+import com.ffalconxr.mercury.ipc.Launcher
+import com.ffalconxr.mercury.ipc.helpers.GPSIPCHelper
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.ResultPoint
 import com.journeyapps.barcodescanner.BarcodeCallback
@@ -73,8 +76,6 @@ import com.journeyapps.barcodescanner.CameraPreview
 import com.journeyapps.barcodescanner.DecoratedBarcodeView
 import com.journeyapps.barcodescanner.DefaultDecoderFactory
 import com.journeyapps.barcodescanner.camera.CameraConfigurationUtils
-import com.ffalconxr.mercury.ipc.Launcher
-import com.ffalconxr.mercury.ipc.helpers.GPSIPCHelper
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
@@ -159,6 +160,7 @@ class MainActivity :
     private var mouseSwipeLastY = 0f
     private var mouseSwipeDownTime = 0L
     private lateinit var controllerBluetoothClient: ControllerBluetoothClient
+    private lateinit var cursorController: GlassesCursorController
     private var remoteControllerMode = ControllerMode.AIR_MOUSE
     private var controllerTouchDownTime = 0L
     private var isControllerConnected = false
@@ -683,7 +685,8 @@ class MainActivity :
                                 // When ANCHORED or SCROLL MODE: both X and Y move the page
                                 // vertically
                                 if ((!isCursorVisible &&
-                                                (isAnchored || dualWebViewGroup.isInScrollMode())) &&
+                                                (isAnchored ||
+                                                        dualWebViewGroup.isInScrollMode())) &&
                                                 !isKeyboardVisible &&
                                                 !dualWebViewGroup.isScreenMasked()
                                 ) {
@@ -1043,7 +1046,8 @@ class MainActivity :
 
                                     // Calculate dynamic delay to ensure we wait until AFTER the
                                     // triple tap window closes
-                                    val timeSinceFirstTap = SystemClock.uptimeMillis() - firstTapTime
+                                    val timeSinceFirstTap =
+                                            SystemClock.uptimeMillis() - firstTapTime
                                     val remainingTripleTapWindow =
                                             TRIPLE_TAP_DURATION - timeSinceFirstTap
 
@@ -1084,7 +1088,6 @@ class MainActivity :
                             }
 
                             private fun performDoubleTapBackNavigation() {
-                                val isScreenMasked = dualWebViewGroup.isScreenMasked()
                                 val hasHistory = webView.canGoBack()
 
                                 if (!hasHistory) {
@@ -1175,6 +1178,25 @@ class MainActivity :
         mainContainer.apply {
             addView(cursorLeftView)
             addView(cursorRightView)
+        }
+
+        // 1. Get screen dimensions
+        val displayMetrics = resources.displayMetrics
+        val screenWidth = displayMetrics.widthPixels
+        val screenHeight = displayMetrics.heightPixels
+
+        cursorController =
+                GlassesCursorController(screenWidth = screenWidth, screenHeight = screenHeight)
+        cursorController.setOnUpdateListener { x, y, select ->
+            lastCursorX = x
+            lastCursorY = y
+            lastKnownCursorX = x
+            lastKnownCursorY = y
+            refreshCursor(true)
+            if (select) {
+                dispatchTouchEventAtCursor()
+            }
+            dualWebViewGroup.noteUserInteraction()
         }
 
         webView = dualWebViewGroup.getWebView()
@@ -1373,11 +1395,7 @@ class MainActivity :
         if (isAnchored) {
             rotationSensor?.let { sensor ->
                 sensorEventListener = createSensorEventListener()
-                sensorManager.registerListener(
-                        sensorEventListener,
-                        sensor,
-                        ANCHOR_SENSOR_DELAY
-                )
+                sensorManager.registerListener(sensorEventListener, sensor, ANCHOR_SENSOR_DELAY)
             }
             dualWebViewGroup.startAnchoring()
         } else {
@@ -1428,6 +1446,9 @@ class MainActivity :
     }
 
     override fun onPause() {
+        if (::cursorController.isInitialized) {
+            cursorController.stop()
+        }
         super.onPause()
 
         if (nativeQrScannerView != null || isQrScanInProgress) {
@@ -1461,6 +1482,9 @@ class MainActivity :
     }
 
     override fun onResume() {
+        if (::cursorController.isInitialized) {
+            cursorController.start()
+        }
         super.onResume()
 
         // Register notification receiver
@@ -1478,11 +1502,7 @@ class MainActivity :
         if (isAnchored) {
             // Re-register the sensor listener
             rotationSensor?.let { sensor ->
-                sensorManager.registerListener(
-                        sensorEventListener,
-                        sensor,
-                        ANCHOR_SENSOR_DELAY
-                )
+                sensorManager.registerListener(sensorEventListener, sensor, ANCHOR_SENSOR_DELAY)
             }
         }
 
@@ -1562,6 +1582,11 @@ class MainActivity :
         return dualWebViewGroup.getWebView().url
     }
 
+    fun getActiveWebViewOrNull(): WebView? {
+        if (!::dualWebViewGroup.isInitialized) return null
+        return dualWebViewGroup.getWebView()
+    }
+
     override fun onBookmarkSelected(url: String) {
         val formattedUrl =
                 when {
@@ -1575,6 +1600,18 @@ class MainActivity :
     }
 
     private fun handleMaskToggle() {
+        if (dualWebViewGroup.isScreenMasked()) {
+            dualWebViewGroup.unmaskScreen()
+            isCursorVisible = preMaskCursorState
+            lastCursorX = preMaskCursorX
+            lastCursorY = preMaskCursorY
+            if (isCursorVisible) {
+                cursorLeftView.visibility = View.VISIBLE
+                cursorRightView.visibility = View.VISIBLE
+                refreshCursor(true)
+            }
+            return
+        }
         // Close settings menu if open to prevent state desync
         dualWebViewGroup.hideSettings()
 
@@ -1701,7 +1738,12 @@ class MainActivity :
         return out
     }
 
-    private fun quaternionSlerp(qa: FloatArray, qb: FloatArray, t: Float, out: FloatArray): FloatArray {
+    private fun quaternionSlerp(
+            qa: FloatArray,
+            qb: FloatArray,
+            t: Float,
+            out: FloatArray
+    ): FloatArray {
         // q = [w, x, y, z]
         val w1 = qa[0]
         val x1 = qa[1]
@@ -3347,7 +3389,8 @@ class MainActivity :
         val adjustedY: Float
 
         if (isAnchored) {
-            val rotationRad = Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
+            val rotationRad =
+                    Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
             val cos = Math.cos(rotationRad).toFloat()
             val sin = Math.sin(rotationRad).toFloat()
             val unscaledX = translatedX * cos + translatedY * sin
@@ -3362,7 +3405,10 @@ class MainActivity :
         checkAndShowKeyboard(adjustedX.toInt(), adjustedY.toInt())
     }
 
-    private fun mapMousePointForVirtualTap(rawScreenX: Float, rawScreenY: Float): Pair<Float, Float> {
+    private fun mapMousePointForVirtualTap(
+            rawScreenX: Float,
+            rawScreenY: Float
+    ): Pair<Float, Float> {
         if (!isMouseTapMode) return rawScreenX to rawScreenY
         val fallbackEyeWidth = 640f
         if (!::dualWebViewGroup.isInitialized) {
@@ -3373,7 +3419,8 @@ class MainActivity :
         val groupLocation = IntArray(2)
         dualWebViewGroup.getLocationOnScreen(groupLocation)
         val groupLeft = groupLocation[0].toFloat()
-        val groupWidth = dualWebViewGroup.width.toFloat().takeIf { it > 0f } ?: (fallbackEyeWidth * 2f)
+        val groupWidth =
+                dualWebViewGroup.width.toFloat().takeIf { it > 0f } ?: (fallbackEyeWidth * 2f)
         val eyeWidth = (groupWidth / 2f).coerceAtLeast(1f)
 
         val xWithinGroup = rawScreenX - groupLeft
@@ -3408,7 +3455,8 @@ class MainActivity :
         val adjustedX: Float
         val adjustedY: Float
         if (isAnchored) {
-            val rotationRad = Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
+            val rotationRad =
+                    Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
             val cos = Math.cos(rotationRad).toFloat()
             val sin = Math.sin(rotationRad).toFloat()
             val unscaledX = translatedX * cos + translatedY * sin
@@ -3435,15 +3483,9 @@ class MainActivity :
         val adjustedY = mapped.second
 
         val event =
-                MotionEvent.obtain(
-                                downTime,
-                                eventTime,
-                                action,
-                                adjustedX,
-                                adjustedY,
-                                0
-                        )
-                        .apply { source = InputDevice.SOURCE_TOUCHSCREEN }
+                MotionEvent.obtain(downTime, eventTime, action, adjustedX, adjustedY, 0).apply {
+                    source = InputDevice.SOURCE_TOUCHSCREEN
+                }
         isSimulatingTouchEvent = true
         try {
             webView.dispatchTouchEvent(event)
@@ -3474,17 +3516,21 @@ class MainActivity :
         }
 
         if (dualWebViewGroup.isPointInRestoreButton(screenX, screenY)) return true
-        if (dualWebViewGroup.isChatVisible() && dualWebViewGroup.isPointInChat(screenX, screenY)) return true
+        if (dualWebViewGroup.isChatVisible() && dualWebViewGroup.isPointInChat(screenX, screenY))
+                return true
         if (isKeyboardVisible && dualWebViewGroup.isPointInKeyboard(screenX, screenY)) return true
         if (dualWebViewGroup.isWindowsOverviewVisible() &&
                         dualWebViewGroup.isPointInWindowsOverview(screenX, screenY)
         ) {
             return true
         }
-        if (dualWebViewGroup.isToggleBarVisible() && dualWebViewGroup.isPointInToggleBar(screenX, screenY)) {
+        if (dualWebViewGroup.isToggleBarVisible() &&
+                        dualWebViewGroup.isPointInToggleBar(screenX, screenY)
+        ) {
             return true
         }
-        if (dualWebViewGroup.isNavBarVisible() && dualWebViewGroup.isPointInNavBar(screenX, screenY)) {
+        if (dualWebViewGroup.isNavBarVisible() && dualWebViewGroup.isPointInNavBar(screenX, screenY)
+        ) {
             return true
         }
         if (dualWebViewGroup.isPointInScrollbar(screenX, screenY)) return true
@@ -3526,7 +3572,8 @@ class MainActivity :
         val adjustedX: Float
         val adjustedY: Float
         if (isAnchored) {
-            val rotationRad = Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
+            val rotationRad =
+                    Math.toRadians(dualWebViewGroup.leftEyeUIContainer.rotation.toDouble())
             val cos = Math.cos(rotationRad).toFloat()
             val sin = Math.sin(rotationRad).toFloat()
             val unscaledX = translatedX * cos + translatedY * sin
@@ -3647,7 +3694,9 @@ class MainActivity :
             return true
         }
 
-        if (dualWebViewGroup.isChatVisible() && dualWebViewGroup.isPointInChat(rawScreenX, rawScreenY)) {
+        if (dualWebViewGroup.isChatVisible() &&
+                        dualWebViewGroup.isPointInChat(rawScreenX, rawScreenY)
+        ) {
             dualWebViewGroup.dispatchChatTouchEvent(rawScreenX, rawScreenY)
             return true
         }
@@ -3878,14 +3927,16 @@ class MainActivity :
                 .getBoolean("forceDarkWebEnabled", true)
     }
 
-    private fun applyForceDarkModeSetting(targetWebView: WebView, enabled: Boolean = isForceDarkWebEnabled()) {
+    private fun applyForceDarkModeSetting(
+            targetWebView: WebView,
+            enabled: Boolean = isForceDarkWebEnabled()
+    ) {
         targetWebView.settings.apply {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 isAlgorithmicDarkeningAllowed = enabled
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 @Suppress("DEPRECATION")
-                forceDark =
-                        if (enabled) WebSettings.FORCE_DARK_ON else WebSettings.FORCE_DARK_OFF
+                forceDark = if (enabled) WebSettings.FORCE_DARK_ON else WebSettings.FORCE_DARK_OFF
             }
         }
     }
@@ -3999,8 +4050,7 @@ class MainActivity :
                 // JavaScript and Content Settings
                 javaScriptEnabled = true
                 domStorageEnabled = true
-                @Suppress("DEPRECATION")
-                databaseEnabled = true
+                @Suppress("DEPRECATION") databaseEnabled = true
                 javaScriptCanOpenWindowsAutomatically = false
                 mediaPlaybackRequiresUserGesture = false
 
@@ -4010,8 +4060,7 @@ class MainActivity :
                 setGeolocationEnabled(true)
 
                 // Display and Layout Settings
-                @Suppress("DEPRECATION")
-                defaultZoom = WebSettings.ZoomDensity.MEDIUM
+                @Suppress("DEPRECATION") defaultZoom = WebSettings.ZoomDensity.MEDIUM
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
@@ -4038,7 +4087,8 @@ class MainActivity :
                     defaultUserAgent = WebSettings.getDefaultUserAgent(this@MainActivity)
                 }
 
-                // Use the actual runtime WebView UA to avoid auth providers flagging spoofed clients.
+                // Use the actual runtime WebView UA to avoid auth providers flagging spoofed
+                // clients.
                 customUserAgent = defaultUserAgent
                 if (!customUserAgent.isNullOrBlank()) {
                     settings.userAgentString = customUserAgent
@@ -4169,7 +4219,10 @@ class MainActivity :
                         }
 
                         @Deprecated("Deprecated in Java")
-                        override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                        override fun shouldOverrideUrlLoading(
+                                view: WebView?,
+                                url: String?
+                        ): Boolean {
                             val uri = url?.let { Uri.parse(it) }
                             return shouldOverrideWebViewNavigation(view, uri)
                         }
@@ -4393,7 +4446,8 @@ class MainActivity :
                                 resultMsg: android.os.Message?
                         ): Boolean {
                             // Must provide a pristine WebView here; Chromium will navigate it.
-                            val newWebView = dualWebViewGroup.createNewWindow(loadDefaultUrl = false)
+                            val newWebView =
+                                    dualWebViewGroup.createNewWindow(loadDefaultUrl = false)
                             val transport = resultMsg?.obj as? WebView.WebViewTransport
                             if (transport != null) {
                                 transport.webView = newWebView
@@ -4424,8 +4478,7 @@ class MainActivity :
             mediaPlaybackRequiresUserGesture = false
             domStorageEnabled = true
             javaScriptEnabled = true
-            @Suppress("DEPRECATION")
-            databaseEnabled = true
+            @Suppress("DEPRECATION") databaseEnabled = true
             useWideViewPort = true
             loadWithOverviewMode = true
             setSupportMultipleWindows(true)
@@ -4680,7 +4733,10 @@ class MainActivity :
     private fun startNativeQrScanner(sourceWebView: WebView) {
         if (isQrScanInProgress) {
             val quotedMessage = JSONObject.quote("A scan is already in progress.")
-            sourceWebView.evaluateJavascript("window.__taplinkOnNativeQrError($quotedMessage);", null)
+            sourceWebView.evaluateJavascript(
+                    "window.__taplinkOnNativeQrError($quotedMessage);",
+                    null
+            )
             return
         }
 
@@ -5165,11 +5221,7 @@ class MainActivity :
             sensorEventListener = createSensorEventListener()
             rotationSensor?.let { sensor ->
                 // Use a stable sensor cadence; UI work is still coalesced to vsync.
-                sensorManager.registerListener(
-                        sensorEventListener,
-                        sensor,
-                        ANCHOR_SENSOR_DELAY
-                )
+                sensorManager.registerListener(sensorEventListener, sensor, ANCHOR_SENSOR_DELAY)
             }
             dualWebViewGroup.startAnchoring()
         } else {
@@ -5319,8 +5371,10 @@ class MainActivity :
                 smoothedRollDeg =
                         smoothedRollDeg * (1f - velocitySmoothing) + rollDeg * velocitySmoothing
 
-                // Coalesce sensor events to one pending vsync update. The newest smoothed values are
-                // stored above, so dropping intermediate callbacks reduces main-thread frame pressure.
+                // Coalesce sensor events to one pending vsync update. The newest smoothed values
+                // are
+                // stored above, so dropping intermediate callbacks reduces main-thread frame
+                // pressure.
                 if (!pendingAnchorFrame) {
                     pendingAnchorFrame = true
                     Choreographer.getInstance().postFrameCallback {
@@ -5350,7 +5404,6 @@ class MainActivity :
                                     smoothedRollDeg
                             )
                         }
-
                     }
                 }
             }
@@ -5842,8 +5895,7 @@ class MainActivity :
 
                         val gestureDownTime =
                                 if (gestureAction == MotionEvent.ACTION_DOWN) ev.eventTime
-                                else if (mouseGestureActive) mouseGestureDownTime
-                                else ev.downTime
+                                else if (mouseGestureActive) mouseGestureDownTime else ev.downTime
 
                         val gestureEvent =
                                 MotionEvent.obtain(
@@ -5884,8 +5936,7 @@ class MainActivity :
                         dualWebViewGroup.updatePointerHover(mappedX, mappedY)
                     }
                 }
-                MotionEvent.ACTION_HOVER_EXIT,
-                MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_HOVER_EXIT, MotionEvent.ACTION_CANCEL -> {
                     if (::dualWebViewGroup.isInitialized) {
                         dualWebViewGroup.clearPointerHover()
                     }
@@ -5948,8 +5999,7 @@ class MainActivity :
 
             if (!useMouseForGestures) {
                 when (ev.actionMasked) {
-                    MotionEvent.ACTION_DOWN,
-                    MotionEvent.ACTION_BUTTON_PRESS -> {
+                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_BUTTON_PRESS -> {
                         mouseSwipeTracking = true
                         mouseSwipeStartedOnCustomUi = isPointOnCustomUi(mappedX, mappedY)
                         mouseSwipeDownDispatched = false
@@ -5959,8 +6009,7 @@ class MainActivity :
                         mouseSwipeLastY = mappedY
                         mouseSwipeDownTime = ev.eventTime
                     }
-                    MotionEvent.ACTION_MOVE,
-                    MotionEvent.ACTION_HOVER_MOVE -> {
+                    MotionEvent.ACTION_MOVE, MotionEvent.ACTION_HOVER_MOVE -> {
                         if (mouseSwipeTracking && !mouseSwipeStartedOnCustomUi) {
                             val dragSlop = 10f
                             val movedEnough =
@@ -6040,8 +6089,7 @@ class MainActivity :
                 MotionEvent.ACTION_MOVE -> {
                     dualWebViewGroup.updatePointerHover(mappedX, mappedY)
                 }
-                MotionEvent.ACTION_HOVER_EXIT,
-                MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_HOVER_EXIT, MotionEvent.ACTION_CANCEL -> {
                     dualWebViewGroup.clearPointerHover()
                 }
             }
@@ -6150,6 +6198,15 @@ class MainActivity :
             if (::dualWebViewGroup.isInitialized) {
                 dualWebViewGroup.showToast("Controller connected: $name", 1500L)
             }
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+            // Sync Groq API Key to controller if we have one saved
+            val savedGroqKey =
+                    getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+                            .getString(Constants.KEY_GROQ_API_KEY, "")
+            if (!savedGroqKey.isNullOrBlank()) {
+                controllerBluetoothClient.sendGroqApiKey(savedGroqKey)
+            }
         }
     }
 
@@ -6157,6 +6214,7 @@ class MainActivity :
         runOnUiThread {
             isControllerConnected = false
             isPhoneKeyboardOpen = false
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 
@@ -6164,10 +6222,8 @@ class MainActivity :
         runOnUiThread {
             remoteControllerMode = mode
             ensureMouseTapModeDisabled()
-            if (mode == ControllerMode.AIR_MOUSE) {
-                refreshCursor(true)
-            } else {
-                refreshCursor(true)
+            if (::cursorController.isInitialized) {
+                cursorController.onControllerModeChanged(mode)
             }
             dualWebViewGroup.showToast(
                     if (mode == ControllerMode.AIR_MOUSE) "Controller air mouse"
@@ -6186,6 +6242,7 @@ class MainActivity :
                     isPhoneKeyboardOpen = false
                     controllerBluetoothClient.sendKeyboardVisibility(false)
                 }
+                "toggleMask" -> handleMaskToggle()
                 else -> if (key.isNotEmpty()) onKeyPressed(key)
             }
         }
@@ -6211,41 +6268,118 @@ class MainActivity :
         }
     }
 
-    override fun onControllerAirMouseRay(x: Float, y: Float, select: Boolean) {
+    override fun onControllerAiPrompt(prompt: String) {
         runOnUiThread {
             if (!::dualWebViewGroup.isInitialized) return@runOnUiThread
-            remoteControllerMode = ControllerMode.AIR_MOUSE
-            ensureMouseTapModeDisabled()
-            lastCursorX = x * CONTROLLER_CURSOR_WIDTH
-            lastCursorY = y * CONTROLLER_CURSOR_HEIGHT
-            lastKnownCursorX = lastCursorX
-            lastKnownCursorY = lastCursorY
-            refreshCursor(true)
-            if (select) {
-                dispatchTouchEventAtCursor()
-            }
-            dualWebViewGroup.noteUserInteraction()
+            dualWebViewGroup.showChat()
+            dualWebViewGroup.postDelayed(
+                    {
+                        dualWebViewGroup.sendTextToChatInput(prompt)
+                        dualWebViewGroup.postDelayed(
+                                { dualWebViewGroup.sendEnterToChatInput() },
+                                100
+                        )
+                    },
+                    100
+            )
+        }
+    }
+
+    override fun onControllerAirMouseRay(x: Float, y: Float, select: Boolean) {
+        if (::cursorController.isInitialized) {
+            cursorController.onControllerAirMouseRay(x, y, select)
+        }
+    }
+
+    override fun onControllerScroll(dy: Float) {
+        runOnUiThread {
+            if (!::dualWebViewGroup.isInitialized || !::webView.isInitialized) return@runOnUiThread
+
+            // Dispatch mouse wheel scroll event
+            val pointerCoords = MotionEvent.PointerCoords()
+            pointerCoords.x = lastCursorX
+            pointerCoords.y = lastCursorY
+            // Map positive dy (drag down) to scroll down (content moves up). AXIS_VSCROLL negative
+            // means scroll down.
+            pointerCoords.setAxisValue(MotionEvent.AXIS_VSCROLL, -dy / 30f)
+
+            val pointerProperties = MotionEvent.PointerProperties()
+            pointerProperties.id = 0
+            pointerProperties.toolType = MotionEvent.TOOL_TYPE_MOUSE
+
+            val event =
+                    MotionEvent.obtain(
+                            SystemClock.uptimeMillis(),
+                            SystemClock.uptimeMillis(),
+                            MotionEvent.ACTION_SCROLL,
+                            1,
+                            arrayOf(pointerProperties),
+                            arrayOf(pointerCoords),
+                            0,
+                            0,
+                            1.0f,
+                            1.0f,
+                            0,
+                            0,
+                            InputDevice.SOURCE_MOUSE,
+                            0
+                    )
+
+            webView.dispatchGenericMotionEvent(event)
+            event.recycle()
         }
     }
 
     override fun onControllerTrackpadDelta(dx: Float, dy: Float) {
-        runOnUiThread {
-            if (!::dualWebViewGroup.isInitialized) return@runOnUiThread
-            remoteControllerMode = ControllerMode.TRACKPAD
-            ensureMouseTapModeDisabled()
-            lastCursorX = (lastCursorX + dx).coerceIn(0f, CONTROLLER_CURSOR_WIDTH)
-            lastCursorY = (lastCursorY + dy).coerceIn(0f, CONTROLLER_CURSOR_HEIGHT)
-            lastKnownCursorX = lastCursorX
-            lastKnownCursorY = lastCursorY
-            refreshCursor(true)
-            dualWebViewGroup.noteUserInteraction()
+        if (::cursorController.isInitialized) {
+            cursorController.onControllerTrackpadDelta(dx, dy)
         }
     }
 
     override fun onControllerTap() {
         runOnUiThread {
             if (!::dualWebViewGroup.isInitialized) return@runOnUiThread
-            dispatchTouchEventAtCursor()
+
+            // Route through the same triple-tap detection as the temple touchpad
+            val currentTime = SystemClock.uptimeMillis()
+            if (currentTime - lastTapTime > TAP_INTERVAL) {
+                tapCount = 1
+                firstTapTime = currentTime
+                isTripleTapInProgress = false
+            } else {
+                tapCount++
+            }
+            lastTapTime = currentTime
+
+            // Check for triple tap
+            if (tapCount == 3 && (currentTime - firstTapTime) <= TRIPLE_TAP_DURATION) {
+                DebugLog.d("TripleTapDebug", "Triple tap from controller detected!")
+                isTripleTapInProgress = true
+                tapCount = 0
+
+                if (isAnchored) {
+                    shouldResetInitialQuaternion = true
+                    dualWebViewGroup.updateLeftEyePosition(0f, 0f, 0f)
+                    dualWebViewGroup.showToast("Screen Re-centered")
+                } else {
+                    if (dualWebViewGroup.isInScrollMode()) {
+                        toggleCursorVisibility(forceShow = true)
+                        dualWebViewGroup.showToast("Cursor mode activated")
+                    } else {
+                        toggleCursorVisibility(forceHide = true)
+                        dualWebViewGroup.showToast(
+                                "Scroll mode activated, triple tap again to leave"
+                        )
+                    }
+                }
+                return@runOnUiThread
+            }
+
+            // Not a triple tap — dispatch click at cursor
+            if (!isTripleTapInProgress) {
+                dispatchTouchEventAtCursor()
+            }
+            isTripleTapInProgress = false
             dualWebViewGroup.noteUserInteraction()
         }
     }
@@ -6265,9 +6399,7 @@ class MainActivity :
             if (motionAction == MotionEvent.ACTION_DOWN) {
                 controllerTouchDownTime = eventTime
             }
-            val downTime =
-                    if (controllerTouchDownTime > 0L) controllerTouchDownTime
-                    else eventTime
+            val downTime = if (controllerTouchDownTime > 0L) controllerTouchDownTime else eventTime
 
             if (motionAction == MotionEvent.ACTION_UP &&
                             handleMouseClickForCustomUi(screenPoint.first, screenPoint.second)
@@ -6286,7 +6418,8 @@ class MainActivity :
             if (motionAction == MotionEvent.ACTION_UP) {
                 maybeShowKeyboardForMouseClick(screenPoint.first, screenPoint.second)
             }
-            if (motionAction == MotionEvent.ACTION_UP || motionAction == MotionEvent.ACTION_CANCEL) {
+            if (motionAction == MotionEvent.ACTION_UP || motionAction == MotionEvent.ACTION_CANCEL
+            ) {
                 controllerTouchDownTime = 0L
             }
             dualWebViewGroup.noteUserInteraction()
@@ -6348,14 +6481,13 @@ class MainActivity :
         pendingActiveStateSave?.let { handler.removeCallbacks(it) }
         pendingActiveStateWebView = targetView
         pendingActiveStateReason = reason
-        pendingActiveStateSave =
-                Runnable {
-                    val viewToSave = pendingActiveStateWebView
-                    val saveReason = pendingActiveStateReason
-                    pendingActiveStateSave = null
-                    pendingActiveStateWebView = null
-                    persistActiveWebViewStateNow(saveReason, viewToSave)
-                }
+        pendingActiveStateSave = Runnable {
+            val viewToSave = pendingActiveStateWebView
+            val saveReason = pendingActiveStateReason
+            pendingActiveStateSave = null
+            pendingActiveStateWebView = null
+            persistActiveWebViewStateNow(saveReason, viewToSave)
+        }
         handler.postDelayed(pendingActiveStateSave!!, delayMs)
     }
 
@@ -6486,8 +6618,7 @@ class MainActivity :
         fun openUrl(url: String) {
             activity.runOnUiThread {
                 val formattedUrl = activity.formatUrl(url)
-                val requiresDesktopBrowser =
-                        activity.isDesktopBrowserRequiredSite(formattedUrl)
+                val requiresDesktopBrowser = activity.isDesktopBrowserRequiredSite(formattedUrl)
                 if (requiresDesktopBrowser) {
                     activity.dualWebViewGroup.prepareDesktopBrowsingMode(webView)
                 }

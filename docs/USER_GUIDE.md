@@ -31,9 +31,12 @@ Buttons top-to-bottom:
 When Scroll Mode is active, a small transparent **Show** button appears in the bottom-right corner. Tap it to restore the bars.
 
 ## Touch Gestures
-- **Single Tap**: Click links, buttons, and focus input fields.
+- **Single Tap**: Click links, buttons, and focus input fields (temple touchpad or controller).
 - **Double Tap**: Navigation "Back" (same as the Back button).
-- **Triple Tap** (Anchored Mode only): Re-center the display in front of your current view.
+- **Triple Tap (Anchored Mode)**: Re-center the display in front of your current view.
+- **Triple Tap (Non-Anchored)**: Toggle Scroll Mode on/off.
+
+> All tap gestures work from both the temple touchpad and the TapLink Controller trackpad.
 
 ## Mouse Mode (Mudra)
 - **Auto-enter**: Any input event from a device name containing `Mudra` switches TapLink into mouse tap mode automatically.
@@ -176,8 +179,46 @@ When Scroll Mode is active, a small transparent **Show** button appears in the b
 
 ### Groq API Key
 1. Tap **Enter Groq API Key** in Settings.
-2. Paste your key (using `scrcpy` makes this easier).
+2. Paste your key (using `scrcpy` or the TapLink Controller phone app).
 3. Confirm to enable TapLink AI and voice features.
+4. When the controller connects, the API key syncs automatically in both directions.
+
+## TapLink Controller (Phone Companion App)
+
+The `controller` module builds a standalone Android phone app that connects to the glasses over Bluetooth RFCOMM.
+
+### Setup
+1. **Pair** your phone and the RayNeo X3 glasses via Bluetooth settings.
+2. **Install** the controller APK on your phone (`./gradlew :controller:assembleDebug`).
+3. **Launch** the controller app. It starts the Bluetooth server automatically.
+4. **Launch** TapLink X3 on the glasses. The glasses client connects to the phone within a few seconds.
+5. The status bar shows **"Connected to TapLink glasses"** when linked.
+
+### Controls
+
+| Control | Behavior |
+| --- | --- |
+| **Trackpad (swipe)** | Moves the cursor on the glasses. Swiping does not click. |
+| **Trackpad (stationary tap)** | Clicks at the current cursor position. |
+| **Air Mouse** | Tilting the phone aims the cursor via gyroscope. |
+| **Recenter** | Resets the air mouse baseline (only visible in Air Mouse mode). |
+| **Scroll Bar (drag)** | Dragging up or down on the vertical scroll bar (right side of the trackpad) scrolls the active web page on the glasses. |
+| **Toggle Screen** | Blanks/unblanks the glasses display (same as the eye icon). |
+| **Keyboard** | When the glasses request keyboard input, a text field and Enter/Close buttons appear. |
+| **Groq API Key** | Enter your API key on either device; it syncs on connect. |
+| **TapLink AI** | Type a prompt on the phone and tap Ask to automatically open the AI chat window on the glasses, send the prompt, and display the answer there. |
+
+### Trackpad Gestures
+- **Single tap**: Click at cursor.
+- **Triple tap**: Toggle Scroll Mode (non-anchored) or re-center (anchored).
+- **Swipe**: Move cursor only — never triggers a click.
+- **Vertical Scroll Bar**: Drag up/down on the dedicated scroll strip to scroll web content smoothly.
+
+### Air Mouse Mode
+1. Select **Air Mouse** in the mode selector.
+2. The **Recenter** button appears next to the mode selector.
+3. Tilt the phone to aim. Tap the trackpad area to click.
+4. Tap **Recenter** to re-zero the aim direction.
 
 ## Voice Control and AI
 - **Speech-to-Text**: Tap the **Mic** key on the on-screen keyboard to dictate into the active field.

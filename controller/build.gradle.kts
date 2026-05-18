@@ -19,10 +19,10 @@ android {
 
     buildTypes {
         debug {
-            resValue("string", "app_name", "TapLink Controller Dev")
+            resValue("string", "app_name", "TapLink X3 Controller Dev")
         }
         release {
-            resValue("string", "app_name", "TapLink Controller")
+            resValue("string", "app_name", "TapLink X3 Controller")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
