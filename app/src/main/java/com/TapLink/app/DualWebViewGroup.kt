@@ -24,6 +24,7 @@ import android.text.method.ScrollingMovementMethod
 import android.util.AttributeSet
 import android.util.Base64
 import android.util.Log
+import android.view.Choreographer
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -45,8 +46,10 @@ import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import org.json.JSONObject
+import java.util.WeakHashMap
 
 @SuppressLint("ClickableViewAccessibility")
 class DualWebViewGroup
@@ -155,10 +158,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private var velocityTracker: android.view.VelocityTracker? = null
     private val refreshHandler = Handler(Looper.getMainLooper())
+    private var pendingWindowsStateSave: Runnable? = null
+    private val windowsStateSaveDelayMs = 750L
+    private var lastWindowsStateSaveMs = 0L
+    private val forcedWindowsStateSaveMinIntervalMs = 1000L
     private var refreshInterval = 16L // ~60fps for smooth mirroring
     private val maskedRefreshIntervalMs = 100L // ~10fps while the screen is masked
     private var lastCaptureTime = 0L
+    private var captureInFlight = false
+    private var rightEyeSurfaceReady = false
     private var lastScrollBarCheckTime = 0L
+    private var lastRefreshRateCheckTime = 0L
     private val scrollBarVisibilityThrottleMs = 50L
     private val MIN_CAPTURE_INTERVAL = 16L // Cap at ~60fps
     private var lastCursorUpdateTime = 0L
@@ -248,6 +258,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     @Volatile private var isRefreshing = false
     private val refreshLock = Any()
+    private var refreshFrameScheduled = false
 
     private var isDesktopMode = false
     private var currentWebZoom = 1.0f
@@ -272,6 +283,25 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var isHoveringZoomOut = false
     private var isHoveringWindowsToggle = false
     private var windowsButton: FontIconView? = null
+    private data class ToggleHoverTarget(
+            val id: Int,
+            val view: View,
+            val setHoverFlag: () -> Unit
+    )
+    private val toggleHoverTargets: List<ToggleHoverTarget> by lazy {
+        toggleBarButtons.mapNotNull { (id, _, setHoverFlag) ->
+            leftToggleBar.findViewById<View>(id)?.let { ToggleHoverTarget(id, it, setHoverFlag) }
+        }
+    }
+    private var cachedSettingsMenu: View? = null
+    private var cachedSettingsHoverTargets: List<View> = emptyList()
+    private var lastHoverScreenX = Float.NaN
+    private var lastHoverScreenY = Float.NaN
+    private val activeHoverViews = linkedSetOf<View>()
+    private val activeActivatedViews = linkedSetOf<View>()
+    private var chatHoverActive = false
+    private var keyboardHoverActive = false
+    private val observerInjectionTimes = WeakHashMap<WebView, Pair<String?, Long>>()
 
     private var fullScreenTapDetector: GestureDetector =
             GestureDetector(
@@ -1180,7 +1210,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val screenY = visualY + reusableLocation[1]
 
                 // Pass screen coordinates - buttons also use screen coordinates
-                updateButtonHoverStates(screenX, screenY)
+                updateButtonHoverStates(screenX, screenY, force = isAnchored)
             }
             listener?.onCursorPositionChanged(x, y, isVisible)
             lastCursorUpdateTime = currentTime
@@ -1201,16 +1231,18 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val screenX = visualX + reusableLocation[0]
         val screenY = visualY + reusableLocation[1]
 
-        updateButtonHoverStates(screenX, screenY)
+        updateButtonHoverStates(screenX, screenY, force = true)
     }
 
     fun updatePointerHover(screenX: Float, screenY: Float) {
         if (!isAttachedToWindow) return
-        updateButtonHoverStates(screenX, screenY)
+        updateButtonHoverStates(screenX, screenY, force = false)
     }
 
     fun clearPointerHover() {
         if (!isAttachedToWindow) return
+        lastHoverScreenX = Float.NaN
+        lastHoverScreenY = Float.NaN
         clearAllHoverStates()
     }
 
@@ -1615,10 +1647,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     // Here we'll use a simple draw to canvas if possible
                     val w = webView.width
                     val h = webView.height
-                    if (w > 0 && h > 0) {
-                        val bmp = Bitmap.createBitmap(w / 4, h / 4, Bitmap.Config.RGB_565)
+                    if (currentWin.thumbnail == null && w > 0 && h > 0) {
+                        val scale = 1f / 6f
+                        val bmp =
+                                Bitmap.createBitmap(
+                                        maxOf(1, (w * scale).roundToInt()),
+                                        maxOf(1, (h * scale).roundToInt()),
+                                        Bitmap.Config.RGB_565
+                                )
                         val c = Canvas(bmp)
-                        c.scale(0.25f, 0.25f)
+                        c.scale(scale, scale)
                         webView.draw(c)
                         currentWin.thumbnail = bmp
                     }
@@ -1757,9 +1795,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     val state = Bundle()
                     win.webView.saveState(state)
                     val parcel = Parcel.obtain()
-                    state.writeToParcel(parcel, 0)
-                    val bytes = parcel.marshall()
-                    parcel.recycle()
+                    val bytes =
+                            try {
+                                state.writeToParcel(parcel, 0)
+                                parcel.marshall()
+                            } finally {
+                                parcel.recycle()
+                            }
 
                     // Only save state if under size limit
                     if (bytes.size < maxStateSize) {
@@ -1800,12 +1842,38 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     .putString(KEY_WINDOWS_STATE, jsonString)
                     .apply()
 
-            DebugLog.d(
-                    "Persistence",
-                    "Saved ${windows.size} windows with state (${jsonString.length} chars)"
-            )
+            lastWindowsStateSaveMs = SystemClock.uptimeMillis()
+
+            DebugLog.d("Persistence") {
+                "Saved ${windows.size} windows with state (${jsonString.length} chars)"
+            }
         } catch (e: Exception) {
             Log.e("Persistence", "Error saving window state", e)
+        }
+    }
+
+    fun scheduleSaveAllWindowsState(delayMs: Long = windowsStateSaveDelayMs) {
+        pendingWindowsStateSave?.let { refreshHandler.removeCallbacks(it) }
+        pendingWindowsStateSave =
+                Runnable {
+                    pendingWindowsStateSave = null
+                    saveAllWindowsState()
+                }
+        refreshHandler.postDelayed(pendingWindowsStateSave!!, delayMs)
+    }
+
+    fun flushPendingWindowsStateSave(force: Boolean = false) {
+        val pendingSave = pendingWindowsStateSave
+        pendingWindowsStateSave = null
+        if (pendingSave != null) {
+            refreshHandler.removeCallbacks(pendingSave)
+        }
+        val shouldForceSave =
+                force &&
+                        SystemClock.uptimeMillis() - lastWindowsStateSaveMs >=
+                                forcedWindowsStateSaveMinIntervalMs
+        if (pendingSave != null || shouldForceSave) {
+            saveAllWindowsState()
         }
     }
 
@@ -2082,6 +2150,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             holder.addCallback(
                     object : SurfaceHolder.Callback {
                         override fun surfaceCreated(holder: SurfaceHolder) {
+                            rightEyeSurfaceReady = true
                             setupBitmap(width, height)
                             startRefreshing()
                         }
@@ -2092,10 +2161,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                 width: Int,
                                 height: Int
                         ) {
+                            rightEyeSurfaceReady = true
                             setupBitmap(width, height)
                         }
 
                         override fun surfaceDestroyed(holder: SurfaceHolder) {
+                            rightEyeSurfaceReady = false
+                            captureInFlight = false
                             synchronized(bitmapLock) {
                                 val currentBitmap = bitmap
                                 bitmap = null // Set to null first
@@ -2730,10 +2802,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         fullScreenOverlayContainer.elevation = 2000f
         fullScreenOverlayContainer.bringToFront()
 
-        // Force refresh to ensure the fullscreen content is captured
+        // Refresh only the fullscreen container; child visibility changes already schedule the
+        // rest of the hierarchy.
         post {
-            fullScreenOverlayContainer.invalidate()
             fullScreenOverlayContainer.requestLayout()
+            fullScreenOverlayContainer.postInvalidateOnAnimation()
             startRefreshing()
             // DebugLog.d("FullscreenDebug", "  Post-show refresh triggered")
         }
@@ -2774,21 +2847,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
         previousFullScreenVisibility.clear()
 
-        // Force WebView to redraw
-        webView.invalidate()
-        webView.requestLayout()
-
-        // Force the entire UI container to relayout and redraw
-        leftEyeUIContainer.invalidate()
-        leftEyeUIContainer.requestLayout()
-
-        // Also refresh the parent to ensure proper alignment
-        leftEyeClipParent.invalidate()
         leftEyeClipParent.requestLayout()
-
-        // Force a full view hierarchy refresh
-        this.invalidate()
-        this.requestLayout()
+        leftEyeClipParent.postInvalidateOnAnimation()
 
         // Restart the mirroring refresh with a slight delay to let layout complete
         postDelayed(
@@ -2831,6 +2891,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         refreshInterval =
                 when {
                     isScreenMasked -> maskedRefreshIntervalMs
+                    isFullscreen -> 16L
                     isInScrollMode -> 16L
                     isIdle && !isMediaPlaying -> idleRefreshIntervalMs
                     isMediaPlaying -> 16L
@@ -3013,30 +3074,22 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     fun dispatchFullScreenOverlayTouch(screenX: Float, screenY: Float) {
         val scale = uiScale
-        DebugLog.d("FullscreenTouch", "Touch at screen ($screenX, $screenY), scale: $scale")
 
         // Check controls container if visible
         if (::fullScreenControlsContainer.isInitialized &&
                         fullScreenControlsContainer.visibility == View.VISIBLE
         ) {
-            DebugLog.d("FullscreenTouch", "Controls container is visible")
-
             // Check exit button
             if (::btnFsExit.isInitialized && btnFsExit.visibility == View.VISIBLE) {
                 val btnLocation = IntArray(2)
                 btnFsExit.getLocationOnScreen(btnLocation)
                 val btnWidth = btnFsExit.width * scale
                 val btnHeight = btnFsExit.height * scale
-                DebugLog.d(
-                        "FullscreenTouch",
-                        "Exit button: loc=(${btnLocation[0]}, ${btnLocation[1]}), size=($btnWidth, $btnHeight), raw=(${btnFsExit.width}, ${btnFsExit.height})"
-                )
                 if (screenX >= btnLocation[0] &&
                                 screenX <= btnLocation[0] + btnWidth &&
                                 screenY >= btnLocation[1] &&
                                 screenY <= btnLocation[1] + btnHeight
                 ) {
-                    DebugLog.d("FullscreenTouch", "Exit button HIT!")
                     btnFsExit.performClick()
                     return
                 }
@@ -3046,10 +3099,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             if (::fullScreenMediaControls.isInitialized &&
                             fullScreenMediaControls.visibility == View.VISIBLE
             ) {
-                DebugLog.d(
-                        "FullscreenTouch",
-                        "Media controls visible with ${fullScreenMediaControls.childCount} children"
-                )
                 for (i in 0 until fullScreenMediaControls.childCount) {
                     val button = fullScreenMediaControls.getChildAt(i)
                     if (button.visibility != View.VISIBLE) continue
@@ -3058,28 +3107,20 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     button.getLocationOnScreen(btnLocation)
                     val btnWidth = button.width * scale
                     val btnHeight = button.height * scale
-                    DebugLog.d(
-                            "FullscreenTouch",
-                            "Button $i: loc=(${btnLocation[0]}, ${btnLocation[1]}), size=($btnWidth, $btnHeight)"
-                    )
 
                     if (screenX >= btnLocation[0] &&
                                     screenX <= btnLocation[0] + btnWidth &&
                                     screenY >= btnLocation[1] &&
                                     screenY <= btnLocation[1] + btnHeight
                     ) {
-                        DebugLog.d("FullscreenTouch", "Button $i HIT!")
                         button.performClick()
                         return
                     }
                 }
             }
-        } else {
-            DebugLog.d("FullscreenTouch", "Controls container NOT visible or not initialized")
         }
 
         // If no button hit, toggle controls visibility
-        DebugLog.d("FullscreenTouch", "No button hit, toggling controls visibility")
         if (::fullScreenControlsContainer.isInitialized) {
             if (fullScreenControlsContainer.visibility == View.VISIBLE) {
                 fullScreenControlsContainer.visibility = View.GONE
@@ -3091,6 +3132,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     private fun drawBitmapToSurface() {
+        if (!rightEyeSurfaceReady || !rightEyeView.holder.surface.isValid) {
+            return
+        }
         synchronized(bitmapLock) {
             val currentBitmap = bitmap
             if (currentBitmap == null || currentBitmap.isRecycled) {
@@ -3439,10 +3483,18 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val screenX = 320f + containerLocation[0]
         val screenY = 240f + containerLocation[1]
 
-        updateButtonHoverStates(screenX, screenY)
+        val shouldRefreshHover =
+                fullScreenOverlayContainer.visibility != View.VISIBLE ||
+                        (::fullScreenControlsContainer.isInitialized &&
+                                fullScreenControlsContainer.visibility == View.VISIBLE)
+        if (shouldRefreshHover) {
+            updateButtonHoverStates(screenX, screenY)
+        }
 
-        // Ensure visual cursor scale/visibility is refreshed in anchored mode
-        listener?.onCursorPositionChanged(320f, 240f, true)
+        if (fullScreenOverlayContainer.visibility != View.VISIBLE) {
+            // Ensure visual cursor scale/visibility is refreshed in anchored mode
+            listener?.onCursorPositionChanged(320f, 240f, true)
+        }
 
         // Only do expensive operations occasionally, not every frame
         // The Choreographer already ensures smooth vsync timing
@@ -3454,6 +3506,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     // Capture and mirror content to left SurfaceView
     private fun captureLeftEyeContent() {
         if (!isRefreshing) {
+            return
+        }
+        if (!rightEyeSurfaceReady || !rightEyeView.holder.surface.isValid) {
+            return
+        }
+        if (captureInFlight) {
             return
         }
 
@@ -3497,33 +3555,39 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 val captureRect = android.graphics.Rect(0, 0, halfWidth, height)
                 val window = (context as Activity).window
 
+                captureInFlight = true
                 PixelCopy.request(
                         window,
                         captureRect,
                         bitmapToUse,
                         { copyResult ->
-                            // Log PixelCopy result for debugging
-                            if (copyResult != PixelCopy.SUCCESS) {
-                                Log.w("MirrorDebug", "PixelCopy failed with result: $copyResult")
-                            }
+                            try {
+                                // Log PixelCopy result for debugging
+                                if (copyResult != PixelCopy.SUCCESS) {
+                                    Log.w("MirrorDebug", "PixelCopy failed with result: $copyResult")
+                                }
 
-                            if (copyResult == PixelCopy.SUCCESS && isRefreshing) {
-                                synchronized(bitmapLock) {
-                                    if (!bitmapToUse.isRecycled && bitmap === bitmapToUse) {
-                                        drawBitmapToSurface()
-                                        lastCaptureTime = System.currentTimeMillis()
-                                    } else {
-                                        Log.w(
-                                                "MirrorDebug",
-                                                "Bitmap state issue - recycled: ${bitmapToUse.isRecycled}, same: ${bitmap === bitmapToUse}"
-                                        )
+                                if (copyResult == PixelCopy.SUCCESS && isRefreshing) {
+                                    synchronized(bitmapLock) {
+                                        if (!bitmapToUse.isRecycled && bitmap === bitmapToUse) {
+                                            drawBitmapToSurface()
+                                            lastCaptureTime = System.currentTimeMillis()
+                                        } else {
+                                            Log.w(
+                                                    "MirrorDebug",
+                                                    "Bitmap state issue - recycled: ${bitmapToUse.isRecycled}, same: ${bitmap === bitmapToUse}"
+                                            )
+                                        }
                                     }
                                 }
+                            } finally {
+                                captureInFlight = false
                             }
                         },
                         refreshHandler
                 )
             } catch (e: Exception) {
+                captureInFlight = false
                 Log.e("MirrorDebug", "Error capturing content", e)
                 stopRefreshing()
             }
@@ -3564,6 +3628,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val refreshRunnable =
             object : Runnable {
                 override fun run() {
+                    refreshFrameScheduled = false
                     refreshCount++
 
                     // Log every 2 seconds to avoid spam
@@ -3578,10 +3643,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     }
 
                     if (isRefreshing) {
+                        if (now - lastRefreshRateCheckTime > 1000) {
+                            updateRefreshRate()
+                            lastRefreshRateCheckTime = now
+                        }
                         if (webView.isAttachedToWindow) {
                             captureLeftEyeContent()
                         }
-                        refreshHandler.postDelayed(this, refreshInterval)
+                        scheduleNextRefresh()
                     } else {
                         Log.w("MirrorDebug", "RefreshLoop STOPPING! isRefreshing=$isRefreshing")
                         // No need to call stopRefreshing() here as we just stop posting callbacks
@@ -3589,10 +3658,22 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
             }
 
+    private fun scheduleNextRefresh() {
+        if (refreshFrameScheduled) return
+
+        if (refreshInterval <= MIN_CAPTURE_INTERVAL) {
+            refreshFrameScheduled = true
+            Choreographer.getInstance().postFrameCallback { refreshRunnable.run() }
+        } else {
+            refreshHandler.postDelayed(refreshRunnable, refreshInterval)
+        }
+    }
+
     fun startRefreshing() {
         synchronized(refreshLock) {
             if (!isRefreshing) {
                 isRefreshing = true
+                refreshFrameScheduled = false
                 refreshHandler.removeCallbacks(refreshRunnable)
                 refreshHandler.post(refreshRunnable)
             }
@@ -3602,6 +3683,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun stopRefreshing() {
         synchronized(refreshLock) {
             isRefreshing = false
+            refreshFrameScheduled = false
             refreshHandler.removeCallbacks(refreshRunnable)
         }
     }
@@ -4843,6 +4925,25 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         syncBrowsingModeUi()
     }
 
+    fun toggleBrowsingMode() {
+        isDesktopMode = !isDesktopMode
+        context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("isDesktopMode", isDesktopMode)
+                .apply()
+        updateBrowsingMode(isDesktopMode)
+    }
+
+    fun prepareDesktopBrowsingMode(targetWebView: WebView) {
+        isDesktopMode = true
+        context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("isDesktopMode", true)
+                .apply()
+        applyBrowsingModeToWebView(targetWebView, true)
+        syncBrowsingModeUi()
+    }
+
     private fun applyBrowsingModeToWebView(targetWebView: WebView, isDesktop: Boolean) {
         val isNetflix = targetWebView.url?.contains("netflix.com") == true
         if (isNetflix) return
@@ -4972,15 +5073,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         when (buttonId) {
             R.id.btnModeToggle -> {
                 button?.let { showButtonClickFeedback(it) }
-                isDesktopMode = !isDesktopMode
-
-                // Save preference
-                context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
-                        .edit()
-                        .putBoolean("isDesktopMode", isDesktopMode)
-                        .apply()
-
-                updateBrowsingMode(isDesktopMode)
+                toggleBrowsingMode()
             }
             R.id.btnYouTube -> {
                 button?.let { showButtonClickFeedback(it) }
@@ -5031,7 +5124,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val reusableRect = android.graphics.Rect()
 
     // Add this method to handle cursor hovering
-    private fun updateButtonHoverStates(screenX: Float, screenY: Float) {
+    private fun updateButtonHoverStates(screenX: Float, screenY: Float, force: Boolean = false) {
+        if (!force &&
+                        !isAnchored &&
+                        abs(screenX - lastHoverScreenX) < 0.5f &&
+                        abs(screenY - lastHoverScreenY) < 0.5f
+        ) {
+            return
+        }
+        lastHoverScreenX = screenX
+        lastHoverScreenY = screenY
+
         // Clear all states initially
         clearAllHoverStates()
 
@@ -5059,6 +5162,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val chatLocalY = localY - chatView.top
 
             if (chatView.updateHoverLocal(chatLocalX, chatLocalY)) {
+                chatHoverActive = true
                 customKeyboard?.updateHover(-1f, -1f)
                 return
             }
@@ -5069,8 +5173,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             for ((_, navButton) in navButtons) {
                 if (isOver(navButton.left, screenX, screenY)) {
                     navButton.isHovered = true
-                    navButton.left.isHovered = true
-                    navButton.right.isHovered = true
+                    markHovered(navButton.left)
+                    markHovered(navButton.right)
                     customKeyboard?.clearHover() // Clear keyboard hover
                     return // Found the hovered button, stop checking
                 }
@@ -5080,11 +5184,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Check left toggle bar buttons
 
 
-        for ((buttonId, _, setHoverFlag) in toggleBarButtons) {
-            val button = leftToggleBar.findViewById<View>(buttonId)
-            if (isOver(button, screenX, screenY)) {
-                button?.isHovered = true
-                setHoverFlag()
+        for (target in toggleHoverTargets) {
+            if (isOver(target.view, screenX, screenY)) {
+                markHovered(target.view)
+                target.setHoverFlag()
                 clearNavigationButtonStates()
                 // DebugLog.d("HoverDebug", "Hovering over toggle button: $name")
                 customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
@@ -5095,7 +5198,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Check Windows button separately (programmatically created, no resource ID)
         windowsButton?.let { btn ->
             if (isOver(btn, screenX, screenY)) {
-                btn.isHovered = true
+                markHovered(btn)
                 isHoveringWindowsToggle = true
                 clearNavigationButtonStates()
                 customKeyboard?.updateHover(-1f, -1f)
@@ -5105,16 +5208,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Check settings window elements if visible
         if (isSettingsVisible) {
-            settingsMenu?.let { menu ->
-
-                for (id in settingsElements) {
-                    val view = menu.findViewById<View>(id)
-                    if (isOver(view, screenX, screenY)) {
-                        view?.isHovered = true
-                        // DebugLog.d("HoverDebug", "Hovering over settings element: $id")
-                        customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
-                        return // Found the hovered element, stop checking
-                    }
+            for (view in getSettingsHoverTargets()) {
+                if (isOver(view, screenX, screenY)) {
+                    markHovered(view)
+                    // DebugLog.d("HoverDebug", "Hovering over settings element: $id")
+                    customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
+                    return // Found the hovered element, stop checking
                 }
             }
         }
@@ -5129,7 +5228,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     for (i in 0 until container.childCount) {
                         val button = container.getChildAt(i)
                         if (isOver(button, screenX, screenY)) {
-                            button.isHovered = true
+                            markHovered(button)
                             // DebugLog.d("HoverDebug", "Hovering over dialog button: $i")
                             customKeyboard?.updateHover(-1f, -1f) // Clear keyboard hover
                             return
@@ -5180,7 +5279,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         ) {
 
                             if (i == 0) { // Add Button
-                                child.isHovered = true
+                                markHovered(child)
                                 hoveredWindowsOverviewItem = child
                                 customKeyboard?.updateHover(-1f, -1f)
                                 return
@@ -5211,7 +5310,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                                                 yInItem >= itemChild.top &&
                                                                 yInItem <= itemChild.bottom
                                                 ) {
-                                                    itemChild.isHovered = true
+                                                    markHovered(itemChild)
                                                     hoveredWindowsOverviewItem = itemChild
                                                     customKeyboard?.updateHover(-1f, -1f)
                                                     return
@@ -5220,7 +5319,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                         }
 
                                         // Set hover on the whole item
-                                        item.isHovered = true
+                                        markHovered(item)
                                         hoveredWindowsOverviewItem = item
                                         customKeyboard?.updateHover(-1f, -1f)
                                         return
@@ -5240,7 +5339,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                     // First child (i == 0) is the Add Button
                     if (i == 0 && isOver(child, screenX, screenY)) {
-                        child.isHovered = true
+                        markHovered(child)
                         hoveredWindowsOverviewItem = child
                         customKeyboard?.updateHover(-1f, -1f)
                         return
@@ -5260,7 +5359,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     if (itemChild is FontIconView &&
                                                     isOver(itemChild, screenX, screenY)
                                     ) {
-                                        itemChild.isHovered = true
+                                        markHovered(itemChild)
                                         hoveredWindowsOverviewItem = itemChild
                                         customKeyboard?.updateHover(-1f, -1f)
                                         return
@@ -5270,7 +5369,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                             // Then check the whole window item
                             if (isOver(windowItem, screenX, screenY)) {
-                                windowItem.isHovered = true
+                                markHovered(windowItem)
                                 hoveredWindowsOverviewItem = windowItem
                                 customKeyboard?.updateHover(-1f, -1f)
                                 return
@@ -5307,14 +5406,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 for (i in 0 until horizontalScrollBar.childCount) {
                     val child = horizontalScrollBar.getChildAt(i)
                     if (isOver(child, screenX, screenY)) {
-                        child.isHovered = true
-                        child.isActivated = true
+                        markHovered(child)
+                        markActivated(child)
 
                         // If we are over the track container, check the thumb specifically
                         if (child == horizontalScrollBar.getChildAt(1)) {
                             if (isOver(hScrollThumb, screenX, screenY)) {
-                                hScrollThumb.isHovered = true
-                                hScrollThumb.isActivated = true
+                                markHovered(hScrollThumb)
+                                markActivated(hScrollThumb)
                             }
                         }
                     }
@@ -5336,14 +5435,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 for (i in 0 until verticalScrollBar.childCount) {
                     val child = verticalScrollBar.getChildAt(i)
                     if (isOver(child, screenX, screenY)) {
-                        child.isHovered = true
-                        child.isActivated = true
+                        markHovered(child)
+                        markActivated(child)
 
                         // If we are over the track container, check the thumb specifically
                         if (child == verticalScrollBar.getChildAt(1)) {
                             if (isOver(vScrollThumb, screenX, screenY)) {
-                                vScrollThumb.isHovered = true
-                                vScrollThumb.isActivated = true
+                                markHovered(vScrollThumb)
+                                markActivated(vScrollThumb)
                             }
                         }
                     }
@@ -5363,6 +5462,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 // Pass raw screenX/screenY and let CustomKeyboardView check against actual screen
                 // positions
                 kbView.updateHoverScreen(screenX, screenY, uiScale)
+                keyboardHoverActive = true
 
                 // We don't return here because updateHoverScreen will internally check if a key was
                 // hit.
@@ -5391,68 +5491,43 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         hoveredWindowsOverviewItem?.isHovered = false
         hoveredWindowsOverviewItem = null
 
-        // Clear visual hover states without allocation
-        leftToggleBar.findViewById<View>(R.id.btnModeToggle)?.isHovered = false
-        leftToggleBar.findViewById<View>(R.id.btnYouTube)?.isHovered = false
-        leftToggleBar.findViewById<View>(R.id.btnBookmarks)?.isHovered = false
-        leftToggleBar.findViewById<View>(R.id.btnZoomIn)?.isHovered = false
-        leftToggleBar.findViewById<View>(R.id.btnZoomOut)?.isHovered = false
-        leftToggleBar.findViewById<View>(R.id.btnMask)?.isHovered = false
-        leftToggleBar.findViewById<View>(R.id.btnAnchor)?.isHovered = false
-
-        // Clear Windows button hover state (programmatically created)
-        windowsButton?.isHovered = false
-
-        // Clear settings hover states
-        if (isSettingsVisible) {
-            settingsMenu?.let { menu ->
-
-                for (id in settingsElements) {
-                    menu.findViewById<View>(id)?.isHovered = false
-                }
-            }
-        }
-
-        // Clear dialog button states
-        if (dialogContainer.visibility == View.VISIBLE) {
-            val dialogView = dialogContainer.getChildAt(0) as? ViewGroup
-            dialogView?.let { viewGroup ->
-                val btnContainer = viewGroup.getChildAt(viewGroup.childCount - 1) as? ViewGroup
-                btnContainer?.let { container ->
-                    for (i in 0 until container.childCount) {
-                        container.getChildAt(i).isHovered = false
-                    }
-                }
-            }
-        }
+        activeHoverViews.forEach { it.isHovered = false }
+        activeHoverViews.clear()
+        activeActivatedViews.forEach { it.isActivated = false }
+        activeActivatedViews.clear()
 
         // Clear navigation button states
         clearNavigationButtonStates()
 
-        if (::chatView.isInitialized) {
+        if (chatHoverActive && ::chatView.isInitialized) {
             chatView.clearHover()
+            chatHoverActive = false
         }
 
         // Clear keyboard hover
-        customKeyboard?.updateHoverScreen(-1f, -1f, 1f)
+        if (keyboardHoverActive) {
+            customKeyboard?.updateHoverScreen(-1f, -1f, 1f)
+            keyboardHoverActive = false
+        }
+    }
 
-        // Clear scroll bar hover states
-        if (horizontalScrollBar.visibility == View.VISIBLE) {
-            for (i in 0 until horizontalScrollBar.childCount) {
-                horizontalScrollBar.getChildAt(i).isHovered = false
-                horizontalScrollBar.getChildAt(i).isActivated = false
-            }
-            hScrollThumb.isHovered = false
-            hScrollThumb.isActivated = false
+    private fun markHovered(view: View) {
+        view.isHovered = true
+        activeHoverViews.add(view)
+    }
+
+    private fun markActivated(view: View) {
+        view.isActivated = true
+        activeActivatedViews.add(view)
+    }
+
+    private fun getSettingsHoverTargets(): List<View> {
+        val menu = settingsMenu ?: return emptyList()
+        if (menu !== cachedSettingsMenu) {
+            cachedSettingsMenu = menu
+            cachedSettingsHoverTargets = settingsElements.mapNotNull { menu.findViewById<View>(it) }
         }
-        if (verticalScrollBar.visibility == View.VISIBLE) {
-            for (i in 0 until verticalScrollBar.childCount) {
-                verticalScrollBar.getChildAt(i).isHovered = false
-                verticalScrollBar.getChildAt(i).isActivated = false
-            }
-            vScrollThumb.isHovered = false
-            vScrollThumb.isActivated = false
-        }
+        return cachedSettingsHoverTargets
     }
 
     // Helper method to check if a point is within any visible scrollbar
@@ -5652,10 +5727,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         if (leftToggleBar.visibility == View.VISIBLE) {
-            for ((buttonId, _, _) in toggleBarButtons) {
-                val button = leftToggleBar.findViewById<View>(buttonId)
-                if (isOver(button, screenX, screenY)) {
-                    handleLeftMenuAction(buttonId)
+            for (target in toggleHoverTargets) {
+                if (isOver(target.view, screenX, screenY)) {
+                    handleLeftMenuAction(target.id)
                     return
                 }
             }
@@ -6965,6 +7039,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        pendingWindowsStateSave?.let { refreshHandler.removeCallbacks(it) }
+        pendingWindowsStateSave = null
         stopRefreshing()
     }
 
@@ -8075,6 +8151,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun injectPageObservers(targetWebView: WebView) {
+        val now = SystemClock.uptimeMillis()
+        val currentUrl = targetWebView.url
+        val lastInjection = observerInjectionTimes[targetWebView]
+        if (lastInjection != null &&
+                        lastInjection.first == currentUrl &&
+                        now - lastInjection.second < 1000L
+        ) {
+            return
+        }
+        observerInjectionTimes[targetWebView] = currentUrl to now
+
         val script =
                 """
             (function() {

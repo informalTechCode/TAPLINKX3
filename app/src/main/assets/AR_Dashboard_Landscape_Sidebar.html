@@ -954,6 +954,21 @@
       return changed;
     }
 
+    function ensureBuiltInAppUrls(dashboardState) {
+      let changed = false;
+      const lockedBuiltIns = ['gmessages'];
+      for (const key of lockedBuiltIns) {
+        const expected = defaultApps[key];
+        if (!expected) continue;
+        const current = dashboardState.apps[key];
+        if (!current || current.name !== expected.name || current.url !== expected.url) {
+          dashboardState.apps[key] = { ...expected };
+          changed = true;
+        }
+      }
+      return changed;
+    }
+
     function loadState() {
       const fallbackGroups = JSON.parse(JSON.stringify(defaultGroups));
       fallbackGroups.forEach(g => {
@@ -981,7 +996,8 @@
 
     let state = loadState();
     const migratedReddit = ensureRedditMigration(state);
-    if (sanitizeGroups(state.groups) || migratedReddit) {
+    const repairedBuiltIns = ensureBuiltInAppUrls(state);
+    if (sanitizeGroups(state.groups) || migratedReddit || repairedBuiltIns) {
       persistState();
     }
 
@@ -1156,6 +1172,15 @@
       el.addEventListener('touchend', () => el.focus({ preventScroll: true }));
     });
 
+    function openAppUrl(url) {
+      if (!url) return;
+      if (window.AndroidInterface && typeof window.AndroidInterface.openUrl === 'function') {
+        window.AndroidInterface.openUrl(url);
+        return;
+      }
+      window.location.assign(url);
+    }
+
     linkForm.addEventListener('submit', (e) => {
       e.preventDefault();
       const name = (linkName.value || '').trim();
@@ -1228,7 +1253,7 @@
       bindActivate(app, () => {
         if (isEditing) return;
         if (!meta.url) return;
-        window.location.href = meta.url;
+        openAppUrl(meta.url);
       });
       return app;
     }
@@ -1254,7 +1279,7 @@
       const targetUrl = parseScannedUrl(text);
       if (targetUrl) {
         closeQrPage();
-        window.location.href = targetUrl;
+        openAppUrl(targetUrl);
       }
     }
 
