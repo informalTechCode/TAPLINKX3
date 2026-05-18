@@ -80,9 +80,9 @@
     }
 
     .hud {
-      width: 100vw;
-      max-width: 960px;
-      margin: 0 auto;
+      width: 100%;
+      max-width: none;
+      margin: 0;
       height: 100vh;
       max-height: 480px;
       display: flex;
@@ -91,7 +91,7 @@
       scroll-behavior: smooth;
       filter: brightness(var(--brightness));
       transform: scale(var(--scale));
-      padding: 0 8px 16px;
+      padding: 0 0 16px;
       box-sizing: border-box;
       /* touch-action: none; removed to allow scrolling */
     }
@@ -99,10 +99,10 @@
     .topbar {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 10px;
-      background: rgba(255, 255, 255, .05);
-      border-bottom: 1px solid rgba(255, 255, 255, .08);
+      gap: 6px;
+      padding: 5px 8px;
+      background: #000;
+      border-bottom: 1px solid rgba(255, 255, 255, .06);
       position: sticky;
       top: 0;
       backdrop-filter: blur(10px);
@@ -113,16 +113,32 @@
     .topbar-actions {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: nowrap;
+      margin-left: auto;
+    }
+
+    .topbar strong {
+      font-size: 13px;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .topbar-search {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1 1 100%;
+      min-width: 0;
     }
 
     .btn {
       border: none;
       background: rgba(255, 255, 255, .08);
-      padding: 8px 12px;
-      border-radius: 10px;
+      padding: 5px 9px;
+      border-radius: 8px;
       color: var(--text);
+      font-size: 11px;
       cursor: pointer;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
@@ -132,12 +148,15 @@
     .search {
       background: rgba(255, 255, 255, .08);
       border: 1px solid rgba(255, 255, 255, .15);
-      border-radius: 10px;
-      padding: 8px 10px;
+      border-radius: 8px;
+      padding: 4px 8px;
       color: var(--text);
       outline: none;
-      min-width: 140px;
+      min-width: 0;
+      height: 26px;
       flex: 1;
+      box-sizing: border-box;
+      font-size: 11px;
     }
 
     .weather-card {
@@ -145,12 +164,12 @@
       border-radius: 10px;
       background: rgba(255, 255, 255, .08);
       color: var(--text);
-      min-width: 116px;
-      min-height: 36px;
-      padding: 6px 10px;
+      min-width: 88px;
+      min-height: 26px;
+      padding: 2px 8px;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       cursor: pointer;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
@@ -169,7 +188,7 @@
     }
 
     .weather-icon {
-      font-size: 18px;
+      font-size: 13px;
       line-height: 1;
       flex: 0 0 auto;
     }
@@ -183,15 +202,15 @@
     }
 
     .weather-temp {
-      font-size: 13px;
+      font-size: 11px;
       font-weight: 700;
       white-space: nowrap;
     }
 
     .weather-desc {
-      max-width: 76px;
+      max-width: 52px;
       color: var(--muted);
-      font-size: 10px;
+      font-size: 8px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -201,7 +220,7 @@
       display: grid;
       grid-template-columns: 1fr;
       gap: 10px;
-      padding: 10px;
+      padding: 0 0 10px;
       box-sizing: border-box;
       min-height: 0
     }
@@ -217,11 +236,11 @@
     }
 
     .card {
-      background: var(--card);
-      border: 1px solid rgba(255, 255, 255, .08);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: 14px
+      background: #000;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 8px 12px 12px
     }
 
     .card h3 {
@@ -303,43 +322,53 @@
       --sec-glow: #e0e0e0
     }
 
-    /* Apps 2 columns inside each category */
+    /* Launcher-style app grid */
     .apps {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+      gap: 14px 10px;
       margin-bottom: 6px
+    }
+
+    #leftPane>h3 {
+      display: none;
     }
 
     @media (max-width:600px) {
       .apps {
-        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr))
+        grid-template-columns: repeat(auto-fill, minmax(70px, 1fr))
       }
     }
 
+    .launcher-empty {
+      grid-column: 1 / -1;
+    }
+
     .app {
-      border: 1px solid rgba(255, 255, 255, .1);
-      border-radius: 14px;
-      padding: 10px 8px;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      padding: 8px 6px;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 8px;
-      background: rgba(255, 255, 255, .03);
+      justify-content: flex-start;
+      gap: 5px;
+      background: transparent;
       cursor: pointer;
       color: var(--text);
-      transition: transform .15s ease, box-shadow .2s ease, border-color .2s ease;
+      transition: transform .15s ease, background .2s ease, border-color .2s ease;
       width: 100%;
       box-sizing: border-box;
       min-width: 0;
-      min-height: 0;
+      min-height: 72px;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent
     }
 
     .app:hover {
       transform: translateY(-1px) scale(1.03);
-      border-color: rgba(255, 255, 255, .25);
-      box-shadow: 0 10px 24px rgba(0, 0, 0, .35), 0 0 0 1px rgba(255, 255, 255, .06)
+      background: rgba(255, 255, 255, .04);
+      border-color: rgba(255, 255, 255, .12)
     }
 
     .app:active {
@@ -347,22 +376,29 @@
     }
 
     .app img {
-      width: var(--icon-size);
-      height: var(--icon-size);
-      flex: 0 0 var(--icon-size);
+      width: 38px;
+      height: 38px;
+      flex: 0 0 38px;
       object-fit: contain;
-      border-radius: 4px
+      border-radius: 9px
     }
 
 
 
     .app span {
       color: var(--text);
-      flex: 1;
+      flex: 0 1 auto;
       min-width: 0;
-      white-space: nowrap;
+      width: 100%;
+      text-align: center;
+      font-size: 10px;
+      line-height: 1.15;
+      white-space: normal;
       overflow: hidden;
       text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
     }
 
     .btn {
@@ -377,9 +413,10 @@
     .btn {
       border: none;
       background: rgba(255, 255, 255, .08);
-      padding: 8px 12px;
-      border-radius: 10px;
+      padding: 5px 9px;
+      border-radius: 8px;
       color: var(--text);
+      font-size: 11px;
       cursor: pointer;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
@@ -399,12 +436,15 @@
     .search {
       background: rgba(255, 255, 255, .08);
       border: 1px solid rgba(255, 255, 255, .15);
-      border-radius: 10px;
-      padding: 8px 10px;
+      border-radius: 8px;
+      padding: 4px 8px;
       color: var(--text);
       outline: none;
-      min-width: 140px;
+      min-width: 0;
+      height: 26px;
       flex: 1;
+      box-sizing: border-box;
+      font-size: 11px;
     }
 
     .weather-card {
@@ -412,12 +452,12 @@
       border-radius: 10px;
       background: rgba(255, 255, 255, .08);
       color: var(--text);
-      min-width: 116px;
-      min-height: 36px;
-      padding: 6px 10px;
+      min-width: 88px;
+      min-height: 26px;
+      padding: 2px 8px;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       cursor: pointer;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
@@ -436,7 +476,7 @@
     }
 
     .weather-icon {
-      font-size: 18px;
+      font-size: 13px;
       line-height: 1;
       flex: 0 0 auto;
     }
@@ -450,15 +490,15 @@
     }
 
     .weather-temp {
-      font-size: 13px;
+      font-size: 11px;
       font-weight: 700;
       white-space: nowrap;
     }
 
     .weather-desc {
-      max-width: 76px;
+      max-width: 52px;
       color: var(--muted);
-      font-size: 10px;
+      font-size: 8px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -468,7 +508,7 @@
       display: grid;
       grid-template-columns: 1fr;
       gap: 10px;
-      padding: 10px;
+      padding: 0 0 10px;
       box-sizing: border-box;
       min-height: 0
     }
@@ -484,11 +524,11 @@
     }
 
     .card {
-      background: var(--card);
-      border: 1px solid rgba(255, 255, 255, .08);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: 14px
+      background: #000;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 8px 12px 12px
     }
 
     .card h3 {
@@ -499,12 +539,16 @@
       letter-spacing: .8px
     }
 
+    #leftPane>h3 {
+      display: none;
+    }
+
     /* Sections left column */
     .section {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin: 10px 0 8px;
+      margin: 8px 0 7px;
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: .8px;
@@ -570,43 +614,49 @@
       --sec-glow: #e0e0e0
     }
 
-    /* Apps 2 columns inside each category */
+    /* Launcher-style app grid */
     .apps {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+      gap: 14px 10px;
       margin-bottom: 6px
     }
 
     @media (max-width:600px) {
       .apps {
-        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr))
+        grid-template-columns: repeat(auto-fill, minmax(70px, 1fr))
       }
     }
 
+    .launcher-empty {
+      grid-column: 1 / -1;
+    }
+
     .app {
-      border: 1px solid rgba(255, 255, 255, .1);
-      border-radius: 14px;
-      padding: 10px 8px;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      padding: 8px 6px;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 8px;
-      background: rgba(255, 255, 255, .03);
+      justify-content: flex-start;
+      gap: 5px;
+      background: transparent;
       cursor: pointer;
       color: var(--text);
-      transition: transform .15s ease, box-shadow .2s ease, border-color .2s ease;
+      transition: transform .15s ease, background .2s ease, border-color .2s ease;
       width: 100%;
       box-sizing: border-box;
       min-width: 0;
-      min-height: 0;
+      min-height: 72px;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent
     }
 
     .app:hover {
       transform: translateY(-1px) scale(1.03);
-      border-color: rgba(255, 255, 255, .25);
-      box-shadow: 0 10px 24px rgba(0, 0, 0, .35), 0 0 0 1px rgba(255, 255, 255, .06)
+      background: rgba(255, 255, 255, .06);
+      border-color: rgba(255, 255, 255, .12)
     }
 
     .app:active {
@@ -614,11 +664,11 @@
     }
 
     .app img {
-      width: var(--icon-size);
-      height: var(--icon-size);
-      flex: 0 0 var(--icon-size);
+      width: 38px;
+      height: 38px;
+      flex: 0 0 38px;
       object-fit: contain;
-      border-radius: 4px
+      border-radius: 9px
     }
 
     [data-theme="light"] {
@@ -633,11 +683,18 @@
 
     .app span {
       color: var(--text);
-      flex: 1;
+      flex: 0 1 auto;
       min-width: 0;
-      white-space: nowrap;
+      width: 100%;
+      text-align: center;
+      font-size: 10px;
+      line-height: 1.15;
+      white-space: normal;
       overflow: hidden;
       text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
     }
 
     .btn {
@@ -681,8 +738,11 @@
     }
 
     .app-actions {
-      margin-left: auto;
+      position: absolute;
+      top: 0;
+      right: 0;
       display: none;
+      flex-direction: column;
       gap: 6px;
     }
 
@@ -691,8 +751,8 @@
       background: rgba(255, 255, 255, .1);
       color: var(--text);
       border-radius: 999px;
-      padding: 4px 10px;
-      font-size: 11px;
+      padding: 3px 6px;
+      font-size: 9px;
       cursor: pointer;
     }
 
@@ -711,8 +771,8 @@
 
     body[data-editing="true"] .app:hover {
       transform: none;
-      border-color: rgba(255, 255, 255, .1);
-      box-shadow: none;
+      background: rgba(255, 255, 255, .06);
+      border-color: rgba(255, 255, 255, .12);
     }
 
     .modal {
@@ -838,8 +898,8 @@
     }
 
     [data-theme="dark"] .topbar {
-      background: rgba(0, 0, 0, .7);
-      border-bottom: 1px solid rgba(255, 255, 255, .08);
+      background: #000;
+      border-bottom: 1px solid rgba(255, 255, 255, .06);
     }
 
     [data-theme="dark"] .section {
@@ -859,28 +919,28 @@
   <div class="hud" data-taplink-scroll="true">
     <div class="topbar">
       <strong style="color:var(--text)">TapLinkX3 Dashboard</strong>
-      <div style="flex:1"></div>
       <div class="topbar-actions">
         <button class="btn" id="openQrScanner" type="button">QR Scanner</button>
         <button class="btn" id="editToggle" type="button">Edit Links</button>
         <button class="btn" id="addLink" type="button">Add Link</button>
 
       </div>
-      <input id="appSearch" class="search" placeholder="Filter apps." />
-      <button class="weather-card" id="weatherCard" type="button" aria-label="Open hourly weather forecast">
-        <span class="weather-icon" id="weatherIcon" aria-hidden="true">WX</span>
-        <span class="weather-copy">
-          <span class="weather-temp" id="weatherTemp">Weather</span>
-          <span class="weather-desc" id="weatherDesc">Locating...</span>
-        </span>
-      </button>
+      <div class="topbar-search">
+        <input id="appSearch" class="search" placeholder="Filter apps." />
+        <button class="weather-card" id="weatherCard" type="button" aria-label="Open hourly weather forecast">
+          <span class="weather-icon" id="weatherIcon" aria-hidden="true">WX</span>
+          <span class="weather-copy">
+            <span class="weather-temp" id="weatherTemp">Weather</span>
+            <span class="weather-desc" id="weatherDesc">Locating...</span>
+          </span>
+        </button>
+      </div>
     </div>
 
     <div class="content">
-      <!-- Left: Categories (single column), each with 2-column apps -->
+      <!-- Launcher-style app categories -->
       <div class="card" id="leftPane">
-        <h3>Apps</h3>
-        <div id="appContainer"></div>
+        <div id="appContainer" class="apps"></div>
       </div>
     </div>
   </div>
@@ -1149,6 +1209,7 @@
     let inputGuardUntil = 0;
     let weatherLocation = null;
     let weatherUrl = null;
+    let weatherRetryTimer = null;
 
     function armInputGuard(durationMs = 400) {
       inputGuardUntil = Math.max(inputGuardUntil, Date.now() + durationMs);
@@ -1354,6 +1415,34 @@
       });
     }
 
+    function waitForInjectedPosition(timeoutMs = 15000) {
+      const existing = getInjectedPosition();
+      if (existing) return Promise.resolve(existing);
+      return new Promise((resolve, reject) => {
+        const started = Date.now();
+        const timer = setInterval(() => {
+          const injected = getInjectedPosition();
+          if (injected) {
+            clearInterval(timer);
+            resolve(injected);
+            return;
+          }
+          if (Date.now() - started >= timeoutMs) {
+            clearInterval(timer);
+            reject(new Error('Location not ready'));
+          }
+        }, 500);
+      });
+    }
+
+    function scheduleWeatherRetry() {
+      if (weatherRetryTimer) return;
+      weatherRetryTimer = setTimeout(() => {
+        weatherRetryTimer = null;
+        loadLocalWeather(false);
+      }, 5000);
+    }
+
     function weatherSummary(code, isDay) {
       const groups = [
         { codes: [0], label: 'Clear', icon: isDay ? 'SUN' : 'CLR' },
@@ -1389,10 +1478,14 @@
       try {
         weatherLocation = await getBrowserPosition();
       } catch (error) {
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        weatherLocation = getInjectedPosition();
+        try {
+          weatherLocation = await waitForInjectedPosition();
+        } catch (innerError) {
+          weatherLocation = getInjectedPosition();
+        }
         if (!weatherLocation) {
-          setWeatherStatus('Weather', 'No location', 'WX');
+          setWeatherStatus('Weather', 'Locating...', 'WX');
+          scheduleWeatherRetry();
           return;
         }
       }
@@ -1551,35 +1644,35 @@
       qrResult.textContent = text;
     }
 
-    function addSection(title, cls) {
-      const s = document.createElement('div');
-      s.className = `section ${cls}`;
-      const span = document.createElement('span');
-      span.className = 'label';
-      span.textContent = title;
-      s.append(span);
-      appContainer.append(s);
-      const body = document.createElement('div');
-      body.className = 'apps';
-      appContainer.append(body);
-      return body;
+    function getLauncherItems() {
+      const seen = new Set();
+      const items = [];
+      for (const g of state.groups) {
+        for (const k of g.keys || []) {
+          if (seen.has(k) || !state.apps[k]) continue;
+          seen.add(k);
+          items.push({ k, m: state.apps[k] });
+        }
+      }
+      for (const [k, m] of Object.entries(state.apps)) {
+        if (seen.has(k)) continue;
+        items.push({ k, m });
+      }
+      return items;
     }
 
     function renderAll() {
       appContainer.innerHTML = '';
       const q = (search?.value || '').trim().toLowerCase();
-      for (const g of state.groups) {
-        const body = addSection(g.title, g.cls);
-        const items = (g.keys || []).map(k => ({ k, m: state.apps[k] })).filter(x => x.m);
-        const filtered = q ? items.filter(x => x.m.name.toLowerCase().includes(q) || x.k.toLowerCase().includes(q)) : items;
-        if (filtered.length) {
-          for (const it of filtered) { body.append(createAppButton(it.k, it.m)); }
-        } else {
-          const ph = document.createElement('div');
-          ph.className = 'muted';
-          ph.textContent = '- no matches -';
-          body.append(ph);
-        }
+      const items = getLauncherItems();
+      const filtered = q ? items.filter(x => x.m.name.toLowerCase().includes(q) || x.k.toLowerCase().includes(q)) : items;
+      if (filtered.length) {
+        for (const it of filtered) { appContainer.append(createAppButton(it.k, it.m)); }
+      } else {
+        const ph = document.createElement('div');
+        ph.className = 'muted launcher-empty';
+        ph.textContent = '- no matches -';
+        appContainer.append(ph);
       }
     }
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="controller_background">#0D1117</color>
+    <string name="app_name" translatable="false">TapLink Controller Dev</string>
+    <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/controller_background</item>
+        <item name="android:statusBarColor">@color/controller_background</item>
+    </style>
+</resources>

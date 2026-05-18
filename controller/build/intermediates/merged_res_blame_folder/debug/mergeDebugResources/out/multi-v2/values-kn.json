@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.TapLinkX3.controller-mergeDebugResources-11:/values-kn/values-kn.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\conno\\.gradle\\caches\\9.2.1\\transforms\\4eddb3919a18c2dcf4a168736c0c0ebd\\workspace\\transformed\\core-1.17.0\\res\\values-kn\\values-kn.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,153,256,357,463,564,672,800",
+                        "endColumns": "97,102,100,105,100,107,127,100",
+                        "endOffsets": "148,251,352,458,559,667,795,896"
+                    }
+                }
+            ]
+        }
+    ]
+}

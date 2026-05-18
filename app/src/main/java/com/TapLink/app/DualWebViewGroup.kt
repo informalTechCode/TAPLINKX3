@@ -163,6 +163,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var lastWindowsStateSaveMs = 0L
     private val forcedWindowsStateSaveMinIntervalMs = 1000L
     private var refreshInterval = 16L // ~60fps for smooth mirroring
+    private val maxRefreshIntervalMs = 0L // Choreographer-driven, one capture attempt per vsync
     private val maskedRefreshIntervalMs = 100L // ~10fps while the screen is masked
     private var lastCaptureTime = 0L
     private var captureInFlight = false
@@ -170,7 +171,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var lastScrollBarCheckTime = 0L
     private var lastRefreshRateCheckTime = 0L
     private val scrollBarVisibilityThrottleMs = 50L
-    private val MIN_CAPTURE_INTERVAL = 16L // Cap at ~60fps
+    private val minCaptureIntervalMs = 16L // Cap at ~60fps for non-max refresh modes
     private var lastCursorUpdateTime = 0L
     private val CURSOR_UPDATE_INTERVAL = 16L // 60fps cap for cursor updates
     private var lastScrollBarInteractionTime = 0L
@@ -197,6 +198,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val navBarHeightPx = 32.dp()
     private val toggleBarWidthPx = 32.dp()
     private val toggleButtonSizePx = toggleBarWidthPx
+    private val scrollBarSizePx = 20
+    private val webContentScrollBarClearancePx = 28
 
     val keyboardContainer: FrameLayout =
             FrameLayout(context).apply {
@@ -636,6 +639,21 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return isMediaPlaying || (now - lastMediaPlayingAt < mediaScrollFreezeMs)
     }
 
+    private fun isDashboardPage(): Boolean {
+        val currentUrl = webView.url ?: return false
+        return currentUrl == Constants.DEFAULT_URL ||
+                currentUrl.startsWith(Constants.DEFAULT_URL) ||
+                currentUrl.contains("AR_Dashboard_Landscape_Sidebar.html")
+    }
+
+    private fun verticalContentClearance(): Int {
+        return if (verticalScrollBar.visibility == View.VISIBLE && !isDashboardPage()) {
+            webContentScrollBarClearancePx
+        } else {
+            0
+        }
+    }
+
     private fun updateScrollBarThumbs(xProgress: Int, yProgress: Int) {
         val now = SystemClock.uptimeMillis()
         // Guard against updates during or shortly after scrollbar interaction to prevent bouncing
@@ -878,8 +896,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Apply layout adjustments
         (webViewsContainer.layoutParams as? FrameLayout.LayoutParams)?.let { p ->
             // Keep WebView sizing stable to avoid layout churn (prevents media pauses/flicker).
-            val rightMarginShift = if (verticalScrollBar.visibility == View.VISIBLE) 20 else 0
-            val bottomMarginShift = if (horizontalScrollBar.visibility == View.VISIBLE) 20 else 0
+            val rightMarginShift = verticalContentClearance()
+            val bottomMarginShift =
+                    if (horizontalScrollBar.visibility == View.VISIBLE) scrollBarSizePx else 0
 
             var targetWidth: Int
             var targetHeight: Int
@@ -2713,7 +2732,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, 20).apply {
                     gravity = Gravity.BOTTOM
                     leftMargin = toggleBarWidthPx
-                    rightMargin = 20 // Prevent overlap with vertical scroll bar
+                    rightMargin = scrollBarSizePx // Prevent overlap with vertical scroll bar
                     bottomMargin = navBarHeightPx // Sit on top of the nav bar
                 }
         )
@@ -2885,8 +2904,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Logic (prioritized):
         // 1. Screen masked: 10fps (100ms) - minimal updates
         // 2. Idle (no user interaction for 5s) and not playing media: 10fps (100ms)
-        // 3. Media playing: 60fps (16ms) - smooth video playback
-        // 4. Anchored + Normal browsing: 60fps (16ms) - needs smooth head tracking
+        // 3. Anchored + normal browsing: max display vsync - needs lowest-latency head tracking
+        // 4. Media playing: 60fps (16ms) - smooth video playback
         // 5. Non-anchored without media: 30fps (33ms) - balanced for browsing
         refreshInterval =
                 when {
@@ -2895,7 +2914,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     isInScrollMode -> 16L
                     isIdle && !isMediaPlaying -> idleRefreshIntervalMs
                     isMediaPlaying -> 16L
-                    isAnchored && !isFullscreen -> 16L
+                    isAnchored && !isFullscreen -> maxRefreshIntervalMs
                     else -> 33L
                 }
     }
@@ -3516,7 +3535,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         val currentTime = System.currentTimeMillis()
-        if (currentTime - lastCaptureTime < MIN_CAPTURE_INTERVAL) {
+        val captureInterval = if (refreshInterval <= maxRefreshIntervalMs) {
+            maxRefreshIntervalMs
+        } else {
+            minCaptureIntervalMs
+        }
+        if (currentTime - lastCaptureTime < captureInterval) {
             return
         }
 
@@ -3661,7 +3685,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private fun scheduleNextRefresh() {
         if (refreshFrameScheduled) return
 
-        if (refreshInterval <= MIN_CAPTURE_INTERVAL) {
+        if (refreshInterval <= minCaptureIntervalMs) {
             refreshFrameScheduled = true
             Choreographer.getInstance().postFrameCallback { refreshRunnable.run() }
         } else {
@@ -3731,7 +3755,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Shrink the WebView when keyboard is visible so content isn't blocked
         val isKeyboardVisible = keyboardContainer.visibility == View.VISIBLE
 
-        val horizontalReserve = if (horizontalScrollBar.visibility == View.VISIBLE) 20 else 0
+        val horizontalReserve =
+                if (horizontalScrollBar.visibility == View.VISIBLE) scrollBarSizePx else 0
 
         if (isInScrollMode || isNavBarsHidden) {
             val keyboardLimit =
@@ -4052,7 +4077,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
             // Prevent overlap with vertical scrollbar if visible
             if (verticalScrollBar.visibility == View.VISIBLE) {
-                scrollWidth -= 20 // Subtract width of vertical scrollbar
+                scrollWidth -= scrollBarSizePx // Subtract width of vertical scrollbar
             }
 
             horizontalScrollBar.measure(
@@ -4068,7 +4093,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         if (verticalScrollBar.visibility == View.VISIBLE) {
-            val vScrollWidth = 20
+            val vScrollWidth = scrollBarSizePx
             val vScrollRight = halfWidth // Align to right edge
             val vScrollTop = 0 // Start from top
 

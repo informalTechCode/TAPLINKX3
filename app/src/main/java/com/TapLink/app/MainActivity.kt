@@ -61,6 +61,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.edit
+import com.TapLinkX3.app.controller.ControllerBluetoothClient
+import com.TapLinkX3.app.controller.ControllerInputListener
+import com.TapLinkX3.app.controller.ControllerMode
+import com.TapLinkX3.app.controller.ControllerTouchAction
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.ResultPoint
 import com.journeyapps.barcodescanner.BarcodeCallback
@@ -102,6 +106,9 @@ interface LinkEditingListener {
     fun isLinkEditing(): Boolean
 }
 
+private const val CONTROLLER_CURSOR_WIDTH = 640f
+private const val CONTROLLER_CURSOR_HEIGHT = 480f
+
 class MainActivity :
         AppCompatActivity(),
         DualWebViewGroup.DualWebViewGroupListener,
@@ -112,7 +119,8 @@ class MainActivity :
         LinkEditingListener,
         DualWebViewGroup.MaskToggleListener,
         DualWebViewGroup.AnchorToggleListener,
-        DualWebViewGroup.WindowCallback {
+        DualWebViewGroup.WindowCallback,
+        ControllerInputListener {
 
     private val messagesDesktopUserAgent =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
@@ -150,6 +158,11 @@ class MainActivity :
     private var mouseSwipeLastX = 0f
     private var mouseSwipeLastY = 0f
     private var mouseSwipeDownTime = 0L
+    private lateinit var controllerBluetoothClient: ControllerBluetoothClient
+    private var remoteControllerMode = ControllerMode.AIR_MOUSE
+    private var controllerTouchDownTime = 0L
+    private var isControllerConnected = false
+    private var isPhoneKeyboardOpen = false
 
     private fun refreshCursor() {
         dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, isCursorVisible)
@@ -381,6 +394,7 @@ class MainActivity :
     private var sensorEventListener = createSensorEventListener()
     private var shouldResetInitialQuaternion = false
     private var pendingDoubleTapAction = false
+    private val ANCHOR_SENSOR_DELAY = SensorManager.SENSOR_DELAY_GAME
 
     private var ipcLauncher: Launcher? = null
     private var gpsUpdatesRegistered = false
@@ -546,6 +560,8 @@ class MainActivity :
         dualWebViewGroup.maskToggleListener = this
         dualWebViewGroup.windowCallback = this
         dualWebViewGroup.restoreState()
+        controllerBluetoothClient = ControllerBluetoothClient(this, this)
+        controllerBluetoothClient.start()
 
         // Load saved anchored mode state
         isAnchored =
@@ -1360,7 +1376,7 @@ class MainActivity :
                 sensorManager.registerListener(
                         sensorEventListener,
                         sensor,
-                        SensorManager.SENSOR_DELAY_UI
+                        ANCHOR_SENSOR_DELAY
                 )
             }
             dualWebViewGroup.startAnchoring()
@@ -1465,7 +1481,7 @@ class MainActivity :
                 sensorManager.registerListener(
                         sensorEventListener,
                         sensor,
-                        SensorManager.SENSOR_DELAY_UI
+                        ANCHOR_SENSOR_DELAY
                 )
             }
         }
@@ -2178,6 +2194,10 @@ class MainActivity :
 
         // Notify DualWebViewGroup about keyboard being hidden
         dualWebViewGroup.onKeyboardHidden()
+        if (isPhoneKeyboardOpen && ::controllerBluetoothClient.isInitialized) {
+            isPhoneKeyboardOpen = false
+            controllerBluetoothClient.sendKeyboardVisibility(false)
+        }
 
         // Restore original webView state
         webView.translationY = 0f
@@ -4889,6 +4909,12 @@ class MainActivity :
             ) {
                 permissionsToRequest.add(android.Manifest.permission.MODIFY_AUDIO_SETTINGS)
             }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                            checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) !=
+                                    PackageManager.PERMISSION_GRANTED
+            ) {
+                permissionsToRequest.add(android.Manifest.permission.BLUETOOTH_CONNECT)
+            }
 
             if (permissionsToRequest.isNotEmpty()) {
                 requestPermissions(permissionsToRequest.toTypedArray(), PERMISSIONS_REQUEST_CODE)
@@ -4960,6 +4986,10 @@ class MainActivity :
                                 audioGranted = true
                             } else if (permission == Manifest.permission.CAMERA) {
                                 grantedResources.add(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                            } else if (permission == Manifest.permission.BLUETOOTH_CONNECT &&
+                                            ::controllerBluetoothClient.isInitialized
+                            ) {
+                                controllerBluetoothClient.start()
                             }
                         }
                     }
@@ -5006,6 +5036,15 @@ class MainActivity :
 
     fun showCustomKeyboard() {
         DebugLog.d("KeyboardDebug", "1. Starting showCustomKeyboard")
+
+        if (isControllerConnected) {
+            if (!isPhoneKeyboardOpen) {
+                isPhoneKeyboardOpen = true
+                controllerBluetoothClient.sendKeyboardVisibility(true)
+                dualWebViewGroup.showToast("Keyboard opened on phone", 1500L)
+            }
+            return
+        }
 
         if (isKeyboardVisible &&
                         keyboardView?.visibility == View.VISIBLE &&
@@ -5125,11 +5164,11 @@ class MainActivity :
 
             sensorEventListener = createSensorEventListener()
             rotationSensor?.let { sensor ->
-                // Use UI rate for good responsiveness with power savings (smoothing handles jitter)
+                // Use a stable sensor cadence; UI work is still coalesced to vsync.
                 sensorManager.registerListener(
                         sensorEventListener,
                         sensor,
-                        SensorManager.SENSOR_DELAY_UI
+                        ANCHOR_SENSOR_DELAY
                 )
             }
             dualWebViewGroup.startAnchoring()
@@ -5180,7 +5219,7 @@ class MainActivity :
 
         // Quaternion SLERP: 0.40 (fast/left) to 0.02 (very smooth/right)
         // Inverting: 100 - level gives us the inverse
-        // Range expanded to compensate for SENSOR_DELAY_UI timing
+        // Range expanded for stable anchored tracking while applying view updates at vsync.
         val invertedLevel = 100 - smoothnessLevel
         anchorSmoothingFactor = 0.02f + (invertedLevel / 100f) * 0.38f
 
@@ -5258,12 +5297,19 @@ class MainActivity :
                 quaternionInverse(initialQuaternion!!, inverseInitialQuaternion)
                 quaternionMultiply(inverseInitialQuaternion, activeQuaternion, relativeQuaternion)
 
-                quaternionToEuler(relativeQuaternion, eulerAngles) // [roll, pitch, yaw]
-                val rollRad = eulerAngles[2] // or [2], etc., depends on your system
-                val rollDeg = Math.toDegrees(rollRad.toDouble()).toFloat()
+                quaternionToEuler(relativeQuaternion, eulerAngles) // [x-axis, y-axis, z-axis]
+                val xAxisRad = eulerAngles[0]
+                val yAxisRad = eulerAngles[1]
+                val zAxisRad = eulerAngles[2]
+                val rollDeg = Math.toDegrees(zAxisRad.toDouble()).toFloat()
 
-                val deltaX = relativeQuaternion[1] * TRANSLATION_SCALE
-                val deltaY = relativeQuaternion[2] * TRANSLATION_SCALE
+                // Convert relative head rotation to screen-space compensation using angular
+                // offsets, not raw quaternion vector components. Raw components are only a
+                // small-angle approximation and leak between axes as the user's head turns,
+                // which makes the anchored image visibly wander.
+                val angularTranslationScale = TRANSLATION_SCALE * 0.5f
+                val deltaX = xAxisRad * angularTranslationScale
+                val deltaY = yAxisRad * angularTranslationScale
 
                 // Apply velocity smoothing (double exponential smoothing) using dynamic factor
                 smoothedDeltaX =
@@ -6097,8 +6143,168 @@ class MainActivity :
         finish()
     }
 
+    override fun onControllerConnected(name: String, address: String) {
+        runOnUiThread {
+            isControllerConnected = true
+            DebugLog.d("ControllerInput", "Controller connected: $name from $address")
+            if (::dualWebViewGroup.isInitialized) {
+                dualWebViewGroup.showToast("Controller connected: $name", 1500L)
+            }
+        }
+    }
+
+    override fun onControllerDisconnected() {
+        runOnUiThread {
+            isControllerConnected = false
+            isPhoneKeyboardOpen = false
+        }
+    }
+
+    override fun onControllerModeChanged(mode: ControllerMode) {
+        runOnUiThread {
+            remoteControllerMode = mode
+            ensureMouseTapModeDisabled()
+            if (mode == ControllerMode.AIR_MOUSE) {
+                refreshCursor(true)
+            } else {
+                refreshCursor(true)
+            }
+            dualWebViewGroup.showToast(
+                    if (mode == ControllerMode.AIR_MOUSE) "Controller air mouse"
+                    else "Controller trackpad",
+                    1200L
+            )
+        }
+    }
+
+    override fun onControllerKey(key: String) {
+        runOnUiThread {
+            when (key) {
+                "backspace" -> onBackspacePressed()
+                "enter" -> onEnterPressed()
+                "hideKeyboard" -> {
+                    isPhoneKeyboardOpen = false
+                    controllerBluetoothClient.sendKeyboardVisibility(false)
+                }
+                else -> if (key.isNotEmpty()) onKeyPressed(key)
+            }
+        }
+    }
+
+    override fun onControllerGroqApiKey(key: String) {
+        runOnUiThread {
+            val trimmed = key.trim()
+            if (trimmed.isBlank()) {
+                dualWebViewGroup.showToast("Groq API key was empty", 1500L)
+                return@runOnUiThread
+            }
+
+            getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(Constants.KEY_GROQ_API_KEY, trimmed)
+                    .apply()
+            if (groqAudioService == null) {
+                initializeGroqService()
+            }
+            groqAudioService?.setApiKey(trimmed)
+            dualWebViewGroup.showToast("Groq API key saved from phone", 1500L)
+        }
+    }
+
+    override fun onControllerAirMouseRay(x: Float, y: Float, select: Boolean) {
+        runOnUiThread {
+            if (!::dualWebViewGroup.isInitialized) return@runOnUiThread
+            remoteControllerMode = ControllerMode.AIR_MOUSE
+            ensureMouseTapModeDisabled()
+            lastCursorX = x * CONTROLLER_CURSOR_WIDTH
+            lastCursorY = y * CONTROLLER_CURSOR_HEIGHT
+            lastKnownCursorX = lastCursorX
+            lastKnownCursorY = lastCursorY
+            refreshCursor(true)
+            if (select) {
+                dispatchTouchEventAtCursor()
+            }
+            dualWebViewGroup.noteUserInteraction()
+        }
+    }
+
+    override fun onControllerTrackpadDelta(dx: Float, dy: Float) {
+        runOnUiThread {
+            if (!::dualWebViewGroup.isInitialized) return@runOnUiThread
+            remoteControllerMode = ControllerMode.TRACKPAD
+            ensureMouseTapModeDisabled()
+            lastCursorX = (lastCursorX + dx).coerceIn(0f, CONTROLLER_CURSOR_WIDTH)
+            lastCursorY = (lastCursorY + dy).coerceIn(0f, CONTROLLER_CURSOR_HEIGHT)
+            lastKnownCursorX = lastCursorX
+            lastKnownCursorY = lastCursorY
+            refreshCursor(true)
+            dualWebViewGroup.noteUserInteraction()
+        }
+    }
+
+    override fun onControllerTap() {
+        runOnUiThread {
+            if (!::dualWebViewGroup.isInitialized) return@runOnUiThread
+            dispatchTouchEventAtCursor()
+            dualWebViewGroup.noteUserInteraction()
+        }
+    }
+
+    override fun onControllerTouch(action: ControllerTouchAction, x: Float, y: Float) {
+        runOnUiThread {
+            if (!::dualWebViewGroup.isInitialized || !::webView.isInitialized) return@runOnUiThread
+            val screenPoint = controllerNormalizedToScreen(x, y)
+            val motionAction =
+                    when (action) {
+                        ControllerTouchAction.DOWN -> MotionEvent.ACTION_DOWN
+                        ControllerTouchAction.MOVE -> MotionEvent.ACTION_MOVE
+                        ControllerTouchAction.UP -> MotionEvent.ACTION_UP
+                        ControllerTouchAction.CANCEL -> MotionEvent.ACTION_CANCEL
+                    }
+            val eventTime = SystemClock.uptimeMillis()
+            if (motionAction == MotionEvent.ACTION_DOWN) {
+                controllerTouchDownTime = eventTime
+            }
+            val downTime =
+                    if (controllerTouchDownTime > 0L) controllerTouchDownTime
+                    else eventTime
+
+            if (motionAction == MotionEvent.ACTION_UP &&
+                            handleMouseClickForCustomUi(screenPoint.first, screenPoint.second)
+            ) {
+                controllerTouchDownTime = 0L
+                return@runOnUiThread
+            }
+
+            dispatchWebTouchFromScreen(
+                    motionAction,
+                    screenPoint.first,
+                    screenPoint.second,
+                    eventTime,
+                    downTime
+            )
+            if (motionAction == MotionEvent.ACTION_UP) {
+                maybeShowKeyboardForMouseClick(screenPoint.first, screenPoint.second)
+            }
+            if (motionAction == MotionEvent.ACTION_UP || motionAction == MotionEvent.ACTION_CANCEL) {
+                controllerTouchDownTime = 0L
+            }
+            dualWebViewGroup.noteUserInteraction()
+        }
+    }
+
+    private fun controllerNormalizedToScreen(x: Float, y: Float): Pair<Float, Float> {
+        val groupLocation = IntArray(2)
+        dualWebViewGroup.getLocationOnScreen(groupLocation)
+        return groupLocation[0] + x * CONTROLLER_CURSOR_WIDTH to
+                groupLocation[1] + y * CONTROLLER_CURSOR_HEIGHT
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        if (::controllerBluetoothClient.isInitialized) {
+            controllerBluetoothClient.stop()
+        }
         pendingActiveStateSave?.let { handler.removeCallbacks(it) }
         pendingActiveStateSave = null
         pendingActiveStateWebView = null
