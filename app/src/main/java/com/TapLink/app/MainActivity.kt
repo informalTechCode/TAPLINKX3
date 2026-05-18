@@ -6266,6 +6266,17 @@ class MainActivity :
         }
 
         @JavascriptInterface
+        fun requestCurrentLocation() {
+            activity.runOnUiThread {
+                activity.noteGeolocationUse()
+                val location = activity.getLastLocation()
+                if (location != null) {
+                    activity.dualWebViewGroup.injectLocation(location.first, location.second)
+                }
+            }
+        }
+
+        @JavascriptInterface
         fun openUrl(url: String) {
             activity.runOnUiThread {
                 val formattedUrl = activity.formatUrl(url)

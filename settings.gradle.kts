@@ -22,4 +22,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "TapLinkX3"
 include(":app")
- 

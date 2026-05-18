@@ -27,6 +27,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var selectedColor = Color.WHITE
     private var selectedAngle = 0f
 
+    private val hsvBuffer = FloatArray(3)
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         centerX = w / 2f
@@ -68,16 +70,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     fun setColor(color: Int) {
         selectedColor = color
-        val hsv = FloatArray(3)
-        Color.colorToHSV(color, hsv)
-        selectedAngle = hsv[0] // Hue is 0-360
+        Color.colorToHSV(color, hsvBuffer)
+        selectedAngle = hsvBuffer[0] // Hue is 0-360
         invalidate()
     }
 
     /** returns the color at the specific angle (0-360) */
     fun getColorAtAngle(angle: Float): Int {
-        val hsv = floatArrayOf(angle, 1f, 1f)
-        return Color.HSVToColor(hsv)
+        hsvBuffer[0] = angle
+        hsvBuffer[1] = 1f
+        hsvBuffer[2] = 1f
+        return Color.HSVToColor(hsvBuffer)
     }
 
     // Since we handle touch manually in DualWebViewGroup, we expose a calculation helper
