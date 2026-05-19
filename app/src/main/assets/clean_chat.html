@@ -332,6 +332,9 @@
         let activeTtsAudio = null;
         let pendingTtsAudio = null;
         let isMicActive = false;
+        const MAX_STORED_MESSAGES = 12;
+        const MAX_HISTORY_MESSAGES = 8;
+        const MAX_HISTORY_CONTENT_CHARS = 1800;
 
         // Auto-scroll to bottom on load
         chatHistory.scrollTop = chatHistory.scrollHeight;
@@ -381,7 +384,7 @@
             console.warn('TTS error', message);
         };
 
-        function appendMessage(role, text) {
+        function appendMessage(role, text, options = {}) {
             // Map 'assistant' to 'ai' for CSS styling
             const displayRole = (role === 'assistant') ? 'ai' : role;
 
@@ -401,8 +404,38 @@
             if (role !== 'error' && role !== 'loading') {
                 // Ensure we store 'assistant' for API calls
                 const apiRole = (role === 'ai') ? 'assistant' : role;
-                messages.push({ role: apiRole, content: text });
+                const storedText = options.storeContent === false
+                    ? null
+                    : (options.historyContent || text);
+                if (storedText !== null) {
+                    messages.push({
+                        role: apiRole,
+                        content: clampHistoryContent(storedText)
+                    });
+                    trimStoredMessages();
+                }
             }
+        }
+
+        function clampHistoryContent(text) {
+            const value = String(text || '');
+            if (value.length <= MAX_HISTORY_CONTENT_CHARS) return value;
+            return `${value.slice(0, MAX_HISTORY_CONTENT_CHARS)}\n[Truncated]`;
+        }
+
+        function trimStoredMessages() {
+            if (messages.length > MAX_STORED_MESSAGES) {
+                messages = messages.slice(messages.length - MAX_STORED_MESSAGES);
+            }
+        }
+
+        function requestHistory() {
+            return messages
+                .slice(-MAX_HISTORY_MESSAGES)
+                .map((message) => ({
+                    role: message.role,
+                    content: clampHistoryContent(message.content)
+                }));
         }
 
         window.receiveGroqResponse = function (text) {
@@ -475,12 +508,18 @@
             chatHistory.scrollTop = chatHistory.scrollHeight;
         }
 
-        function sendMessage(text) {
-            appendMessage('user', text);
+        function sendMessage(text, options = {}) {
+            appendMessage('user', options.displayText || text, {
+                historyContent: options.historyContent
+            });
             // Call Native Bridge
             showLoading();
             if (window.GroqBridge && window.GroqBridge.chatWithGroq) {
-                window.GroqBridge.chatWithGroq(text, JSON.stringify(messages.slice(0, -1)), ttsEnabled);
+                window.GroqBridge.chatWithGroq(
+                    text,
+                    JSON.stringify(requestHistory().slice(0, -1)),
+                    ttsEnabled
+                );
             } else {
                 console.warn("GroqBridge not found");
                 setTimeout(() => {
@@ -527,7 +566,10 @@
             if (pageText) {
                 text += `\n\nContent:\n${pageText}`;
             }
-            sendMessage(text);
+            sendMessage(text, {
+                displayText: `Summarize this webpage:\nURL: ${url}`,
+                historyContent: `Asked to summarize webpage: ${url}`
+            });
         }
 
         sendBtn.addEventListener('click', sendChat);

@@ -172,8 +172,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var lastRefreshRateCheckTime = 0L
     private val scrollBarVisibilityThrottleMs = 50L
     private val minCaptureIntervalMs = 16L // Cap at ~60fps for non-max refresh modes
-    private var lastCursorUpdateTime = 0L
-    private val CURSOR_UPDATE_INTERVAL = 16L // 60fps cap for cursor updates
+    private var cursorUpdateFrameScheduled = false
+    private var pendingCursorVisible = false
     private var lastScrollBarInteractionTime = 0L
     private val scrollBarHoldMs = 1200L
     private var lastHorzScrollableAt = 0L
@@ -1203,37 +1203,46 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     // Function to update the cursor positions and visibility
     fun updateCursorPosition(x: Float, y: Float, isVisible: Boolean) {
-        val currentTime = System.currentTimeMillis()
         lastCursorX = x
         lastCursorY = y
+        pendingCursorVisible = isVisible
 
         if (!isAttachedToWindow) {
             return
         }
 
-        if (currentTime - lastCursorUpdateTime >= CURSOR_UPDATE_INTERVAL) {
-            if (isVisible) {
-                // Convert cursor from container-local to screen coordinates
-                getLocationOnScreen(reusableLocation)
-
-                // Account for UI scale and translation when calculating screen position
-                // Visual cursor is scaled around (320, 240) and then translated (only in
-                // non-anchored mode)
-                val transX = if (isAnchored) 0f else leftEyeUIContainer.translationX
-                val transY = if (isAnchored) 0f else leftEyeUIContainer.translationY
-
-                val visualX = 320f + (x - 320f) * uiScale + transX
-                val visualY = 240f + (y - 240f) * uiScale + transY
-
-                val screenX = visualX + reusableLocation[0]
-                val screenY = visualY + reusableLocation[1]
-
-                // Pass screen coordinates - buttons also use screen coordinates
-                updateButtonHoverStates(screenX, screenY, force = isAnchored)
+        if (!cursorUpdateFrameScheduled) {
+            cursorUpdateFrameScheduled = true
+            Choreographer.getInstance().postFrameCallback {
+                cursorUpdateFrameScheduled = false
+                dispatchPendingCursorPosition()
             }
-            listener?.onCursorPositionChanged(x, y, isVisible)
-            lastCursorUpdateTime = currentTime
         }
+    }
+
+    private fun dispatchPendingCursorPosition() {
+        if (!isAttachedToWindow) {
+            return
+        }
+
+        if (pendingCursorVisible) {
+            // Convert cursor from container-local to screen coordinates
+            getLocationOnScreen(reusableLocation)
+
+            // Account for UI scale and translation when calculating screen position.
+            val transX = if (isAnchored) 0f else leftEyeUIContainer.translationX
+            val transY = if (isAnchored) 0f else leftEyeUIContainer.translationY
+
+            val visualX = 320f + (lastCursorX - 320f) * uiScale + transX
+            val visualY = 240f + (lastCursorY - 240f) * uiScale + transY
+
+            val screenX = visualX + reusableLocation[0]
+            val screenY = visualY + reusableLocation[1]
+
+            // Pass screen coordinates - buttons also use screen coordinates
+            updateButtonHoverStates(screenX, screenY, force = isAnchored)
+        }
+        listener?.onCursorPositionChanged(lastCursorX, lastCursorY, pendingCursorVisible)
     }
 
     private fun refreshHoverAtCurrentCursor() {
@@ -2906,7 +2915,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // 2. Idle (no user interaction for 5s) and not playing media: 10fps (100ms)
         // 3. Anchored + normal browsing: max display vsync - needs lowest-latency head tracking
         // 4. Media playing: 60fps (16ms) - smooth video playback
-        // 5. Non-anchored without media: 30fps (33ms) - balanced for browsing
+        // 5. Non-anchored without media: 60fps (16ms) so controller input stays responsive
         refreshInterval =
                 when {
                     isScreenMasked -> maskedRefreshIntervalMs
@@ -2915,7 +2924,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     isIdle && !isMediaPlaying -> idleRefreshIntervalMs
                     isMediaPlaying -> 16L
                     isAnchored && !isFullscreen -> maxRefreshIntervalMs
-                    else -> 33L
+                    else -> 16L
                 }
     }
 

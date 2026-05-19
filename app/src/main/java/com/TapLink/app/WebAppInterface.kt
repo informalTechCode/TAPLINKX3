@@ -12,6 +12,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 
 @Keep
@@ -47,12 +48,12 @@ class WebAppInterface(private val context: Context, private val webView: WebView
 
                         val history =
                                 try {
-                                    org.json.JSONArray(historyJson)
+                                    JSONArray(historyJson)
                                 } catch (e: Exception) {
-                                    org.json.JSONArray()
+                                    JSONArray()
                                 }
 
-                        val messages = org.json.JSONArray()
+                        val messages = JSONArray()
                         // Add system prompt
                         val systemMsg = JSONObject()
                         systemMsg.put("role", "system")
@@ -72,15 +73,31 @@ Do not include internal reasoning traces or chain-of-thought."""
                         systemMsg.put("content", systemContent)
                         messages.put(systemMsg)
 
-                        // Add history
-                        for (i in 0 until history.length()) {
-                            messages.put(history.get(i))
+                        // Add bounded history so old browser-side chats cannot create 413 payloads.
+                        val historyStart =
+                                (history.length() - MAX_HISTORY_MESSAGES).coerceAtLeast(0)
+                        for (i in historyStart until history.length()) {
+                            val item = history.getJSONObject(i)
+                            if (item.optString("role") == "ai") {
+                                item.put("role", "assistant")
+                            }
+                            item.put(
+                                    "content",
+                                    truncateForRequest(
+                                            item.optString("content"),
+                                            MAX_HISTORY_MESSAGE_CHARS
+                                    )
+                            )
+                            messages.put(item)
                         }
 
                         // Add current user message
                         val userMsg = JSONObject()
                         userMsg.put("role", "user")
-                        userMsg.put("content", message)
+                        userMsg.put(
+                                "content",
+                                truncateForRequest(message, MAX_CURRENT_MESSAGE_CHARS)
+                        )
                         messages.put(userMsg)
 
                         val jsonBody = JSONObject()
@@ -102,6 +119,12 @@ Do not include internal reasoning traces or chain-of-thought."""
 
                         client.newCall(request).execute().use { response ->
                             if (!response.isSuccessful) {
+                                if (response.code == 413) {
+                                    postResponse(
+                                            "Error: Request was too large. I trimmed chat context; try the question again or start a fresh chat."
+                                    )
+                                    return@use
+                                }
                                 postResponse("Error: ${response.code} - ${response.message}")
                                 return@use
                             }
@@ -131,6 +154,12 @@ Do not include internal reasoning traces or chain-of-thought."""
                 .start()
     }
 
+    private fun truncateForRequest(text: String, maxChars: Int): String {
+        val value = text.trim()
+        if (value.length <= maxChars) return value
+        return value.take(maxChars) + "\n[Truncated to keep AI request under size limits.]"
+    }
+
     private fun postResponse(text: String) {
         mainHandler.post {
             // Escape single quotes and backslashes for JS string
@@ -148,5 +177,11 @@ Do not include internal reasoning traces or chain-of-thought."""
             ctx = ctx.baseContext
         }
         return ctx as? MainActivity
+    }
+
+    private companion object {
+        private const val MAX_HISTORY_MESSAGES = 8
+        private const val MAX_HISTORY_MESSAGE_CHARS = 1800
+        private const val MAX_CURRENT_MESSAGE_CHARS = 6000
     }
 }

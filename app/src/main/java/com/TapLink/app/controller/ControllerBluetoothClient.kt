@@ -229,10 +229,17 @@ class ControllerBluetoothClient(
 
                 when (type) {
                     "trackpad" -> {
-                        val dx = extractFloat(line, PREFIX_DX) ?: continue
-                        val dy = extractFloat(line, PREFIX_DY) ?: continue
+                        val dx = extractFloat(line, PREFIX_DX) ?: 0f
+                        val dy = extractFloat(line, PREFIX_DY) ?: 0f
+                        val action =
+                                parseTrackpadAction(extractString(line, PREFIX_ACTION) ?: "move")
+                                        ?: ControllerTrackpadAction.MOVE
+                        val pointerCount =
+                                (extractInt(line, PREFIX_POINTER_COUNT) ?: 1).coerceAtLeast(1)
 
-                        handler.post { listener.onControllerTrackpadDelta(dx, dy) }
+                        handler.post {
+                            listener.onControllerTrackpadGesture(action, dx, dy, pointerCount)
+                        }
                     }
                     "airMouse" -> {
                         val x = extractFloat(line, PREFIX_X) ?: continue
@@ -331,6 +338,31 @@ class ControllerBluetoothClient(
         } else null
     }
 
+    private fun extractInt(json: String, prefix: String): Int? {
+        val idx = json.indexOf(prefix)
+        if (idx < 0) return null
+        val start = idx + prefix.length
+        var end = start
+        while (end < json.length && json[end].isDigit()) {
+            end++
+        }
+        return if (end > start) {
+            try {
+                json.substring(start, end).toInt()
+            } catch (e: NumberFormatException) {
+                null
+            }
+        } else null
+    }
+
+    private fun extractString(json: String, prefix: String): String? {
+        val idx = json.indexOf(prefix)
+        if (idx < 0) return null
+        val start = idx + prefix.length
+        val end = json.indexOf('"', start)
+        return if (end > start) json.substring(start, end) else null
+    }
+
     private fun send(json: JSONObject) {
         val output = outputStream ?: return
         if (!isConnected.get()) return
@@ -361,6 +393,16 @@ class ControllerBluetoothClient(
                 else -> null
             }
 
+    private fun parseTrackpadAction(value: String): ControllerTrackpadAction? =
+            when (value) {
+                "down" -> ControllerTrackpadAction.DOWN
+                "move" -> ControllerTrackpadAction.MOVE
+                "pointer" -> ControllerTrackpadAction.POINTER
+                "up" -> ControllerTrackpadAction.UP
+                "cancel" -> ControllerTrackpadAction.CANCEL
+                else -> null
+            }
+
     private fun hasPermission(): Boolean =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 ActivityCompat.checkSelfPermission(
@@ -385,8 +427,10 @@ class ControllerBluetoothClient(
         val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
         // Pre-allocate strings for the high-speed parser to avoid Garbage Collection frame drops
+        private const val PREFIX_ACTION = "\"action\":\""
         private const val PREFIX_DX = "\"dx\":"
         private const val PREFIX_DY = "\"dy\":"
+        private const val PREFIX_POINTER_COUNT = "\"pointerCount\":"
         private const val PREFIX_X = "\"x\":"
         private const val PREFIX_Y = "\"y\":"
     }

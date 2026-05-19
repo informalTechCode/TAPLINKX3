@@ -14,8 +14,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Response
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 
 @Keep
@@ -119,12 +121,12 @@ class GroqInterface(private val context: Context, private val webView: WebView) 
 
                         val history =
                                 try {
-                                    org.json.JSONArray(historyJson)
+                                    JSONArray(historyJson)
                                 } catch (e: Exception) {
-                                    org.json.JSONArray()
+                                    JSONArray()
                                 }
 
-                        val messages = org.json.JSONArray()
+                        val messages = JSONArray()
                         // Add system prompt
                         val systemMsg = JSONObject()
                         systemMsg.put("role", "system")
@@ -163,62 +165,65 @@ Style:
                         systemMsg.put("content", systemContent)
                         messages.put(systemMsg)
 
-                        // Add history
-                        for (i in 0 until history.length()) {
+                        // Add bounded history. The browser also trims this, but native clamping keeps
+                        // old chat assets and URL-scheme callers from creating oversized requests.
+                        val historyStart =
+                                (history.length() - MAX_HISTORY_MESSAGES).coerceAtLeast(0)
+                        for (i in historyStart until history.length()) {
                             val item = history.getJSONObject(i)
                             // Fix role for API compatibility
                             if (item.optString("role") == "ai") {
                                 item.put("role", "assistant")
                             }
+                            item.put(
+                                    "content",
+                                    truncateForRequest(
+                                            item.optString("content"),
+                                            MAX_HISTORY_MESSAGE_CHARS
+                                    )
+                            )
                             messages.put(item)
                         }
 
                         // Add current user message
                         val userMsg = JSONObject()
                         userMsg.put("role", "user")
-                        userMsg.put("content", message)
+                        userMsg.put(
+                                "content",
+                                truncateForRequest(message, MAX_CURRENT_MESSAGE_CHARS)
+                        )
                         messages.put(userMsg)
 
-                        val jsonBody = JSONObject()
-                        jsonBody.put("model", "groq/compound")
-                        jsonBody.put("messages", messages)
-
-                        val requestBody =
-                                jsonBody.toString()
-                                        .toRequestBody(
-                                                "application/json; charset=utf-8".toMediaType()
-                                        )
-
-                        val request =
-                                Request.Builder()
-                                        .url("https://api.groq.com/openai/v1/chat/completions")
-                                        .addHeader("Authorization", "Bearer $apiKey")
-                                        .post(requestBody)
-                                        .build()
-
-                        var actualResponse = client.newCall(request).execute()
-                        if (!actualResponse.isSuccessful) {
-                            DebugLog.w("GroqInterface", "groq/compound failed with code ${actualResponse.code}. Retrying with llama-3.3-70b-versatile...")
+                        var actualResponse = executeChatRequest(apiKey, "groq/compound", messages)
+                        if (!actualResponse.isSuccessful && actualResponse.code == 413) {
+                            DebugLog.w(
+                                    "GroqInterface",
+                                    "Groq request too large. Retrying without history."
+                            )
                             actualResponse.close()
-
-                            val fallbackJsonBody = JSONObject()
-                            fallbackJsonBody.put("model", "llama-3.3-70b-versatile")
-                            fallbackJsonBody.put("messages", messages)
-
-                            val fallbackRequestBody =
-                                    fallbackJsonBody.toString()
-                                            .toRequestBody(
-                                                    "application/json; charset=utf-8".toMediaType()
-                                            )
-
-                            val fallbackRequest =
-                                    Request.Builder()
-                                            .url("https://api.groq.com/openai/v1/chat/completions")
-                                            .addHeader("Authorization", "Bearer $apiKey")
-                                            .post(fallbackRequestBody)
-                                            .build()
-
-                            actualResponse = client.newCall(fallbackRequest).execute()
+                            actualResponse =
+                                    executeChatRequest(
+                                            apiKey,
+                                            "groq/compound",
+                                            compactMessages(systemContent, message)
+                                    )
+                        }
+                        if (!actualResponse.isSuccessful) {
+                            DebugLog.w(
+                                    "GroqInterface",
+                                    "groq/compound failed with code ${actualResponse.code}. Retrying with llama-3.3-70b-versatile..."
+                            )
+                            actualResponse.close()
+                            actualResponse =
+                                    executeChatRequest(
+                                            apiKey,
+                                            "llama-3.3-70b-versatile",
+                                            if (messages.toString().length > MAX_REQUEST_BODY_CHARS) {
+                                                compactMessages(systemContent, message)
+                                            } else {
+                                                messages
+                                            }
+                                    )
                         }
 
                         actualResponse.use { response ->
@@ -262,6 +267,43 @@ Style:
                     }
                 }
                 .start()
+    }
+
+    private fun executeChatRequest(apiKey: String, model: String, messages: JSONArray): Response {
+        val jsonBody =
+                JSONObject()
+                        .put("model", model)
+                        .put("messages", messages)
+                        .toString()
+                        .toRequestBody("application/json; charset=utf-8".toMediaType())
+
+        val request =
+                Request.Builder()
+                        .url("https://api.groq.com/openai/v1/chat/completions")
+                        .addHeader("Authorization", "Bearer $apiKey")
+                        .post(jsonBody)
+                        .build()
+
+        return client.newCall(request).execute()
+    }
+
+    private fun compactMessages(systemContent: String, message: String): JSONArray {
+        return JSONArray()
+                .put(JSONObject().put("role", "system").put("content", systemContent))
+                .put(
+                        JSONObject()
+                                .put("role", "user")
+                                .put(
+                                        "content",
+                                        truncateForRequest(message, MAX_COMPACT_MESSAGE_CHARS)
+                                )
+                )
+    }
+
+    private fun truncateForRequest(text: String, maxChars: Int): String {
+        val value = text.trim()
+        if (value.length <= maxChars) return value
+        return value.take(maxChars) + "\n[Truncated to keep AI request under size limits.]"
     }
 
     @JavascriptInterface
@@ -440,5 +482,10 @@ Style:
     private companion object {
         private const val DASHBOARD_URL =
                 "file:///android_asset/AR_Dashboard_Landscape_Sidebar.html"
+        private const val MAX_HISTORY_MESSAGES = 8
+        private const val MAX_HISTORY_MESSAGE_CHARS = 1800
+        private const val MAX_CURRENT_MESSAGE_CHARS = 6000
+        private const val MAX_COMPACT_MESSAGE_CHARS = 4000
+        private const val MAX_REQUEST_BODY_CHARS = 18000
     }
 }

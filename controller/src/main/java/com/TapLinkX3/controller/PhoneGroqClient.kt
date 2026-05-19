@@ -36,10 +36,30 @@ class PhoneGroqClient {
                     try {
                         val messages = JSONArray().apply {
                             put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
-                            for (i in 0 until history.length()) {
-                                put(history.getJSONObject(i))
+                            val historyStart =
+                                    (history.length() - MAX_HISTORY_ITEMS).coerceAtLeast(0)
+                            for (i in historyStart until history.length()) {
+                                val item = history.getJSONObject(i)
+                                item.put(
+                                        "content",
+                                        truncateForRequest(
+                                                item.optString("content"),
+                                                MAX_HISTORY_MESSAGE_CHARS
+                                        )
+                                )
+                                put(item)
                             }
-                            put(JSONObject().put("role", "user").put("content", trimmedMessage))
+                            put(
+                                    JSONObject()
+                                            .put("role", "user")
+                                            .put(
+                                                    "content",
+                                                    truncateForRequest(
+                                                            trimmedMessage,
+                                                            MAX_CURRENT_MESSAGE_CHARS
+                                                    )
+                                            )
+                            )
                         }
 
                         val body =
@@ -60,17 +80,27 @@ class PhoneGroqClient {
 
                         var actualResponse = client.newCall(request).execute()
                         if (!actualResponse.isSuccessful) {
+                            val failedCode = actualResponse.code
                             actualResponse.close()
+
+                            val fallbackMessages =
+                                    if (failedCode == 413 ||
+                                                    messages.toString().length >
+                                                            MAX_REQUEST_BODY_CHARS
+                                    ) {
+                                        compactMessages(trimmedMessage)
+                                    } else {
+                                        messages
+                                    }
 
                             val fallbackBody =
                                     JSONObject()
                                             .put("model", "llama-3.3-70b-versatile")
-                                            .put("messages", messages)
+                                            .put("messages", fallbackMessages)
                                             .toString()
                                             .toRequestBody(
                                                     "application/json; charset=utf-8".toMediaType()
                                             )
-
                             val fallbackRequest =
                                     Request.Builder()
                                             .url("https://api.groq.com/openai/v1/chat/completions")
@@ -120,8 +150,31 @@ class PhoneGroqClient {
         }
     }
 
+    private fun compactMessages(message: String): JSONArray {
+        return JSONArray()
+                .put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
+                .put(
+                        JSONObject()
+                                .put("role", "user")
+                                .put(
+                                        "content",
+                                        truncateForRequest(message, MAX_COMPACT_MESSAGE_CHARS)
+                                )
+                )
+    }
+
+    private fun truncateForRequest(text: String, maxChars: Int): String {
+        val value = text.trim()
+        if (value.length <= maxChars) return value
+        return value.take(maxChars) + "\n[Truncated to keep AI request under size limits.]"
+    }
+
     companion object {
-        private const val MAX_HISTORY_ITEMS = 12
+        private const val MAX_HISTORY_ITEMS = 8
+        private const val MAX_HISTORY_MESSAGE_CHARS = 1800
+        private const val MAX_CURRENT_MESSAGE_CHARS = 6000
+        private const val MAX_COMPACT_MESSAGE_CHARS = 4000
+        private const val MAX_REQUEST_BODY_CHARS = 18000
         private const val SYSTEM_PROMPT =
                 """You are TapLink AI, the phone-side assistant for TapLink X3 on RayNeo X3 Pro glasses.
 

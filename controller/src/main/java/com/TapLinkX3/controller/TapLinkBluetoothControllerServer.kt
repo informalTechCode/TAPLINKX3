@@ -80,12 +80,23 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
         // Use raw string for high-frequency sensor events to avoid JSONObject overhead
         val cx = x.coerceIn(0f, 1f)
         val cy = y.coerceIn(0f, 1f)
-        sendRaw("""{"type":"airMouse","x":$cx,"y":$cy,"select":$select}""")
+        sendLatestRaw("""{"type":"airMouse","x":$cx,"y":$cy,"select":$select}""")
     }
 
-    fun sendTrackpadDelta(dx: Float, dy: Float) {
+    fun sendTrackpadDelta(
+            dx: Float,
+            dy: Float,
+            pointerCount: Int = 1,
+            action: TrackpadAction = TrackpadAction.MOVE
+    ) {
         // Use raw string for high-frequency touch events to avoid JSONObject overhead
-        sendRaw("""{"type":"trackpad","dx":$dx,"dy":$dy}""")
+        sendRaw(
+                """{"type":"trackpad","action":"${action.wireName}","dx":$dx,"dy":$dy,"pointerCount":${pointerCount.coerceAtLeast(1)}}"""
+        )
+    }
+
+    fun sendTrackpadGesture(action: TrackpadAction, pointerCount: Int = 1) {
+        sendTrackpadDelta(0f, 0f, pointerCount, action)
     }
 
     fun sendScroll(dy: Float) {
@@ -198,6 +209,8 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
             java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
                 Thread(runnable, "TapLinkControllerWriter").apply { isDaemon = true }
             }
+    private val latestRawMessage = java.util.concurrent.atomic.AtomicReference<String?>(null)
+    private val latestRawWriteScheduled = AtomicBoolean(false)
 
     private fun send(json: JSONObject) {
         sendRaw(json.toString())
@@ -207,16 +220,43 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
     private fun sendRaw(data: String) {
         if (!isConnected.get()) return
         writeExecutor.execute {
-            val output = outputStream ?: return@execute
-            try {
-                synchronized(output) {
-                    output.write(data.toByteArray(Charsets.UTF_8))
-                    output.write('\n'.code)
-                    output.flush()
-                }
-            } catch (_: IOException) {
-                isConnected.set(false)
+            writeRawToOutput(data)
+        }
+    }
+
+    /**
+     * Latest-only fast path for absolute-position streams. If Bluetooth falls behind, old air
+     * mouse rays are stale and should be replaced instead of queued and replayed later.
+     */
+    private fun sendLatestRaw(data: String) {
+        if (!isConnected.get()) return
+        latestRawMessage.set(data)
+        if (latestRawWriteScheduled.compareAndSet(false, true)) {
+            writeExecutor.execute { drainLatestRawMessages() }
+        }
+    }
+
+    private fun drainLatestRawMessages() {
+        while (true) {
+            val next = latestRawMessage.getAndSet(null) ?: break
+            writeRawToOutput(next)
+        }
+        latestRawWriteScheduled.set(false)
+        if (latestRawMessage.get() != null && latestRawWriteScheduled.compareAndSet(false, true)) {
+            writeExecutor.execute { drainLatestRawMessages() }
+        }
+    }
+
+    private fun writeRawToOutput(data: String) {
+        val output = outputStream ?: return
+        try {
+            synchronized(output) {
+                output.write(data.toByteArray(Charsets.UTF_8))
+                output.write('\n'.code)
+                output.flush()
             }
+        } catch (_: IOException) {
+            isConnected.set(false)
         }
     }
 
@@ -237,6 +277,14 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
     enum class TouchAction(val wireName: String) {
         DOWN("down"),
         MOVE("move"),
+        UP("up"),
+        CANCEL("cancel")
+    }
+
+    enum class TrackpadAction(val wireName: String) {
+        DOWN("down"),
+        MOVE("move"),
+        POINTER("pointer"),
         UP("up"),
         CANCEL("cancel")
     }

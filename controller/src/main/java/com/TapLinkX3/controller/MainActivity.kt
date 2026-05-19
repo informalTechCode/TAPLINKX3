@@ -52,7 +52,7 @@ class MainActivity : Activity(), SensorEventListener {
     private lateinit var aiAskButton: Button
     private var suppressKeyboardTextChange = false
 
-    private var trackpadSensitivity = 2.5f
+    private var trackpadSensitivity = DEFAULT_TRACKPAD_SENSITIVITY
     private var airMouseSensitivity = 1.0f
 
     private var mode = TapLinkBluetoothControllerServer.ControllerMode.TRACKPAD
@@ -68,10 +68,24 @@ class MainActivity : Activity(), SensorEventListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        trackpadSensitivity = prefs.getFloat(KEY_TRACKPAD_SENSITIVITY, 2.5f)
+        val savedTrackpadSensitivity =
+                prefs.getFloat(KEY_TRACKPAD_SENSITIVITY, DEFAULT_TRACKPAD_SENSITIVITY)
+        trackpadSensitivity =
+                if (abs(savedTrackpadSensitivity - LEGACY_TRACKPAD_SENSITIVITY) < 0.001f ||
+                                abs(savedTrackpadSensitivity - PREVIOUS_DEFAULT_TRACKPAD_SENSITIVITY) < 0.001f
+                ) {
+                    DEFAULT_TRACKPAD_SENSITIVITY
+                } else {
+                    savedTrackpadSensitivity
+                }
+        if (trackpadSensitivity != savedTrackpadSensitivity) {
+            prefs.edit().putFloat(KEY_TRACKPAD_SENSITIVITY, trackpadSensitivity).apply()
+        }
         airMouseSensitivity = prefs.getFloat(KEY_AIR_MOUSE_SENSITIVITY, 1.0f)
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
-        rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        rotationSensor =
+                sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
+                        ?: sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         setContentView(buildContentView())
         controllerServer.onConnectionChanged = { connected ->
             runOnUiThread {
@@ -149,25 +163,60 @@ class MainActivity : Activity(), SensorEventListener {
         }
     }
 
-    // Trackpad fractional leftovers.
-    // This is NOT time batching. It only preserves sub-pixel movement.
+    // Trackpad movement keeps fractional carry between packets, but is emitted immediately so
+    // cursor motion follows the finger instead of waiting for the next phone display frame.
     private var pendingTrackpadDx = 0f
     private var pendingTrackpadDy = 0f
+    private var hasPendingTrackpadDelta = false
+    private var maxPointerCountInGesture = 1
 
-    // Air mouse duplicate suppression.
+    // Air mouse duplicate suppression and frame-paced output.
     private var lastSentAirMouseX = Float.NaN
     private var lastSentAirMouseY = Float.NaN
     private var lastSentAirMouseSelect = false
+    private var pendingAirMouseX = 0.5f
+    private var pendingAirMouseY = 0.5f
+    private var pendingAirMouseSelect = false
+    private var hasPendingAirMouse = false
 
-    private val AIR_MOUSE_MIN_DELTA = 0.0015f
+    private val AIR_MOUSE_MIN_DELTA = 0.00075f
 
-    // VSYNC-aligned input dispatcher with Bluetooth Throttling
+    // VSYNC-aligned input dispatcher with Bluetooth throttling.
     private val frameCallback =
             object : Choreographer.FrameCallback {
                 override fun doFrame(frameTimeNanos: Long) {
-                    // Intentionally empty.
-                    // Trackpad sends directly from MotionEvent.ACTION_MOVE.
-                    // Air mouse sends directly from onSensorChanged().
+                    if (mode == TapLinkBluetoothControllerServer.ControllerMode.TRACKPAD &&
+                                    hasPendingTrackpadDelta
+                    ) {
+                        flushPendingTrackpadDelta()
+                    }
+
+                    if (mode == TapLinkBluetoothControllerServer.ControllerMode.AIR_MOUSE &&
+                                    hasPendingAirMouse
+                    ) {
+                        hasPendingAirMouse = false
+
+                        val shouldSend =
+                                lastSentAirMouseX.isNaN() ||
+                                        abs(pendingAirMouseX - lastSentAirMouseX) >=
+                                                AIR_MOUSE_MIN_DELTA ||
+                                        abs(pendingAirMouseY - lastSentAirMouseY) >=
+                                                AIR_MOUSE_MIN_DELTA ||
+                                        pendingAirMouseSelect != lastSentAirMouseSelect
+
+                        if (shouldSend) {
+                            lastSentAirMouseX = pendingAirMouseX
+                            lastSentAirMouseY = pendingAirMouseY
+                            lastSentAirMouseSelect = pendingAirMouseSelect
+                            controllerServer.sendAirMouseRay(
+                                    pendingAirMouseX,
+                                    pendingAirMouseY,
+                                    pendingAirMouseSelect
+                            )
+                        }
+                    }
+
+                    Choreographer.getInstance().postFrameCallback(this)
                 }
             }
 
@@ -182,10 +231,11 @@ class MainActivity : Activity(), SensorEventListener {
                 sensorManager.registerListener(
                         this@MainActivity,
                         it,
-                        SensorManager.SENSOR_DELAY_GAME
+                        SensorManager.SENSOR_DELAY_FASTEST
                 )
             }
         }
+        Choreographer.getInstance().postFrameCallback(frameCallback)
     }
 
     override fun onResume() {
@@ -200,7 +250,8 @@ class MainActivity : Activity(), SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        if (event.sensor.type != Sensor.TYPE_ROTATION_VECTOR ||
+        if ((event.sensor.type != Sensor.TYPE_GAME_ROTATION_VECTOR &&
+                        event.sensor.type != Sensor.TYPE_ROTATION_VECTOR) ||
                         mode != TapLinkBluetoothControllerServer.ControllerMode.AIR_MOUSE
         ) {
             return
@@ -228,23 +279,14 @@ class MainActivity : Activity(), SensorEventListener {
         val yawRange = AIR_MOUSE_YAW_RANGE / airMouseSensitivity
         val pitchRange = AIR_MOUSE_PITCH_RANGE / airMouseSensitivity
 
-        val x = (0.5f + angleDelta(yaw, baselineYaw) / yawRange).coerceIn(0f, 1f)
-        val y = (0.5f + (pitch - baselinePitch) / pitchRange).coerceIn(0f, 1f)
+        val rawX = (0.5f + angleDelta(yaw, baselineYaw) / yawRange).coerceIn(0f, 1f)
+        val rawY = (0.5f + (pitch - baselinePitch) / pitchRange).coerceIn(0f, 1f)
         val select = false
 
-        val shouldSend =
-                lastSentAirMouseX.isNaN() ||
-                        abs(x - lastSentAirMouseX) >= AIR_MOUSE_MIN_DELTA ||
-                        abs(y - lastSentAirMouseY) >= AIR_MOUSE_MIN_DELTA ||
-                        select != lastSentAirMouseSelect
-
-        if (!shouldSend) return
-
-        lastSentAirMouseX = x
-        lastSentAirMouseY = y
-        lastSentAirMouseSelect = select
-
-        controllerServer.sendAirMouseRay(x, y, select)
+        pendingAirMouseX = rawX
+        pendingAirMouseY = rawY
+        pendingAirMouseSelect = select
+        hasPendingAirMouse = true
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
@@ -433,6 +475,7 @@ class MainActivity : Activity(), SensorEventListener {
                             }
                     )
                     setOnCheckedChangeListener { group, checkedId ->
+                        flushPendingTrackpadDelta()
                         val checked = group.findViewById<RadioButton>(checkedId)
                         mode =
                                 if (checked.text.toString().contains("Air")) {
@@ -843,58 +886,75 @@ class MainActivity : Activity(), SensorEventListener {
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                lastPadX = event.x
-                lastPadY = event.y
-                touchStartX = event.x
-                touchStartY = event.y
+                val (x, y) = trackpadCentroid(event)
+                lastPadX = x
+                lastPadY = y
+                touchStartX = x
+                touchStartY = y
                 totalTouchDistance = 0f
+                maxPointerCountInGesture = event.pointerCount
 
-                pendingTrackpadDx = 0f
-                pendingTrackpadDy = 0f
+                resetTrackpadAccumulator(x, y, event.pointerCount)
+                if (!isAirMouse) {
+                    controllerServer.sendTrackpadGesture(
+                            TapLinkBluetoothControllerServer.TrackpadAction.DOWN,
+                            event.pointerCount
+                    )
+                }
 
+                return true
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                flushPendingTrackpadDelta((event.pointerCount - 1).coerceAtLeast(1))
+                val (x, y) = trackpadCentroid(event)
+                resetTrackpadAccumulator(x, y, event.pointerCount)
+                if (!isAirMouse) {
+                    controllerServer.sendTrackpadGesture(
+                            TapLinkBluetoothControllerServer.TrackpadAction.POINTER,
+                            event.pointerCount
+                    )
+                }
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
-                val dx = event.x - lastPadX
-                val dy = event.y - lastPadY
-
-                totalTouchDistance += sqrt(dx * dx + dy * dy)
-
-                lastPadX = event.x
-                lastPadY = event.y
-
-                if (!isAirMouse) {
-                    // Preserve fractional/sub-pixel movement locally.
-                    // Send immediately once there is at least 1 pixel worth of movement.
-                    pendingTrackpadDx += dx * trackpadSensitivity
-                    pendingTrackpadDy += dy * trackpadSensitivity
-
-                    val sendDx = pendingTrackpadDx.toInt()
-                    val sendDy = pendingTrackpadDy.toInt()
-
-                    if (sendDx != 0 || sendDy != 0) {
-                        pendingTrackpadDx -= sendDx.toFloat()
-                        pendingTrackpadDy -= sendDy.toFloat()
-
-                        controllerServer.sendTrackpadDelta(sendDx.toFloat(), sendDy.toFloat())
-                    }
-                }
+                val (x, y) = trackpadCentroid(event)
+                processTrackpadSample(x, y, event.pointerCount, isAirMouse)
 
                 return true
             }
+            MotionEvent.ACTION_POINTER_UP -> {
+                flushPendingTrackpadDelta(event.pointerCount)
+                val remainingPointerCount = (event.pointerCount - 1).coerceAtLeast(1)
+                val (x, y) = trackpadCentroid(event, excludeActionPointer = true)
+                resetTrackpadAccumulator(x, y, remainingPointerCount)
+                if (!isAirMouse) {
+                    controllerServer.sendTrackpadGesture(
+                            TapLinkBluetoothControllerServer.TrackpadAction.POINTER,
+                            remainingPointerCount
+                    )
+                }
+                return true
+            }
             MotionEvent.ACTION_UP -> {
-                if (isAirMouse) {
-                    val dx = event.x - lastPadX
-                    val dy = event.y - lastPadY
-                    totalTouchDistance += sqrt(dx * dx + dy * dy)
+                val (x, y) = trackpadCentroid(event)
+                processTrackpadSample(x, y, event.pointerCount, isAirMouse)
+
+                if (!isAirMouse) {
+                    flushPendingTrackpadDelta(event.pointerCount)
+                    controllerServer.sendTrackpadGesture(
+                            TapLinkBluetoothControllerServer.TrackpadAction.UP,
+                            event.pointerCount
+                    )
+                } else {
+                    pendingTrackpadDx = 0f
+                    pendingTrackpadDy = 0f
+                    hasPendingTrackpadDelta = false
                 }
 
-                pendingTrackpadDx = 0f
-                pendingTrackpadDy = 0f
-
-                if (totalTouchDistance < TAP_DISTANCE_PX &&
-                                abs(event.x - touchStartX) < TAP_DISTANCE_PX &&
-                                abs(event.y - touchStartY) < TAP_DISTANCE_PX
+                if (maxPointerCountInGesture == 1 &&
+                                totalTouchDistance < TAP_DISTANCE_PX &&
+                                abs(x - touchStartX) < TAP_DISTANCE_PX &&
+                                abs(y - touchStartY) < TAP_DISTANCE_PX
                 ) {
                     controllerServer.sendTap()
                 }
@@ -902,13 +962,105 @@ class MainActivity : Activity(), SensorEventListener {
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
-                pendingTrackpadDx = 0f
-                pendingTrackpadDy = 0f
+                flushPendingTrackpadDelta(event.pointerCount)
+                if (!isAirMouse) {
+                    controllerServer.sendTrackpadGesture(
+                            TapLinkBluetoothControllerServer.TrackpadAction.CANCEL,
+                            event.pointerCount
+                    )
+                }
                 return true
             }
         }
 
         return false
+    }
+
+    private fun resetTrackpadAccumulator(x: Float, y: Float, pointerCount: Int) {
+        lastPadX = x
+        lastPadY = y
+        pendingTrackpadDx = 0f
+        pendingTrackpadDy = 0f
+        hasPendingTrackpadDelta = false
+        maxPointerCountInGesture = maxOf(maxPointerCountInGesture, pointerCount)
+    }
+
+    private fun processTrackpadSample(
+            x: Float,
+            y: Float,
+            pointerCount: Int,
+            isAirMouse: Boolean
+    ) {
+        val dx = x - lastPadX
+        val dy = y - lastPadY
+
+        totalTouchDistance += sqrt(dx * dx + dy * dy)
+        lastPadX = x
+        lastPadY = y
+        maxPointerCountInGesture = maxOf(maxPointerCountInGesture, pointerCount)
+
+        if (isAirMouse) return
+
+        if (pointerCount >= 2) {
+            flushPendingTrackpadDelta(pointerCount)
+            if (abs(dy) >= TRACKPAD_MIN_DELTA) {
+                controllerServer.sendScroll(-dy * trackpadSensitivity)
+            }
+            return
+        }
+
+        pendingTrackpadDx += dx * trackpadSensitivity
+        pendingTrackpadDy += dy * trackpadSensitivity
+        hasPendingTrackpadDelta = true
+    }
+
+    private fun trackpadCentroid(
+            event: MotionEvent,
+            historyIndex: Int? = null,
+            excludeActionPointer: Boolean = false
+    ): Pair<Float, Float> {
+        val ignoredIndex = if (excludeActionPointer) event.actionIndex else -1
+        var x = 0f
+        var y = 0f
+        var count = 0
+
+        for (pointerIndex in 0 until event.pointerCount) {
+            if (pointerIndex == ignoredIndex) continue
+            x +=
+                    if (historyIndex == null) {
+                        event.getX(pointerIndex)
+                    } else {
+                        event.getHistoricalX(pointerIndex, historyIndex)
+                    }
+            y +=
+                    if (historyIndex == null) {
+                        event.getY(pointerIndex)
+                    } else {
+                        event.getHistoricalY(pointerIndex, historyIndex)
+                    }
+            count++
+        }
+
+        return if (count > 0) x / count to y / count else event.x to event.y
+    }
+
+    private fun flushPendingTrackpadDelta(pointerCount: Int = 1) {
+        if (!hasPendingTrackpadDelta) return
+
+        val dx = pendingTrackpadDx
+        val dy = pendingTrackpadDy
+        pendingTrackpadDx = 0f
+        pendingTrackpadDy = 0f
+        hasPendingTrackpadDelta = false
+
+        if (abs(dx) >= TRACKPAD_MIN_DELTA || abs(dy) >= TRACKPAD_MIN_DELTA) {
+            controllerServer.sendTrackpadDelta(
+                    dx,
+                    dy,
+                    pointerCount,
+                    TapLinkBluetoothControllerServer.TrackpadAction.MOVE
+            )
+        }
     }
 
     private fun updateModeChrome() {
@@ -1102,7 +1254,11 @@ class MainActivity : Activity(), SensorEventListener {
         private const val KEY_GROQ_API_KEY = "groq_api_key"
         private const val KEY_TRACKPAD_SENSITIVITY = "trackpad_sensitivity"
         private const val KEY_AIR_MOUSE_SENSITIVITY = "air_mouse_sensitivity"
+        private const val DEFAULT_TRACKPAD_SENSITIVITY = 2.25f
+        private const val PREVIOUS_DEFAULT_TRACKPAD_SENSITIVITY = 1.5f
+        private const val LEGACY_TRACKPAD_SENSITIVITY = 2.5f
         private const val TAP_DISTANCE_PX = 24f
+        private const val TRACKPAD_MIN_DELTA = 0.05f
         private const val AIR_MOUSE_YAW_RANGE = PI.toFloat() / 3f
         private const val AIR_MOUSE_PITCH_RANGE = PI.toFloat() / 4f
     }

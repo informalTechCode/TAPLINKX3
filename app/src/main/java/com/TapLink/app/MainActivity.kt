@@ -65,6 +65,7 @@ import com.TapLinkX3.app.controller.ControllerBluetoothClient
 import com.TapLinkX3.app.controller.ControllerInputListener
 import com.TapLinkX3.app.controller.ControllerMode
 import com.TapLinkX3.app.controller.ControllerTouchAction
+import com.TapLinkX3.app.controller.ControllerTrackpadAction
 import com.TapLinkX3.app.controller.GlassesCursorController
 import com.ffalconxr.mercury.ipc.Launcher
 import com.ffalconxr.mercury.ipc.helpers.GPSIPCHelper
@@ -6333,6 +6334,17 @@ class MainActivity :
     override fun onControllerTrackpadDelta(dx: Float, dy: Float) {
         if (::cursorController.isInitialized) {
             cursorController.onControllerTrackpadDelta(dx, dy)
+        }
+    }
+
+    override fun onControllerTrackpadGesture(
+            action: ControllerTrackpadAction,
+            dx: Float,
+            dy: Float,
+            pointerCount: Int
+    ) {
+        if (::cursorController.isInitialized) {
+            cursorController.onControllerTrackpadGesture(action, dx, dy, pointerCount)
         }
     }
 

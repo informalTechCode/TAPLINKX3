@@ -2,31 +2,26 @@ package com.TapLinkX3.app.controller
 
 import android.util.Log
 import android.view.Choreographer
-import kotlin.math.abs
 
 /**
- * A headless manager that handles high-frequency Bluetooth inputs, smoothly interpolates through
- * network jitter, and syncs the output perfectly to the display refresh rate (VSYNC).
+ * A headless manager that handles high-frequency Bluetooth inputs and keeps cursor updates
+ * aligned with the active controller mode.
  */
 class GlassesCursorController(private val screenWidth: Int, private val screenHeight: Int) :
         ControllerInputListener {
 
     private var currentMode = ControllerMode.TRACKPAD
+    private val cursorWidth = minOf(screenWidth.toFloat(), LEFT_SCREEN_WIDTH)
 
     // 1. The target coordinates (where the Bluetooth tells us to be)
-    private var targetX = screenWidth / 2f
+    private var targetX = cursorWidth / 2f
     private var targetY = screenHeight / 2f
     private var targetSelect = false
     private var targetSelectUpdated = false
 
-    // 2. The actual smoothed coordinates (where the cursor actually renders)
+    // 2. The actual coordinates rendered by the cursor
     private var currentX = targetX
     private var currentY = targetY
-
-    // 3. The smoothing factor (0.1f to 1.0f).
-    // 0.45f is the sweet spot: it completely hides Bluetooth packet-batching
-    // without feeling laggy or "floaty" to the user.
-    private val SMOOTHING_FACTOR = 0.45f
 
     private var onUpdateListener: ((Float, Float, Boolean) -> Unit)? = null
 
@@ -46,20 +41,10 @@ class GlassesCursorController(private val screenWidth: Int, private val screenHe
                 override fun doFrame(frameTimeNanos: Long) {
                     if (!isRunning) return
 
-                    // 1. Keep the network targets mathematically within the screen bounds
-                    targetX = targetX.coerceIn(0f, screenWidth.toFloat())
+                    // Keep the network targets mathematically within the screen bounds.
+                    targetX = targetX.coerceIn(0f, cursorWidth)
                     targetY = targetY.coerceIn(0f, screenHeight.toFloat())
 
-                    // 2. Interpolate (Lerp) the current position toward the target
-                    // This is the magic line that eats all the network jitter!
-                    currentX += (targetX - currentX) * SMOOTHING_FACTOR
-                    currentY += (targetY - currentY) * SMOOTHING_FACTOR
-
-                    // Snap to target if the difference is microscopic to stop infinite math
-                    if (abs(targetX - currentX) < 0.1f) currentX = targetX
-                    if (abs(targetY - currentY) < 0.1f) currentY = targetY
-
-                    // 3. Trigger callback ONLY if the *current* position actually changed
                     if (currentX != lastSentX || currentY != lastSentY || targetSelectUpdated) {
                         val select = targetSelect
                         onUpdateListener?.invoke(currentX, currentY, select)
@@ -70,7 +55,6 @@ class GlassesCursorController(private val screenWidth: Int, private val screenHe
                         targetSelectUpdated = false
                     }
 
-                    // 4. Schedule the next frame
                     Choreographer.getInstance().postFrameCallback(this)
                 }
             }
@@ -94,9 +78,19 @@ class GlassesCursorController(private val screenWidth: Int, private val screenHe
     }
 
     override fun onControllerTrackpadDelta(dx: Float, dy: Float) {
-        if (currentMode != ControllerMode.TRACKPAD) return
+        onControllerTrackpadGesture(ControllerTrackpadAction.MOVE, dx, dy, 1)
+    }
 
-        targetX = (targetX + dx).coerceIn(0f, screenWidth.toFloat())
+    override fun onControllerTrackpadGesture(
+            action: ControllerTrackpadAction,
+            dx: Float,
+            dy: Float,
+            pointerCount: Int
+    ) {
+        if (currentMode != ControllerMode.TRACKPAD) return
+        if (action != ControllerTrackpadAction.MOVE || pointerCount >= 2) return
+
+        targetX = (targetX + dx).coerceIn(0f, cursorWidth)
         targetY = (targetY + dy).coerceIn(0f, screenHeight.toFloat())
 
         // Trackpad should feel direct, not eased toward a delayed target.
@@ -115,22 +109,20 @@ class GlassesCursorController(private val screenWidth: Int, private val screenHe
     override fun onControllerAirMouseRay(x: Float, y: Float, select: Boolean) {
         if (currentMode != ControllerMode.AIR_MOUSE) return
 
-        targetX = (x * screenWidth).coerceIn(0f, screenWidth.toFloat())
+        targetX = (x * cursorWidth).coerceIn(0f, cursorWidth)
         targetY = (y * screenHeight).coerceIn(0f, screenHeight.toFloat())
         targetSelect = select
-        targetSelectUpdated = true
 
-        // If you want air mouse immediate too, bypass the lerp here as well.
+        // Air mouse should follow the latest phone rotation sample immediately. Smoothing already
+        // happens at the phone sensor/Bluetooth pacing layer, so lerping here adds visible lag.
         currentX = targetX
         currentY = targetY
 
         if (currentX != lastSentX || currentY != lastSentY || select != lastSentSelect) {
             onUpdateListener?.invoke(currentX, currentY, select)
-
             lastSentX = currentX
             lastSentY = currentY
             lastSentSelect = select
-            targetSelectUpdated = false
         }
     }
 
@@ -148,4 +140,8 @@ class GlassesCursorController(private val screenWidth: Int, private val screenHe
     override fun onControllerKey(key: String) {}
     override fun onControllerGroqApiKey(key: String) {}
     override fun onControllerAiPrompt(prompt: String) {}
+
+    private companion object {
+        private const val LEFT_SCREEN_WIDTH = 640f
+    }
 }

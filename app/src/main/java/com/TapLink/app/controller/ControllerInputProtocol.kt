@@ -8,6 +8,12 @@ interface ControllerInputListener {
     fun onControllerGroqApiKey(key: String)
     fun onControllerAirMouseRay(x: Float, y: Float, select: Boolean)
     fun onControllerTrackpadDelta(dx: Float, dy: Float)
+    fun onControllerTrackpadGesture(
+            action: ControllerTrackpadAction,
+            dx: Float,
+            dy: Float,
+            pointerCount: Int
+    )
     fun onControllerScroll(dy: Float)
     fun onControllerTap()
     fun onControllerTouch(action: ControllerTouchAction, x: Float, y: Float)
@@ -17,6 +23,14 @@ interface ControllerInputListener {
 enum class ControllerMode {
     AIR_MOUSE,
     TRACKPAD
+}
+
+enum class ControllerTrackpadAction {
+    DOWN,
+    MOVE,
+    POINTER,
+    UP,
+    CANCEL
 }
 
 enum class ControllerTouchAction {
