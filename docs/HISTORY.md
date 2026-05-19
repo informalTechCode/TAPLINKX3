@@ -2,6 +2,12 @@
 
 The original TapLink builds and documentation were published through the release log hosted at https://pastebin.com/80GGhiEK. To preserve that history inside the repository, the paste contents are reproduced below with light formatting for readability.
 
+### TapLink 1.6.0 (May 19, 2026)
+
+- **Source code**: Repository current
+- **Maintenance**:
+  - Bumped Android app version to **1.6.0** with incremented `versionCode` for release distribution.
+
 ### TapLink 1.5.0 (February 6, 2026)
 
 - **Source code**: Repository current
