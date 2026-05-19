@@ -16,6 +16,20 @@ TapLink also supports a pointer-driven mouse tap mode for wearable mouse devices
 - Right-eye pointer coordinates are translated onto the left-eye interaction plane for consistent targeting.
 - Press-drag-release over web content is converted into touch-style swipe scroll, and drag release is consumed to avoid accidental link activation.
 
+## Phone controller input
+
+The TapLink Controller phone app supports two cursor modes:
+
+- **Trackpad**: single-finger swipes send relative cursor deltas; stationary taps click at the current cursor. Movement is accumulated once per display frame to avoid Bluetooth/network backlog. Two-finger vertical movement is routed as scroll.
+- **Air mouse**: phone rotation maps to an absolute normalized ray. The controller prefers the game rotation vector sensor, emits the latest frame-paced ray, and recenters to the middle of the left-eye interaction plane.
+
+Controller input has two transport paths:
+
+- **Bluetooth RFCOMM** is always used for pairing, control messages, keyboard sync, API-key sync, and as a fallback for input.
+- **UDP network input** is preferred for high-frequency trackpad, scroll, and air mouse packets when the devices can reach each other over Wi-Fi or Bluetooth-tethered networking. Glasses listen on UDP port `37693`; the phone listens for discovery on UDP port `37692`.
+
+Air mouse packets are absolute positions, so stale packets are discarded/replaced before sending. Trackpad packets are relative deltas, so they are coalesced per frame instead of replaying every raw touch sample.
+
 ## Anchored tap pipeline
 
 ```mermaid

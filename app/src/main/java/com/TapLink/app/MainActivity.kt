@@ -64,6 +64,7 @@ import androidx.core.content.edit
 import com.TapLinkX3.app.controller.ControllerBluetoothClient
 import com.TapLinkX3.app.controller.ControllerInputListener
 import com.TapLinkX3.app.controller.ControllerMode
+import com.TapLinkX3.app.controller.ControllerNetworkInputServer
 import com.TapLinkX3.app.controller.ControllerTouchAction
 import com.TapLinkX3.app.controller.ControllerTrackpadAction
 import com.TapLinkX3.app.controller.GlassesCursorController
@@ -161,6 +162,7 @@ class MainActivity :
     private var mouseSwipeLastY = 0f
     private var mouseSwipeDownTime = 0L
     private lateinit var controllerBluetoothClient: ControllerBluetoothClient
+    private lateinit var controllerNetworkInputServer: ControllerNetworkInputServer
     private lateinit var cursorController: GlassesCursorController
     private var remoteControllerMode = ControllerMode.AIR_MOUSE
     private var controllerTouchDownTime = 0L
@@ -563,6 +565,8 @@ class MainActivity :
         dualWebViewGroup.maskToggleListener = this
         dualWebViewGroup.windowCallback = this
         dualWebViewGroup.restoreState()
+        controllerNetworkInputServer = ControllerNetworkInputServer(this, this)
+        controllerNetworkInputServer.start()
         controllerBluetoothClient = ControllerBluetoothClient(this, this)
         controllerBluetoothClient.start()
 
@@ -6208,6 +6212,13 @@ class MainActivity :
             if (!savedGroqKey.isNullOrBlank()) {
                 controllerBluetoothClient.sendGroqApiKey(savedGroqKey)
             }
+
+            if (::controllerNetworkInputServer.isInitialized) {
+                controllerBluetoothClient.sendNetworkEndpoint(
+                        ControllerNetworkInputServer.GLASSES_INPUT_PORT,
+                        controllerNetworkInputServer.localIpv4Addresses()
+                )
+            }
         }
     }
 
@@ -6449,6 +6460,9 @@ class MainActivity :
         super.onDestroy()
         if (::controllerBluetoothClient.isInitialized) {
             controllerBluetoothClient.stop()
+        }
+        if (::controllerNetworkInputServer.isInitialized) {
+            controllerNetworkInputServer.stop()
         }
         pendingActiveStateSave?.let { handler.removeCallbacks(it) }
         pendingActiveStateSave = null

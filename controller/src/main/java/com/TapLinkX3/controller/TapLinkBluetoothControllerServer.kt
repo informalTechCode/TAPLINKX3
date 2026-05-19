@@ -32,9 +32,11 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
     private var acceptThread: Thread? = null
     private val isRunning = AtomicBoolean(false)
     private val isConnected = AtomicBoolean(false)
+    private val networkTransport = TapLinkNetworkControllerTransport()
 
     fun start(): Boolean {
         if (isRunning.get()) return true
+        networkTransport.start()
 
         val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
@@ -67,6 +69,7 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
         outputStream = null
         acceptThread?.interrupt()
         acceptThread = null
+        networkTransport.stop()
         onConnectionChanged?.invoke(false)
     }
 
@@ -80,7 +83,10 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
         // Use raw string for high-frequency sensor events to avoid JSONObject overhead
         val cx = x.coerceIn(0f, 1f)
         val cy = y.coerceIn(0f, 1f)
-        sendLatestRaw("""{"type":"airMouse","x":$cx,"y":$cy,"select":$select}""")
+        val data = """{"type":"airMouse","x":$cx,"y":$cy,"select":$select}"""
+        if (!networkTransport.sendLatest(data)) {
+            sendLatestRaw(data)
+        }
     }
 
     fun sendTrackpadDelta(
@@ -90,9 +96,11 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
             action: TrackpadAction = TrackpadAction.MOVE
     ) {
         // Use raw string for high-frequency touch events to avoid JSONObject overhead
-        sendRaw(
+        val data =
                 """{"type":"trackpad","action":"${action.wireName}","dx":$dx,"dy":$dy,"pointerCount":${pointerCount.coerceAtLeast(1)}}"""
-        )
+        if (!networkTransport.send(data)) {
+            sendRaw(data)
+        }
     }
 
     fun sendTrackpadGesture(action: TrackpadAction, pointerCount: Int = 1) {
@@ -100,7 +108,10 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
     }
 
     fun sendScroll(dy: Float) {
-        sendRaw("""{"type":"scroll","dy":$dy}""")
+        val data = """{"type":"scroll","dy":$dy}"""
+        if (!networkTransport.send(data)) {
+            sendRaw(data)
+        }
     }
 
     fun sendTap() {
@@ -199,6 +210,25 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
                 onKeyboardVisibilityRequested?.invoke(json.optBoolean("visible", false))
             } else if (json.optString("type") == "groqApiKey") {
                 onGroqApiKeyReceived?.invoke(json.optString("key"))
+            } else if (json.optString("type") == TapLinkNetworkControllerTransport.TYPE_ENDPOINT) {
+                val port =
+                        json.optInt(
+                                "port",
+                                TapLinkNetworkControllerTransport.GLASSES_INPUT_PORT
+                        )
+                val addressesJson = json.optJSONArray("addresses")
+                val addresses =
+                        if (addressesJson == null) {
+                            emptyList()
+                        } else {
+                            buildList {
+                                for (i in 0 until addressesJson.length()) {
+                                    val address = addressesJson.optString(i)
+                                    if (address.isNotBlank()) add(address)
+                                }
+                            }
+                        }
+                networkTransport.updateEndpoint(addresses, port)
             }
         }
         Log.d(TAG, "readMessages loop ended — glasses disconnected")

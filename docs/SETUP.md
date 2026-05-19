@@ -41,3 +41,13 @@ Gradle wrapper commands are available for CI:
 - To install without Android Studio, build or download the APK and sideload it onto your headset/phone. A step-by-step walkthrough is available here.
 -   [![TapLink X3 sideloading walkthrough](https://img.youtube.com/vi/l3wu7x14LKY/maxresdefault.jpg)](https://www.youtube.com/watch?v=l3wu7x14LKY)
 - When sideloading via ADB, enable developer options on the target device and confirm that unknown sources are allowed in the headset settings before installing the APK.
+
+## Controller networking
+
+The TapLink Controller still requires Bluetooth pairing, but high-frequency cursor input can use a UDP network lane when the phone and glasses can reach each other over Wi-Fi or Bluetooth-tethered networking.
+
+- Glasses UDP input port: `37693`
+- Phone UDP discovery port: `37692`
+- Bluetooth remains the fallback if UDP discovery or delivery is blocked.
+
+For best input latency, keep both devices on the same reachable network path and avoid firewall/VPN rules that block local UDP broadcast or direct UDP packets between the devices.

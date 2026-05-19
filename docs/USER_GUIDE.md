@@ -185,7 +185,7 @@ When Scroll Mode is active, a small transparent **Show** button appears in the b
 
 ## TapLink Controller (Phone Companion App)
 
-The `controller` module builds a standalone Android phone app that connects to the glasses over Bluetooth RFCOMM.
+The `controller` module builds a standalone Android phone app. Bluetooth is still required for pairing, discovery, keyboard visibility, API-key sync, and fallback input. High-frequency cursor input can also use a UDP network lane over Wi-Fi or Bluetooth-tethered networking, which avoids the latency and packet queueing limits of Bluetooth RFCOMM.
 
 ### Setup
 1. **Pair** your phone and the RayNeo X3 glasses via Bluetooth settings.
@@ -193,6 +193,18 @@ The `controller` module builds a standalone Android phone app that connects to t
 3. **Launch** the controller app. It starts the Bluetooth server automatically.
 4. **Launch** TapLink X3 on the glasses. The glasses client connects to the phone within a few seconds.
 5. The status bar shows **"Connected to TapLink glasses"** when linked.
+6. For the lowest-latency cursor path, keep the phone and glasses on the same IP network path. TapLink auto-discovers the glasses UDP input server on port `37693` by broadcast to phone port `37692`; if discovery is blocked, the glasses also send their network endpoint over Bluetooth after connecting.
+
+### Controller Transport
+
+TapLink uses two controller transports at the same time:
+
+| Transport | Used for | Notes |
+| --- | --- | --- |
+| **Bluetooth RFCOMM** | Pairing, mode changes, keyboard visibility, API-key sync, AI prompt handoff, and fallback input. | Required for automatic setup and compatibility. |
+| **UDP network lane** | Air mouse rays, trackpad movement, and scroll. | Preferred when available. Uses latest-position semantics for air mouse so stale packets are not replayed. |
+
+If cursor input still feels delayed, confirm the phone and glasses can reach each other over the active network path and that UDP ports `37692` and `37693` are not blocked. If the UDP path is unavailable, TapLink continues over Bluetooth.
 
 ### Controls
 
@@ -218,7 +230,7 @@ The `controller` module builds a standalone Android phone app that connects to t
 1. Select **Air Mouse** in the mode selector.
 2. The **Recenter** button appears next to the mode selector.
 3. Tilt the phone to aim. Tap the trackpad area to click.
-4. Tap **Recenter** to re-zero the aim direction.
+4. Tap **Recenter** to re-zero the aim direction. Recenter maps the cursor to the center of the left-eye interaction plane, not the divider between both eyes.
 
 ## Voice Control and AI
 - **Speech-to-Text**: Tap the **Mic** key on the on-screen keyboard to dictate into the active field.

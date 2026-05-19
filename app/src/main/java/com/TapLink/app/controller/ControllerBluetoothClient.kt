@@ -80,6 +80,15 @@ class ControllerBluetoothClient(
         send(JSONObject().put("type", "groqApiKey").put("key", key))
     }
 
+    fun sendNetworkEndpoint(port: Int, addresses: List<String>) {
+        send(
+                JSONObject()
+                        .put("type", ControllerNetworkInputServer.TYPE_ENDPOINT)
+                        .put("port", port)
+                        .put("addresses", org.json.JSONArray(addresses))
+        )
+    }
+
     @SuppressLint("MissingPermission")
     private fun connectToPhone() {
         workerThread =

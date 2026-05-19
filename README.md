@@ -9,7 +9,7 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
 - **Dual-eye rendering** that mirrors a single `WebView` into a left-eye clip with a cursor and a right-eye `SurfaceView` preview.
 - **Custom keyboard** with anchored and focus-driven modes, supporting casing toggles, symbol layouts, and dynamic buttons.
 - **Voice Control**: High-accuracy speech-to-text powered by the Groq API. Activate it by pressing the microphone key on the custom keyboard. An API key is required and can be entered via the settings menu.
-- **TapLink Controller**: A companion phone app that connects over Bluetooth RFCOMM to provide trackpad, air mouse, keyboard, and AI controls for the glasses.
+- **TapLink Controller**: A companion phone app that pairs over Bluetooth and uses a low-latency UDP network lane for high-frequency trackpad, air mouse, and scroll input when Wi-Fi/Bluetooth tether networking is available. Bluetooth remains the fallback and handles setup/control messages.
 
 ## Gesture Reference
 
@@ -33,7 +33,7 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
 *   **API Key Entry**: Use the `scrcpy` keyboard or the TapLink Controller phone app to enter your Groq API key. The key syncs automatically between glasses and controller on connect.
 - **Persistent bookmarks** managed through `BookmarksView` with storage handled by `BookmarkManager`.
 - **TapLink AI** powered by Groq, providing a dedicated chat interface for reasoning and real-time help.
-- **TapLink Controller**: Pair your phone via Bluetooth, install the controller APK, and open it. The glasses connect automatically.
+- **TapLink Controller**: Pair your phone via Bluetooth, install the controller APK, and open it. The glasses connect automatically. For smoother cursor input, keep both devices on the same network path; TapLink uses UDP ports `37692` and `37693` for the controller network lane when reachable.
 
 ## Useful Features
 
