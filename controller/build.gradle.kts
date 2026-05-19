@@ -35,6 +35,13 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
+    applicationVariants.all {
+        outputs.all {
+            val output = this as? com.android.build.gradle.api.ApkVariantOutput
+            output?.outputFileName = "TaplinkX3-Controller.apk"
+        }
+    }
 }
 
 kotlin {
