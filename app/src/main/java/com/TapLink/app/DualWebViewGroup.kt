@@ -6369,28 +6369,26 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val resetTextColorButton = menu.findViewById<Button>(R.id.btnResetTextColor)
             val groqKeyButton = menu.findViewById<Button>(R.id.btnGroqApiKey)
 
-            fun getRect(view: View?): Rect? {
+            fun getHitRect(view: View?, slopPx: Int): Rect? {
                 if (view == null || view.visibility != View.VISIBLE) return null
-                val rect = Rect()
-                return if (view.getGlobalVisibleRect(rect)) rect else null
-            }
-
-            fun contains(rect: Rect?, slopPx: Int): Boolean {
-                if (rect == null) return false
-                return x >= rect.left - slopPx &&
-                        x <= rect.right + slopPx &&
-                        y >= rect.top - slopPx &&
-                        y <= rect.bottom + slopPx
+                if (!view.getGlobalVisibleRect(reusableRect)) return null
+                if (x >= reusableRect.left - slopPx &&
+                        x <= reusableRect.right + slopPx &&
+                        y >= reusableRect.top - slopPx &&
+                        y <= reusableRect.bottom + slopPx) {
+                    return reusableRect
+                }
+                return null
             }
 
             val menuSlop = (2f * uiScale).roundToInt()
             val sliderSlop = (1f * uiScale).roundToInt()
             val buttonSlop = (3f * uiScale).roundToInt()
 
-            if (contains(getRect(menu), menuSlop)) {
+            if (getHitRect(menu, menuSlop) != null) {
                 // Check if click is on volume seekbar
-                val volumeRect = getRect(volumeSeekBar)
-                if (volumeSeekBar != null && contains(volumeRect, sliderSlop)) {
+                val volumeRect = getHitRect(volumeSeekBar, sliderSlop)
+                if (volumeRect != null) {
 
                     // Calculate relative position on seekbar
                     val relativeX = (x - volumeRect!!.left) / uiScale
@@ -6420,8 +6418,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on brightness seekbar
-                val brightnessRect = getRect(brightnessSeekBar)
-                if (brightnessSeekBar != null && contains(brightnessRect, sliderSlop)) {
+                val brightnessRect = getHitRect(brightnessSeekBar, sliderSlop)
+                if (brightnessRect != null) {
 
                     // Calculate relative position on seekbar
                     val relativeX = (x - brightnessRect!!.left) / uiScale
@@ -6445,8 +6443,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on force dark toggle button
-                val forceDarkRect = getRect(forceDarkButton)
-                if (forceDarkButton != null && contains(forceDarkRect, buttonSlop)) {
+                val forceDarkRect = getHitRect(forceDarkButton, buttonSlop)
+                if (forceDarkRect != null) {
                     val prefs = context.getSharedPreferences("TapLinkPrefs", Context.MODE_PRIVATE)
                     val currentlyEnabled = prefs.getBoolean("forceDarkWebEnabled", true)
                     val newEnabled = !currentlyEnabled
@@ -6460,8 +6458,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on smoothness seekbar
-                val smoothnessRect = getRect(smoothnessSeekBar)
-                if (smoothnessSeekBar != null && contains(smoothnessRect, sliderSlop)) {
+                val smoothnessRect = getHitRect(smoothnessSeekBar, sliderSlop)
+                if (smoothnessRect != null) {
 
                     // Calculate relative position on seekbar
                     val relativeX = (x - smoothnessRect!!.left) / uiScale
@@ -6491,9 +6489,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                 // Check if click is on cursor sensitivity seekbar
                 val sensitivitySeekBar = menu.findViewById<SeekBar>(R.id.cursorSensitivitySeekBar)
-                val sensitivityRect = getRect(sensitivitySeekBar)
-
-                if (sensitivitySeekBar != null && contains(sensitivityRect, sliderSlop)) {
+                val sensitivityRect = getHitRect(sensitivitySeekBar, sliderSlop)
+                if (sensitivityRect != null) {
                     // Calculate relative position on seekbar
                     val relativeX = (x - sensitivityRect!!.left) / uiScale
                     val percentage =
@@ -6521,9 +6518,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 // Check if click is on reset sensitivity button
                 val resetSensitivityButton =
                         menu.findViewById<Button>(R.id.btnResetCursorSensitivity)
-                val resetSensitivityRect = getRect(resetSensitivityButton)
-
-                if (resetSensitivityButton != null && contains(resetSensitivityRect, buttonSlop)) {
+                val resetSensitivityRect = getHitRect(resetSensitivityButton, buttonSlop)
+                if (resetSensitivityRect != null) {
                     // Reset to 50%
                     // val sensitivitySeekBar =
                     //        menu.findViewById<SeekBar>(R.id.cursorSensitivitySeekBar)
@@ -6544,8 +6540,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on screen size seekbar
-                val screenSizeRect = getRect(screenSizeSeekBar)
-                if (screenSizeSeekBar != null && contains(screenSizeRect, sliderSlop)) {
+                val screenSizeRect = getHitRect(screenSizeSeekBar, sliderSlop)
+                if (screenSizeRect != null) {
 
                     // Calculate relative position on seekbar
                     val relativeX = (x - screenSizeRect!!.left) / uiScale
@@ -6610,8 +6606,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on Groq API Key button
-                val groqKeyRect = getRect(groqKeyButton)
-                if (groqKeyButton != null && contains(groqKeyRect, buttonSlop)) {
+                val groqKeyRect = getHitRect(groqKeyButton, buttonSlop)
+                if (groqKeyRect != null) {
 
                     // Visual feedback
                     groqKeyButton.isPressed = true
@@ -6628,8 +6624,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on reset screen size button
-                val resetScreenSizeRect = getRect(resetScreenSizeButton)
-                if (resetScreenSizeButton != null && contains(resetScreenSizeRect, buttonSlop)) {
+                val resetScreenSizeRect = getHitRect(resetScreenSizeButton, buttonSlop)
+                if (resetScreenSizeRect != null) {
 
                     // Reset screen size to 100%
                     screenSizeSeekBar?.progress = 100
@@ -6681,11 +6677,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on horizontal pos seekbar
-                val horizontalPosRect = getRect(horizontalPosSeekBar)
-                if (horizontalPosSeekBar != null &&
-                                horizontalPosSeekBar.visibility == View.VISIBLE &&
-                                contains(horizontalPosRect, sliderSlop)
-                ) {
+                val horizontalPosRect = getHitRect(horizontalPosSeekBar, sliderSlop)
+                if (horizontalPosRect != null) {
 
                     val relativeX = (x - horizontalPosRect!!.left) / uiScale
                     val percentage =
@@ -6709,11 +6702,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on vertical pos seekbar
-                val verticalPosRect = getRect(verticalPosSeekBar)
-                if (verticalPosSeekBar != null &&
-                                verticalPosSeekBar.visibility == View.VISIBLE &&
-                                contains(verticalPosRect, sliderSlop)
-                ) {
+                val verticalPosRect = getHitRect(verticalPosSeekBar, sliderSlop)
+                if (verticalPosRect != null) {
 
                     val relativeX = (x - verticalPosRect!!.left) / uiScale
                     val percentage =
@@ -6737,11 +6727,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on reset button
-                val resetRect = getRect(resetButton)
-                if (resetButton != null &&
-                                resetButton.visibility == View.VISIBLE &&
-                                contains(resetRect, buttonSlop)
-                ) {
+                val resetRect = getHitRect(resetButton, buttonSlop)
+                if (resetRect != null) {
 
                     // Reset position progress to 50 (center)
                     horizontalPosSeekBar?.progress = 50
@@ -6763,8 +6750,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on help button
-                val helpRect = getRect(helpButton)
-                if (helpButton != null && contains(helpRect, buttonSlop)) {
+                val helpRect = getHitRect(helpButton, buttonSlop)
+                if (helpRect != null) {
 
                     // Visual feedback
                     helpButton.isPressed = true
@@ -6782,9 +6769,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                 // Check if click is on Reset Zoom button
                 val resetZoomButton = menu.findViewById<Button>(R.id.btnResetFontSize)
-                val resetZoomRect = getRect(resetZoomButton)
-
-                if (resetZoomButton != null && contains(resetZoomRect, buttonSlop)) {
+                val resetZoomRect = getHitRect(resetZoomButton, buttonSlop)
+                if (resetZoomRect != null) {
 
                     // Reset font size to 100% (progress 50)
                     fontSizeSeekBar?.progress = 50
@@ -6809,9 +6795,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                 // Check if click is on Reset Webpage Zoom button
                 val resetWebpageZoomButton = menu.findViewById<Button>(R.id.btnResetWebpageZoom)
-                val resetWebpageZoomRect = getRect(resetWebpageZoomButton)
-
-                if (resetWebpageZoomButton != null && contains(resetWebpageZoomRect, buttonSlop)) {
+                val resetWebpageZoomRect = getHitRect(resetWebpageZoomButton, buttonSlop)
+                if (resetWebpageZoomRect != null) {
 
                     // Reset webpage zoom to 1.0
                     currentWebZoom = 1.0f
@@ -6847,8 +6832,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on font size seekbar
-                val fontSizeRect = getRect(fontSizeSeekBar)
-                if (fontSizeSeekBar != null && contains(fontSizeRect, sliderSlop)) {
+                val fontSizeRect = getHitRect(fontSizeSeekBar, sliderSlop)
+                if (fontSizeRect != null) {
 
                     // Calculate relative position on seekbar
                     val relativeX = (x - fontSizeRect!!.left) / uiScale
@@ -6879,8 +6864,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on color wheel
-                val colorWheelRect = getRect(colorWheelView)
-                if (colorWheelView != null && contains(colorWheelRect, sliderSlop)) {
+                val colorWheelRect = getHitRect(colorWheelView, sliderSlop)
+                if (colorWheelRect != null) {
 
                     // Calculate relative position
                     val relativeX = (x - colorWheelRect!!.left) / uiScale
@@ -6904,8 +6889,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on reset text color button
-                val resetTextColorRect = getRect(resetTextColorButton)
-                if (resetTextColorButton != null && contains(resetTextColorRect, buttonSlop)) {
+                val resetTextColorRect = getHitRect(resetTextColorButton, buttonSlop)
+                if (resetTextColorRect != null) {
 
                     // Reset color to white
                     colorWheelView?.setColor(Color.WHITE)
@@ -6921,8 +6906,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
                 // Check if click is on close button
-                val closeRect = getRect(closeButton)
-                if (closeButton != null && contains(closeRect, buttonSlop)) {
+                val closeRect = getHitRect(closeButton, buttonSlop)
+                if (closeRect != null) {
 
                     // Visual feedback
                     closeButton.isPressed = true

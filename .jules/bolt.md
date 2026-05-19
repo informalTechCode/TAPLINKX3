@@ -22,3 +22,6 @@
 ## 2024-05-15 - Prevent Object Allocation in Touch Methods
 **Learning:** Frequent object allocation in high-frequency methods like `updateCursorPosition`, `refreshHoverAtCurrentCursor`, `updateHoverLocal` causes garbage collection and UI stutter. Using `IntArray(2)` allocations creates excessive churn during cursor hover loops.
 **Action:** Preallocate single instance objects like `IntArray(2)` as class members to reduce object allocation.
+## 2024-05-14 - Mutable Shared State in Utility Functions
+**Learning:** Returning a pre-allocated object (like `reusableRect`) directly from a helper function (like `getHitRect`) can create brittle code if the calling functions hold onto those references. Even if it works sequentially, it is an anti-pattern that can lead to shared mutable state bugs later.
+**Action:** When pre-allocating objects for performance, functions should either return boolean results after doing calculations internally, copy values into caller-provided references (e.g. `outRect`), or restrict usage to immediately reading primitives before the next allocation.
