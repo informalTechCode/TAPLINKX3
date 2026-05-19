@@ -53,7 +53,7 @@ class MainActivity : Activity(), SensorEventListener {
     private var suppressKeyboardTextChange = false
 
     private var trackpadSensitivity = DEFAULT_TRACKPAD_SENSITIVITY
-    private var airMouseSensitivity = 1.0f
+    private var airMouseSensitivity = DEFAULT_AIR_MOUSE_SENSITIVITY
 
     private var mode = TapLinkBluetoothControllerServer.ControllerMode.TRACKPAD
     private var hasBaseline = false
@@ -81,7 +81,7 @@ class MainActivity : Activity(), SensorEventListener {
         if (trackpadSensitivity != savedTrackpadSensitivity) {
             prefs.edit().putFloat(KEY_TRACKPAD_SENSITIVITY, trackpadSensitivity).apply()
         }
-        airMouseSensitivity = prefs.getFloat(KEY_AIR_MOUSE_SENSITIVITY, 1.0f)
+        airMouseSensitivity = prefs.getFloat(KEY_AIR_MOUSE_SENSITIVITY, DEFAULT_AIR_MOUSE_SENSITIVITY)
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
         rotationSensor =
                 sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
@@ -1277,6 +1277,7 @@ class MainActivity : Activity(), SensorEventListener {
         private const val DEFAULT_TRACKPAD_SENSITIVITY = 2.25f
         private const val PREVIOUS_DEFAULT_TRACKPAD_SENSITIVITY = 1.5f
         private const val LEGACY_TRACKPAD_SENSITIVITY = 2.5f
+        private const val DEFAULT_AIR_MOUSE_SENSITIVITY = 1.5f
         private const val TAP_DISTANCE_PX = 24f
         private const val TRACKPAD_MIN_DELTA = 0.05f
         private const val AIR_MOUSE_YAW_RANGE = PI.toFloat() / 3f
