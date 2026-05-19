@@ -32,6 +32,7 @@ class ControllerBluetoothClient(
     private var outputStream: OutputStream? = null
     private var workerThread: Thread? = null
     private val handler = Handler(Looper.getMainLooper())
+    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     fun start(): Boolean {
         if (isRunning.get()) return true
@@ -60,8 +61,8 @@ class ControllerBluetoothClient(
     }
 
     fun stop() {
+        val wasConnected = isConnected.getAndSet(false)
         isRunning.set(false)
-        isConnected.set(false)
         try {
             socket?.close()
         } catch (_: IOException) {}
@@ -69,7 +70,9 @@ class ControllerBluetoothClient(
         outputStream = null
         workerThread?.interrupt()
         workerThread = null
-        listener.onControllerDisconnected()
+        if (wasConnected) {
+            listener.onControllerDisconnected()
+        }
     }
 
     fun sendKeyboardVisibility(visible: Boolean) {
@@ -138,6 +141,9 @@ class ControllerBluetoothClient(
                                                         "Successfully connected to controller phone!"
                                                 )
 
+                                                // Remember this device for faster reconnection
+                                                prefs.edit().putString(KEY_LAST_CONTROLLER_ADDRESS, phone.address).apply()
+
                                                 listener.onControllerConnected(
                                                         deviceName,
                                                         phone.address
@@ -168,14 +174,17 @@ class ControllerBluetoothClient(
                                         }
                                     }
 
-                                    isConnected.set(false)
+                                    val wasConnected = isConnected.getAndSet(false)
                                     outputStream = null
                                     try {
                                         socket?.close()
                                     } catch (_: IOException) {}
                                     socket = null
 
-                                    listener.onControllerDisconnected()
+                                    // Only fire disconnect if we were actually connected and stop() didn't already fire it
+                                    if (wasConnected && isRunning.get()) {
+                                        listener.onControllerDisconnected()
+                                    }
                                     Log.d(TAG, "Disconnected from controller")
 
                                     if (isRunning.get()) {
@@ -204,6 +213,17 @@ class ControllerBluetoothClient(
 
         for (device in pairedDevices) {
             Log.d(TAG, "Found paired device: ${device.name} [${device.address}]")
+        }
+
+        // Prefer the last successfully connected controller device
+        val savedAddress = prefs.getString(KEY_LAST_CONTROLLER_ADDRESS, null)
+        if (!savedAddress.isNullOrBlank()) {
+            val saved = pairedDevices.firstOrNull { it.address == savedAddress }
+            if (saved != null) {
+                Log.d(TAG, "Using saved controller: ${saved.name} [${saved.address}]")
+                return saved
+            }
+            Log.d(TAG, "Saved controller $savedAddress no longer paired, falling back to heuristic")
         }
 
         val likelyPhone =
@@ -431,6 +451,8 @@ class ControllerBluetoothClient(
 
     companion object {
         private const val TAG = "ControllerBluetooth"
+        private const val PREFS_NAME = "TapLinkControllerClient"
+        private const val KEY_LAST_CONTROLLER_ADDRESS = "last_controller_address"
         private const val RETRY_DELAY_MS = 2500L
         private const val RECONNECT_DELAY_MS = 2000L
         val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")

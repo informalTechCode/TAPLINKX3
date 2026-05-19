@@ -19,6 +19,7 @@ class ControllerNetworkInputServer(
 ) {
     private val isRunning = AtomicBoolean(false)
     private val loggedActiveReceive = AtomicBoolean(false)
+    private val lastReceiveAtMs = java.util.concurrent.atomic.AtomicLong(0L)
     private val handler = Handler(Looper.getMainLooper())
     private var socket: DatagramSocket? = null
     private var receiveThread: Thread? = null
@@ -80,6 +81,7 @@ class ControllerNetworkInputServer(
             try {
                 val packet = DatagramPacket(buffer, buffer.size)
                 udpSocket.receive(packet)
+                lastReceiveAtMs.set(System.currentTimeMillis())
                 if (loggedActiveReceive.compareAndSet(false, true)) {
                     Log.d(TAG, "Network controller UDP receive active from ${packet.address.hostAddress}")
                 }
@@ -98,8 +100,11 @@ class ControllerNetworkInputServer(
     private fun discoveryLoop(udpSocket: DatagramSocket) {
         while (isRunning.get()) {
             sendDiscovery(udpSocket)
+            // Broadcast more aggressively when not yet receiving data, slower once active
+            val interval = if (System.currentTimeMillis() - lastReceiveAtMs.get() < ACTIVE_THRESHOLD_MS)
+                    DISCOVERY_IDLE_INTERVAL_MS else DISCOVERY_INTERVAL_MS
             try {
-                Thread.sleep(DISCOVERY_INTERVAL_MS)
+                Thread.sleep(interval)
             } catch (_: InterruptedException) {
                 break
             }
@@ -253,6 +258,8 @@ class ControllerNetworkInputServer(
         private const val TYPE_ACK = "controllerNetworkAck"
         private const val TYPE_PING = "controllerNetworkPing"
         private const val DISCOVERY_INTERVAL_MS = 1000L
+        private const val DISCOVERY_IDLE_INTERVAL_MS = 5000L
+        private const val ACTIVE_THRESHOLD_MS = 10000L
 
         private const val PREFIX_ACTION = "\"action\":\""
         private const val PREFIX_DX = "\"dx\":"

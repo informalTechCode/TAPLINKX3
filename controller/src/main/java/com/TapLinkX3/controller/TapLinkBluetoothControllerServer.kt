@@ -30,6 +30,7 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
     private var clientSocket: BluetoothSocket? = null
     private var outputStream: OutputStream? = null
     private var acceptThread: Thread? = null
+    private var readerThread: Thread? = null
     private val isRunning = AtomicBoolean(false)
     private val isConnected = AtomicBoolean(false)
     private val networkTransport = TapLinkNetworkControllerTransport()
@@ -167,13 +168,23 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
                 Log.d(TAG, "Waiting for accept()...")
                 val socket = serverSocket?.accept() ?: continue
                 Log.d(TAG, "Connection accepted from ${socket.remoteDevice?.name ?: "unknown"}")
-                clientSocket?.close()
+
+                // Close old connection and wait for its reader to exit
+                readerThread?.let { oldReader ->
+                    try { clientSocket?.close() } catch (_: IOException) {}
+                    oldReader.interrupt()
+                    try { oldReader.join(500) } catch (_: InterruptedException) {}
+                }
+
                 clientSocket = socket
                 outputStream = socket.outputStream
                 isConnected.set(true)
                 onConnectionChanged?.invoke(true)
                 onStatusChanged?.invoke("Connected to TapLink glasses")
-                Thread { readMessages(socket) }.start()
+                readerThread = Thread({ readMessages(socket) }, "TapLinkControllerReader").apply {
+                    isDaemon = true
+                    start()
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Accept failed: ${e.message}")
                 if (isRunning.get()) {
@@ -286,7 +297,8 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
                 output.flush()
             }
         } catch (_: IOException) {
-            isConnected.set(false)
+            val sock = clientSocket
+            if (sock != null) handleDisconnect(sock)
         }
     }
 

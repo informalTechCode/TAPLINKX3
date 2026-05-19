@@ -36,7 +36,7 @@ import kotlin.math.sqrt
 
 class MainActivity : Activity(), SensorEventListener {
     private val controllerServer by lazy { TapLinkBluetoothControllerServer(this) }
-    private val phoneGroqClient = PhoneGroqClient()
+    private val phoneGroqClient by lazy { PhoneGroqClient() }
     private lateinit var sensorManager: SensorManager
     private var rotationSensor: Sensor? = null
     private lateinit var statusText: TextView
@@ -216,15 +216,32 @@ class MainActivity : Activity(), SensorEventListener {
                         }
                     }
 
-                    Choreographer.getInstance().postFrameCallback(this)
+                    // Only keep running if there's a reason: pending data or active air mouse sensor
+                    val keepRunning = hasPendingTrackpadDelta || hasPendingAirMouse ||
+                            mode == TapLinkBluetoothControllerServer.ControllerMode.AIR_MOUSE
+                    if (keepRunning) {
+                        Choreographer.getInstance().postFrameCallback(this)
+                    } else {
+                        isFrameCallbackRunning = false
+                    }
                 }
             }
+
+    private var isFrameCallbackRunning = false
+
+    private fun startFrameCallbackIfNeeded() {
+        if (!isFrameCallbackRunning) {
+            isFrameCallbackRunning = true
+            Choreographer.getInstance().postFrameCallback(frameCallback)
+        }
+    }
 
     private fun updateSensorAndTimerState() {
         val isAirMouse = mode == TapLinkBluetoothControllerServer.ControllerMode.AIR_MOUSE
 
         sensorManager.unregisterListener(this@MainActivity)
         Choreographer.getInstance().removeFrameCallback(frameCallback)
+        isFrameCallbackRunning = false
 
         if (isAirMouse) {
             rotationSensor?.let {
@@ -234,8 +251,9 @@ class MainActivity : Activity(), SensorEventListener {
                         SensorManager.SENSOR_DELAY_FASTEST
                 )
             }
+            // Air mouse always needs the frame callback running for smoothing
+            startFrameCallbackIfNeeded()
         }
-        Choreographer.getInstance().postFrameCallback(frameCallback)
     }
 
     override fun onResume() {
@@ -247,6 +265,7 @@ class MainActivity : Activity(), SensorEventListener {
         super.onPause()
         sensorManager.unregisterListener(this@MainActivity)
         Choreographer.getInstance().removeFrameCallback(frameCallback)
+        isFrameCallbackRunning = false
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -1012,6 +1031,7 @@ class MainActivity : Activity(), SensorEventListener {
         pendingTrackpadDx += dx * trackpadSensitivity
         pendingTrackpadDy += dy * trackpadSensitivity
         hasPendingTrackpadDelta = true
+        startFrameCallbackIfNeeded()
     }
 
     private fun trackpadCentroid(
