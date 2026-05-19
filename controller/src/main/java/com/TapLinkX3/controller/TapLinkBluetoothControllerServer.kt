@@ -86,7 +86,7 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
         val cy = y.coerceIn(0f, 1f)
         val data = """{"type":"airMouse","x":$cx,"y":$cy,"select":$select}"""
         if (!networkTransport.sendLatest(data)) {
-            sendLatestRaw(data)
+            sendRaw(data)
         }
     }
 
@@ -250,8 +250,6 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
             java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
                 Thread(runnable, "TapLinkControllerWriter").apply { isDaemon = true }
             }
-    private val latestRawMessage = java.util.concurrent.atomic.AtomicReference<String?>(null)
-    private val latestRawWriteScheduled = AtomicBoolean(false)
 
     private fun send(json: JSONObject) {
         sendRaw(json.toString())
@@ -262,29 +260,6 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
         if (!isConnected.get()) return
         writeExecutor.execute {
             writeRawToOutput(data)
-        }
-    }
-
-    /**
-     * Latest-only fast path for absolute-position streams. If Bluetooth falls behind, old air
-     * mouse rays are stale and should be replaced instead of queued and replayed later.
-     */
-    private fun sendLatestRaw(data: String) {
-        if (!isConnected.get()) return
-        latestRawMessage.set(data)
-        if (latestRawWriteScheduled.compareAndSet(false, true)) {
-            writeExecutor.execute { drainLatestRawMessages() }
-        }
-    }
-
-    private fun drainLatestRawMessages() {
-        while (true) {
-            val next = latestRawMessage.getAndSet(null) ?: break
-            writeRawToOutput(next)
-        }
-        latestRawWriteScheduled.set(false)
-        if (latestRawMessage.get() != null && latestRawWriteScheduled.compareAndSet(false, true)) {
-            writeExecutor.execute { drainLatestRawMessages() }
         }
     }
 

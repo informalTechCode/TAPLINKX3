@@ -375,7 +375,6 @@ class MainActivity :
     // Dynamic smoothing factors (controlled by user preference)
     // Range: 0 (fastest/least smooth) to 100 (slowest/most smooth)
     private var smoothnessLevel = 40 // Default: fairly smooth
-    private var anchorSmoothingFactor = 0.08f // Calculated from smoothnessLevel
     private var velocitySmoothing = 0.15f // Calculated from smoothnessLevel
 
     // Cursor sensitivity for non-anchored mode
@@ -1725,78 +1724,6 @@ class MainActivity :
         out[1] = -q[1] * invMagnitude
         out[2] = -q[2] * invMagnitude
         out[3] = -q[3] * invMagnitude
-        return out
-    }
-
-    private fun normalizeQuaternion(q: FloatArray, out: FloatArray): FloatArray {
-        val len = kotlin.math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3])
-        if (len > 0) {
-            out[0] = q[0] / len
-            out[1] = q[1] / len
-            out[2] = q[2] / len
-            out[3] = q[3] / len
-            return out
-        }
-        out[0] = q[0]
-        out[1] = q[1]
-        out[2] = q[2]
-        out[3] = q[3]
-        return out
-    }
-
-    private fun quaternionSlerp(
-            qa: FloatArray,
-            qb: FloatArray,
-            t: Float,
-            out: FloatArray
-    ): FloatArray {
-        // q = [w, x, y, z]
-        val w1 = qa[0]
-        val x1 = qa[1]
-        val y1 = qa[2]
-        val z1 = qa[3]
-        var w2 = qb[0]
-        var x2 = qb[1]
-        var y2 = qb[2]
-        var z2 = qb[3]
-
-        var dot = w1 * w2 + x1 * x2 + y1 * y2 + z1 * z2
-
-        // If the dot product is negative, slerp won't take the shorter path.
-        // So we negate one quaternion.
-        if (dot < 0.0f) {
-            w2 = -w2
-            x2 = -x2
-            y2 = -y2
-            z2 = -z2
-            dot = -dot
-        }
-
-        val DOT_THRESHOLD = 0.9995f
-        if (dot > DOT_THRESHOLD) {
-            // If the inputs are too close for comfort, linearly interpolate
-            // and normalize.
-            out[0] = w1 + t * (w2 - w1)
-            out[1] = x1 + t * (x2 - x1)
-            out[2] = y1 + t * (y2 - y1)
-            out[3] = z1 + t * (z2 - z1)
-            return normalizeQuaternion(out, out)
-        }
-
-        val theta_0 = kotlin.math.acos(dot) // theta_0 = angle between input vectors
-        val theta = theta_0 * t // theta = angle between v0 and result
-        val sin_theta = kotlin.math.sin(theta) // compute this value only once
-        val sin_theta_0 = kotlin.math.sin(theta_0) // compute this value only once
-
-        val s0 =
-                kotlin.math.cos(theta) -
-                        dot * sin_theta / sin_theta_0 // == sin(theta_0 - theta) / sin(theta_0)
-        val s1 = sin_theta / sin_theta_0
-
-        out[0] = s0 * w1 + s1 * w2
-        out[1] = s0 * x1 + s1 * x2
-        out[2] = s0 * y1 + s1 * y2
-        out[3] = s0 * z1 + s1 * z2
         return out
     }
 
@@ -5275,13 +5202,11 @@ class MainActivity :
         // Higher slider values = LOWER factors = MORE smoothing
         // Lower slider values = HIGHER factors = LESS smoothing (more responsive)
 
-        // Quaternion SLERP: 0.40 (fast/left) to 0.02 (very smooth/right)
-        // Inverting: 100 - level gives us the inverse
-        // Range expanded for stable anchored tracking while applying view updates at vsync.
         val invertedLevel = 100 - smoothnessLevel
-        anchorSmoothingFactor = 0.02f + (invertedLevel / 100f) * 0.38f
 
-        // Velocity smoothing: 0.55 (fast/left) to 0.05 (very smooth/right)
+        // Output damping: 0.55 (fast/left) to 0.05 (very smooth/right).
+        // The raw sensor quaternion stays unsmoothed so the anchor target stops when head motion
+        // stops instead of continuing to drift toward a lagging orientation estimate.
         velocitySmoothing = 0.05f + (invertedLevel / 100f) * 0.50f
 
         DebugLog.d(
@@ -5290,8 +5215,7 @@ class MainActivity :
             Smoothness updated:
             Level: $smoothnessLevel (0=fast, 100=smooth)
             Inverted: $invertedLevel
-            Quaternion SLERP: $anchorSmoothingFactor
-            Velocity Damping: $velocitySmoothing
+            Output Damping: $velocitySmoothing
         """.trimIndent()
         )
     }
@@ -5305,7 +5229,6 @@ class MainActivity :
     private fun createSensorEventListener(): SensorEventListener {
         return object : SensorEventListener {
             var initialQuaternion: FloatArray? = null
-            var smoothedQuaternion: FloatArray? = null
 
             val currentQuaternion = FloatArray(4)
             val inverseInitialQuaternion = FloatArray(4)
@@ -5322,25 +5245,9 @@ class MainActivity :
 
                 SensorManager.getQuaternionFromVector(currentQuaternion, event.values)
 
-                // Initialize smoothed quaternion if needed
-                if (smoothedQuaternion == null) {
-                    smoothedQuaternion = currentQuaternion.clone()
-                } else {
-                    // Apply smoothing (SLERP) using dynamic factor
-                    quaternionSlerp(
-                            smoothedQuaternion!!,
-                            currentQuaternion,
-                            anchorSmoothingFactor,
-                            smoothedQuaternion!!
-                    )
-                }
-
-                // Use the smoothed quaternion for calculations
-                val activeQuaternion = smoothedQuaternion!!
-
                 // Reset initial quaternion if requested
                 if (shouldResetInitialQuaternion || initialQuaternion == null) {
-                    initialQuaternion = activeQuaternion.clone()
+                    initialQuaternion = currentQuaternion.clone()
                     shouldResetInitialQuaternion = false
                     // Reset velocity smoothing
                     smoothedDeltaX = 0f
@@ -5353,7 +5260,7 @@ class MainActivity :
                 }
 
                 quaternionInverse(initialQuaternion!!, inverseInitialQuaternion)
-                quaternionMultiply(inverseInitialQuaternion, activeQuaternion, relativeQuaternion)
+                quaternionMultiply(inverseInitialQuaternion, currentQuaternion, relativeQuaternion)
 
                 quaternionToEuler(relativeQuaternion, eulerAngles) // [x-axis, y-axis, z-axis]
                 val xAxisRad = eulerAngles[0]

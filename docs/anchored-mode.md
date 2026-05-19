@@ -32,7 +32,7 @@ Anchored mode tracking can be customized via the **Anchor Smoothness** slider in
 - **Responsiveness**: Lower values (left) result in faster, raw cursor movement.
 - **Stability**: Higher values (right) apply stronger filtering to eliminate jitter, creating a fluid, "heavy" cursor feel.
 
-The smoothing logic uses spherical linear interpolation (SLERP) for rotation and double exponential smoothing for velocity to ensure stability without introducing perceived latency.
+The tracking logic computes the anchor target from the latest rotation-vector sample, then applies output damping to the final translation and roll. This avoids a lagging orientation estimate continuing to move after head motion stops.
 
 ## Listener routing
 
