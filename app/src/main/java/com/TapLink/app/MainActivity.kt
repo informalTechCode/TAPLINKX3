@@ -6358,7 +6358,7 @@ class MainActivity :
     }
 
     private fun controllerNormalizedToScreen(x: Float, y: Float): Pair<Float, Float> {
-        val groupLocation = IntArray(2)
+        val groupLocation = reusableLocation1
         dualWebViewGroup.getLocationOnScreen(groupLocation)
         return groupLocation[0] + x * CONTROLLER_CURSOR_WIDTH to
                 groupLocation[1] + y * CONTROLLER_CURSOR_HEIGHT

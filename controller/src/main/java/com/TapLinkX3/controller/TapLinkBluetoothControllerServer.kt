@@ -167,7 +167,7 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
             try {
                 Log.d(TAG, "Waiting for accept()...")
                 val socket = serverSocket?.accept() ?: continue
-                Log.d(TAG, "Connection accepted from ${socket.remoteDevice?.name ?: "unknown"}")
+                try { Log.d(TAG, "Connection accepted from ${socket.remoteDevice?.name ?: "unknown"}") } catch (e: SecurityException) { Log.d(TAG, "Connection accepted, but missing permission to get device name.") }
 
                 // Close old connection and wait for its reader to exit
                 readerThread?.let { oldReader ->

@@ -3598,7 +3598,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     urlEditText.invalidate()
                 }
 
-                val captureRect = android.graphics.Rect(0, 0, halfWidth, height)
+                captureRect.set(0, 0, halfWidth, height)
                 val window = (context as Activity).window
 
                 captureInFlight = true
@@ -5170,6 +5170,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val reusableLocation2 = IntArray(2)
     private val reusableLocation = IntArray(2)
     private val reusableRect = android.graphics.Rect()
+    private val captureRect = android.graphics.Rect()
 
     // Add this method to handle cursor hovering
     private fun updateButtonHoverStates(screenX: Float, screenY: Float, force: Boolean = false) {
@@ -5588,19 +5589,19 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun dispatchScrollbarTouch(screenX: Float, screenY: Float) {
         fun getLocalPoint(container: ViewGroup): Pair<Float, Float>? {
             if (container.visibility != View.VISIBLE) return null
-            val rect = android.graphics.Rect()
-            if (!container.getGlobalVisibleRect(rect)) return null
-            if (screenX < rect.left ||
-                            screenX > rect.right ||
-                            screenY < rect.top ||
-                            screenY > rect.bottom
+
+            if (!container.getGlobalVisibleRect(reusableRect)) return null
+            if (screenX < reusableRect.left ||
+                            screenX > reusableRect.right ||
+                            screenY < reusableRect.top ||
+                            screenY > reusableRect.bottom
             ) {
                 return null
             }
             val scaleX = if (container.scaleX == 0f) 1f else container.scaleX
             val scaleY = if (container.scaleY == 0f) 1f else container.scaleY
-            val localX = (screenX - rect.left) / scaleX
-            val localY = (screenY - rect.top) / scaleY
+            val localX = (screenX - reusableRect.left) / scaleX
+            val localY = (screenY - reusableRect.top) / scaleY
             return localX to localY
         }
 
