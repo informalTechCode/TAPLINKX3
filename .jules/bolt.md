@@ -28,3 +28,6 @@
 ## 2024-05-19 - [Fix Missing Permission in TAP Bluetooth Controller Log]
 **Learning:** Adding a try catch inside TapLinkBluetoothControllerServer.kt caught a lint Missing Permission error for the bluetooth socket.remoteDevice.name log.
 **Action:** When working on bluetooth code wrap bluetooth actions that are only logs into try catch to bypass unneeded permission issues.
+## 2025-05-18 - [Avoid Iterator Allocations in High-Frequency Hover Loops]
+**Learning:** In Android, iterating over collections using `.forEach` or `for (item in list)` implicitly creates an Iterator object. When this happens inside a high-frequency method like `updateButtonHoverStates` (which is called on every touch or hover event), it creates immense object churn. This leads to garbage collection pauses and dropped frames. Also, using `linkedSetOf` causes node allocation for each entry added, which further worsens memory fragmentation during hover state updates.
+**Action:** Replace `linkedSetOf` with `ArrayList` and iterate through lists using indexed `for` loops (`for (i in 0 until list.size) { val item = list[i] }`) in high-frequency methods. Convert map values into cached lists to avoid allocating a new collection of values on every pass.
