@@ -300,8 +300,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var cachedSettingsHoverTargets: List<View> = emptyList()
     private var lastHoverScreenX = Float.NaN
     private var lastHoverScreenY = Float.NaN
-    private val activeHoverViews = linkedSetOf<View>()
-    private val activeActivatedViews = linkedSetOf<View>()
+    private val activeHoverViews = ArrayList<View>()
+    private val activeActivatedViews = ArrayList<View>()
     private var chatHoverActive = false
     private var keyboardHoverActive = false
     private val observerInjectionTimes = WeakHashMap<WebView, Pair<String?, Long>>()
@@ -394,8 +394,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         stateListAnimator = null
     }
 
+    private var navButtonsList: List<NavButton>? = null
+
     private fun clearNavigationButtonStates() {
-        navButtons.values.forEach { navButton ->
+        val list = navButtonsList ?: return
+        for (i in 0 until list.size) {
+            val navButton = list[i]
             navButton.isHovered = false
             navButton.left.isHovered = false
             navButton.right.isHovered = false
@@ -2283,6 +2287,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                         right = leftNavigationBar.findViewById(R.id.btnChat)
                                 )
                 )
+        navButtonsList = navButtons.values.toList()
 
         // Initialize all buttons with same base properties
         navButtons.values.forEach { navButton ->
@@ -5219,13 +5224,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Check bottom navigation bar buttons ONLY if nav bar is visible
         if (leftNavigationBar.visibility == View.VISIBLE) {
-            for ((_, navButton) in navButtons) {
-                if (isOver(navButton.left, screenX, screenY)) {
-                    navButton.isHovered = true
-                    markHovered(navButton.left)
-                    markHovered(navButton.right)
-                    customKeyboard?.clearHover() // Clear keyboard hover
-                    return // Found the hovered button, stop checking
+            val list = navButtonsList
+            if (list != null) {
+                for (i in 0 until list.size) {
+                    val navButton = list[i]
+                    if (isOver(navButton.left, screenX, screenY)) {
+                        navButton.isHovered = true
+                        markHovered(navButton.left)
+                        markHovered(navButton.right)
+                        customKeyboard?.clearHover() // Clear keyboard hover
+                        return // Found the hovered button, stop checking
+                    }
                 }
             }
         }
@@ -5233,7 +5242,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Check left toggle bar buttons
 
 
-        for (target in toggleHoverTargets) {
+        val toggleTargets = toggleHoverTargets
+        for (i in 0 until toggleTargets.size) {
+            val target = toggleTargets[i]
             if (isOver(target.view, screenX, screenY)) {
                 markHovered(target.view)
                 target.setHoverFlag()
@@ -5257,7 +5268,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Check settings window elements if visible
         if (isSettingsVisible) {
-            for (view in getSettingsHoverTargets()) {
+            val settingsTargets = getSettingsHoverTargets()
+            for (i in 0 until settingsTargets.size) {
+                val view = settingsTargets[i]
                 if (isOver(view, screenX, screenY)) {
                     markHovered(view)
                     // DebugLog.d("HoverDebug", "Hovering over settings element: $id")
@@ -5540,9 +5553,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         hoveredWindowsOverviewItem?.isHovered = false
         hoveredWindowsOverviewItem = null
 
-        activeHoverViews.forEach { it.isHovered = false }
+        for (i in 0 until activeHoverViews.size) { activeHoverViews[i].isHovered = false }
         activeHoverViews.clear()
-        activeActivatedViews.forEach { it.isActivated = false }
+        for (i in 0 until activeActivatedViews.size) { activeActivatedViews[i].isActivated = false }
         activeActivatedViews.clear()
 
         // Clear navigation button states
@@ -5562,12 +5575,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private fun markHovered(view: View) {
         view.isHovered = true
-        activeHoverViews.add(view)
+        if (!activeHoverViews.contains(view)) activeHoverViews.add(view)
     }
 
     private fun markActivated(view: View) {
         view.isActivated = true
-        activeActivatedViews.add(view)
+        if (!activeActivatedViews.contains(view)) activeActivatedViews.add(view)
     }
 
     private fun getSettingsHoverTargets(): List<View> {
