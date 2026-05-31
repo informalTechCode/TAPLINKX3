@@ -33,7 +33,9 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
     fun setCustomTextColor(color: Int) {
         defaultTextColor = color
         // Refresh all keys with new color
-        keys.forEach { it.setTextColor(color) }
+        for (i in 0 until keys.size) {
+            keys[i].setTextColor(color)
+        }
         updateKeyFocus()
     }
 
@@ -422,13 +424,17 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
         val keyboardLayout = getChildAt(0) as? LinearLayout ?: return
         val layoutConfig = currentLayout
 
-        keyboardLayout.children.take(layoutConfig.rows.size).forEachIndexed { rowIndex, rowView ->
-            val rowLayout = rowView as? LinearLayout ?: return@forEachIndexed
+        val rowCount = Math.min(layoutConfig.rows.size, keyboardLayout.childCount)
+        for (rowIndex in 0 until rowCount) {
+            val rowView = keyboardLayout.getChildAt(rowIndex)
+            val rowLayout = rowView as? LinearLayout ?: continue
             val keyRow = layoutConfig.rows[rowIndex]
             var keyIndex = 0
-            rowLayout.children.forEach { child ->
-                val button = child as? Button ?: return@forEach
-                if (button.id in specialButtonIds) return@forEach
+
+            for (childIndex in 0 until rowLayout.childCount) {
+                val child = rowLayout.getChildAt(childIndex)
+                val button = child as? Button ?: continue
+                if (button.id in specialButtonIds) continue
 
                 val keyText = keyRow.getOrNull(keyIndex).orEmpty()
                 keyIndex++
@@ -615,7 +621,8 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
         val hoverBackground = Color.parseColor("#4488FF")
         val now = SystemClock.uptimeMillis()
 
-        keys.forEach { button ->
+        for (i in 0 until keys.size) {
+            val button = keys[i]
             when {
                 button == clickedKey && now < clickFeedbackUntil -> {
                     button.setBackgroundColor(clickFeedbackColor)
@@ -843,6 +850,7 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
     }
 
     private val reusableRect = android.graphics.Rect()
+    private val reusableLocation = IntArray(2)
 
     private fun getKeyAtScreenPosition(screenX: Float, screenY: Float, uiScale: Float): Button? {
         val shouldLog = false
@@ -853,16 +861,25 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
         // Tolerance in screen pixels for fuzzy matching (covers gaps between keys)
         val tolerance = 15f
 
-        for (button in keys) {
+        // Get the screen location of the CustomKeyboardView itself just once per frame
+        // to avoid calling getGlobalVisibleRect repeatedly in the loop.
+        val keyboardLayout = getChildAt(0) as? LinearLayout ?: return null
+        keyboardLayout.getLocationOnScreen(reusableLocation)
+        val kbScreenX = reusableLocation[0].toFloat()
+        val kbScreenY = reusableLocation[1].toFloat()
+
+        for (i in 0 until keys.size) {
+            val button = keys[i]
             if (button.visibility != View.VISIBLE) continue
 
-            // Get actual visible bounds in screen coordinates
-            if (!button.getGlobalVisibleRect(reusableRect)) continue
+            val rowLayout = button.parent as? android.view.ViewGroup ?: continue
 
-            val btnLeft = reusableRect.left.toFloat()
-            val btnTop = reusableRect.top.toFloat()
-            val btnRight = reusableRect.right.toFloat()
-            val btnBottom = reusableRect.bottom.toFloat()
+            // Calculate absolute screen bounds manually
+            // This assumes rows are direct children of keyboardLayout and buttons are direct children of rows
+            val btnLeft = kbScreenX + rowLayout.x + button.x
+            val btnTop = kbScreenY + rowLayout.y + button.y
+            val btnRight = btnLeft + button.width
+            val btnBottom = btnTop + button.height
 
             // --- PASS 1: Strict Hit (screen space) ---
             if (screenX >= btnLeft && screenX < btnRight && screenY >= btnTop && screenY < btnBottom
