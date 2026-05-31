@@ -274,27 +274,9 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 
-    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
-        super.onLayout(changed, left, top, right, bottom)
-
-        // Force redraw of child views after layout
-        if (changed) {
-            val keyboardLayout = getChildAt(0) as? LinearLayout
-            keyboardLayout?.let { layout ->
-                for (i in 0 until layout.childCount) {
-                    val row = layout.getChildAt(i) as? LinearLayout
-                    row?.let { rowLayout ->
-                        for (j in 0 until rowLayout.childCount) {
-                            val button = rowLayout.getChildAt(j) as? Button
-                            button?.invalidate()
-                        }
-                        rowLayout.invalidate()
-                    }
-                }
-                layout.invalidate()
-            }
-        }
-    }
+    // ⚡ Bolt: Removed overridden onLayout that was causing unnecessary invalidate() calls.
+    // 💡 What: Removed onLayout which contained invalidate() calls on all child views.
+    // 🎯 Why: Calling invalidate() inside onLayout forces another redraw pass immediately after layout, creating unnecessary CPU overhead and battery drain. The Android view system already handles invalidation correctly when layout bounds change.
 
     private fun handleButtonClick(button: Button) {
         val buttonId = button.id
