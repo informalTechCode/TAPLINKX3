@@ -825,6 +825,7 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
     }
 
     private val reusableRect = android.graphics.Rect()
+    private val reusableLocation = IntArray(2)
 
     private fun getKeyAtScreenPosition(screenX: Float, screenY: Float, uiScale: Float): Button? {
         val shouldLog = false
@@ -835,16 +836,30 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
         // Tolerance in screen pixels for fuzzy matching (covers gaps between keys)
         val tolerance = 15f
 
+        // Get top-left coordinates of the CustomKeyboardView itself
+        getLocationOnScreen(reusableLocation)
+        val parentX = reusableLocation[0].toFloat()
+        val parentY = reusableLocation[1].toFloat()
+
         for (button in keys) {
             if (button.visibility != View.VISIBLE) continue
 
-            // Get actual visible bounds in screen coordinates
-            if (!button.getGlobalVisibleRect(reusableRect)) continue
+            // Use relative coordinates to compute screen position without expensive getGlobalVisibleRect
+            var btnLeft = button.x
+            var btnTop = button.y
 
-            val btnLeft = reusableRect.left.toFloat()
-            val btnTop = reusableRect.top.toFloat()
-            val btnRight = reusableRect.right.toFloat()
-            val btnBottom = reusableRect.bottom.toFloat()
+            var currentParent = button.parent as? android.view.View
+            while (currentParent != null && currentParent != this) {
+                btnLeft += currentParent.x
+                btnTop += currentParent.y
+                currentParent = currentParent.parent as? android.view.View
+            }
+
+            btnLeft += parentX
+            btnTop += parentY
+
+            val btnRight = btnLeft + button.width
+            val btnBottom = btnTop + button.height
 
             // --- PASS 1: Strict Hit (screen space) ---
             if (screenX >= btnLeft && screenX < btnRight && screenY >= btnTop && screenY < btnBottom
