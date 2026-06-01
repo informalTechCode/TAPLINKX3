@@ -874,12 +874,12 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
 
             val rowLayout = button.parent as? android.view.ViewGroup ?: continue
 
-            // Calculate absolute screen bounds manually
+            // Calculate absolute screen bounds manually, applying uiScale
             // This assumes rows are direct children of keyboardLayout and buttons are direct children of rows
-            val btnLeft = kbScreenX + rowLayout.x + button.x
-            val btnTop = kbScreenY + rowLayout.y + button.y
-            val btnRight = btnLeft + button.width
-            val btnBottom = btnTop + button.height
+            val btnLeft = kbScreenX + (rowLayout.x + button.x) * uiScale
+            val btnTop = kbScreenY + (rowLayout.y + button.y) * uiScale
+            val btnRight = btnLeft + button.width * uiScale
+            val btnBottom = btnTop + button.height * uiScale
 
             // --- PASS 1: Strict Hit (screen space) ---
             if (screenX >= btnLeft && screenX < btnRight && screenY >= btnTop && screenY < btnBottom
