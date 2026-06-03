@@ -4332,6 +4332,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return Pair(localX, localY)
     }
 
+    // ⚡ Bolt: Removed object allocations (FloatArray and Matrix) in computeAnchoredCoordinates
+    // 💡 What: Replaced local `floatArrayOf` and `Matrix()` instantiations with pre-allocated class properties.
+    // 🎯 Why: This method is called extremely frequently during hover and touch events. Allocating objects in high-frequency paths causes memory churn, triggering garbage collection stutters.
+    // 📊 Impact: Significantly reduces GC pressure during active cursor tracking or touch gestures in anchored mode.
     private fun computeAnchoredCoordinates(screenX: Float, screenY: Float): Pair<Float, Float> {
         val parent = leftEyeUIContainer.parent as View
         val parentLocation = reusableLocation2
@@ -4340,13 +4344,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val relativeX = screenX - parentLocation[0]
         val relativeY = screenY - parentLocation[1]
 
-        val points = floatArrayOf(relativeX, relativeY)
+        reusablePoint[0] = relativeX
+        reusablePoint[1] = relativeY
 
-        val inverse = android.graphics.Matrix()
-        leftEyeUIContainer.matrix.invert(inverse)
-        inverse.mapPoints(points)
+        leftEyeUIContainer.matrix.invert(reusableMatrix)
+        reusableMatrix.mapPoints(reusablePoint)
 
-        return Pair(points[0], points[1])
+        return Pair(reusablePoint[0], reusablePoint[1])
     }
 
     private fun isTouchOnView(view: View, x: Float, y: Float): Boolean {
@@ -5176,6 +5180,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val reusableLocation = IntArray(2)
     private val reusableRect = android.graphics.Rect()
     private val captureRect = android.graphics.Rect()
+    private val reusablePoint = FloatArray(2)
+    private val reusableMatrix = android.graphics.Matrix()
 
     // Add this method to handle cursor hovering
     private fun updateButtonHoverStates(screenX: Float, screenY: Float, force: Boolean = false) {
