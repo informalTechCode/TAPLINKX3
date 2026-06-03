@@ -31,3 +31,6 @@
 ## 2025-05-18 - [Avoid Iterator Allocations in High-Frequency Hover Loops]
 **Learning:** In Android, iterating over collections using `.forEach` or `for (item in list)` implicitly creates an Iterator object. When this happens inside a high-frequency method like `updateButtonHoverStates` (which is called on every touch or hover event), it creates immense object churn. This leads to garbage collection pauses and dropped frames. Also, using `linkedSetOf` causes node allocation for each entry added, which further worsens memory fragmentation during hover state updates.
 **Action:** Replace `linkedSetOf` with `ArrayList` and iterate through lists using indexed `for` loops (`for (i in 0 until list.size) { val item = list[i] }`) in high-frequency methods. Convert map values into cached lists to avoid allocating a new collection of values on every pass.
+## 2024-05-18 - [Object Allocation in High-Frequency Paths]
+**Learning:** Allocating objects (like `FloatArray` and `Matrix`) inside high-frequency touch and hover loops (e.g., `computeAnchoredCoordinates` in `DualWebViewGroup`) creates massive memory churn, causing GC stutter and degraded UI responsiveness.
+**Action:** Pre-allocate all such math and measurement objects as class-level properties when optimizing Android View code.
