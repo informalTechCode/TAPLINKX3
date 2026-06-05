@@ -2017,6 +2017,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val settings = webView.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
+        settings.allowUniversalAccessFromFileURLs = true
         @Suppress("DEPRECATION") // Suppress for extensive database usage
         settings.databaseEnabled = true
         settings.useWideViewPort = true
