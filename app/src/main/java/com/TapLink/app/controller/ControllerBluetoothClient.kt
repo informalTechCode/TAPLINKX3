@@ -83,6 +83,15 @@ class ControllerBluetoothClient(
         send(JSONObject().put("type", "groqApiKey").put("key", key))
     }
 
+    fun sendMode(mode: ControllerMode) {
+        val modeStr = when (mode) {
+            ControllerMode.AIR_MOUSE -> "airMouse"
+            ControllerMode.META -> "meta"
+            ControllerMode.TRACKPAD -> "trackpad"
+        }
+        send(JSONObject().put("type", "mode").put("mode", modeStr))
+    }
+
     fun sendNetworkEndpoint(port: Int, addresses: List<String>) {
         send(
                 JSONObject()
@@ -284,9 +293,10 @@ class ControllerBluetoothClient(
                         }
                     }
                     "scroll" -> {
-                        val dy = extractFloat(line, PREFIX_DY) ?: continue
+                        val dx = extractFloat(line, PREFIX_DX) ?: 0f
+                        val dy = extractFloat(line, PREFIX_DY) ?: 0f
 
-                        handler.post { listener.onControllerScroll(dy) }
+                        handler.post { listener.onControllerScroll(dx, dy) }
                     }
                     "tap" -> {
                         handler.post { listener.onControllerTap() }

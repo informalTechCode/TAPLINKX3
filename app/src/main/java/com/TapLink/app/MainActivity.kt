@@ -170,6 +170,7 @@ class MainActivity :
     private var isControllerConnected = false
     private var isPhoneKeyboardOpen = false
     private var metaModeEnabled = false
+    private var isFirstModeCheck = true
     private var metaGestureStartX = 0f
     private var metaGestureStartY = 0f
     private var metaGestureLastX = 0f
@@ -597,9 +598,7 @@ class MainActivity :
         cursorSensitivity =
                 getSharedPreferences(prefsName, MODE_PRIVATE).getInt("cursorSensitivity", 50)
         updateCursorSensitivity(cursorSensitivity)
-        metaModeEnabled =
-                getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
-                        .getBoolean(Constants.KEY_META_MODE_ENABLED, false)
+        metaModeEnabled = false
         applyMetaModeCursorVisibility()
 
         // Initialize GestureDetector
@@ -1288,101 +1287,6 @@ class MainActivity :
             handled
         }
 
-        // Enable storage + JS features required by modern web apps (auth/session state, etc.).
-        webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
-        @Suppress("DEPRECATION") run { webView.settings.databaseEnabled = true }
-
-        webView.webViewClient =
-                object : WebViewClient() {
-                    override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                        super.onPageStarted(view, url, favicon)
-                        // If cursor was visible, store its position
-                        if (isCursorVisible) {
-                            lastKnownCursorX = lastCursorX
-                            lastKnownCursorY = lastCursorY
-                        }
-                    }
-
-                    override fun onPageFinished(view: WebView?, url: String?) {
-                        super.onPageFinished(view, url)
-
-                        // Keep state current without serializing all tabs on the page callback.
-                        if (::dualWebViewGroup.isInitialized) {
-                            dualWebViewGroup.scheduleSaveAllWindowsState()
-                        }
-
-                        maybeShowGlassAppsMetaModeToast(url)
-
-                        // Force enable input on all potential input fields
-                        webView.evaluateJavascript(
-                                """
-                (function() {
-                    function enableInput(element) {
-                        element.style.webkitUserSelect = 'text';
-                        element.style.userSelect = 'text';
-                        element.setAttribute('inputmode', 'text');
-                    }
-                    
-                    document.querySelectorAll('input,textarea,[contenteditable="true"]')
-                        .forEach(enableInput);
-                        
-                    // Create observer for dynamically added elements
-                    new MutationObserver((mutations) => {
-                        mutations.forEach((mutation) => {
-                            mutation.addedNodes.forEach((node) => {
-                                if (node.nodeType === 1) {  // ELEMENT_NODE
-                                    if (node.matches('input,textarea,[contenteditable="true"]')) {
-                                        enableInput(node);
-                                    }
-                                    node.querySelectorAll('input,textarea,[contenteditable="true"]')
-                                        .forEach(enableInput);
-                                }
-                            });
-                        });
-                    }).observe(document.body, {
-                        childList: true,
-                        subtree: true
-                    });
-                })();
-            """,
-                                null
-                        )
-
-                        wasKeyboardDismissedByEnter = false
-
-                        // Update scrollbar visibility based on new content
-                        dualWebViewGroup.updateScrollBarsVisibility()
-
-                        // Enforce desktop viewport if enabled (persists across reloads/SPA
-                        // navigation)
-                        if (dualWebViewGroup.isDesktopMode()) {
-                            webView.evaluateJavascript(
-                                    """
-                        (function() {
-                            var viewport = document.querySelector('meta[name="viewport"]');
-                            if (!viewport) {
-                                viewport = document.createElement('meta');
-                                viewport.name = 'viewport';
-                                document.head.appendChild(viewport);
-                            }
-                            viewport.content = 'width=1280, initial-scale=0.8';
-                        })();
-                        """,
-                                    null
-                            )
-                        }
-                    }
-
-                    override fun doUpdateVisitedHistory(
-                            view: WebView?,
-                            url: String?,
-                            isReload: Boolean
-                    ) {
-                        super.doUpdateVisitedHistory(view, url, isReload)
-                    }
-                }
-
         cursorLeftView.apply {
             isClickable = false
             isFocusable = false
@@ -1949,12 +1853,24 @@ class MainActivity :
         return host == "messages.google.com"
     }
 
+    private fun isGlassAppsSite(url: String?): Boolean {
+        if (url == null) return false
+        val host =
+                try {
+                    Uri.parse(url).host?.lowercase()
+                } catch (_: Exception) {
+                    null
+                }
+        return host == "glassapps.io" || host?.endsWith(".glassapps.io") == true
+    }
+
     private fun applyUserAgentForUrl(view: WebView?, url: String?) {
         view ?: return
         val targetUserAgent =
                 when {
                     isStreamingSite(url) -> defaultUserAgent
                     isDesktopBrowserRequiredSite(url) -> messagesDesktopUserAgent
+                    isGlassAppsSite(url) -> customUserAgent
                     dualWebViewGroup.isDesktopMode() -> dualWebViewGroup.getDesktopUserAgent()
                     else -> customUserAgent
                 }
@@ -4074,6 +3990,11 @@ class MainActivity :
                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                             super.onPageStarted(view, url, favicon)
                             DebugLog.d("WebViewDebug", "Page started loading: $url")
+                            // If cursor was visible, store its position
+                            if (isCursorVisible) {
+                                lastKnownCursorX = lastCursorX
+                                lastKnownCursorY = lastCursorY
+                            }
 
                             if (closeChatOnNextPageStart) {
                                 val now = SystemClock.uptimeMillis()
@@ -4132,8 +4053,91 @@ class MainActivity :
                                 view?.visibility = View.VISIBLE
                                 injectJavaScriptForInputFocus()
 
+                                // Force enable input on all potential input fields
+                                view?.evaluateJavascript(
+                                        """
+                        (function() {
+                            function enableInput(element) {
+                                element.style.webkitUserSelect = 'text';
+                                element.style.userSelect = 'text';
+                                element.setAttribute('inputmode', 'text');
+                            }
+                            
+                            document.querySelectorAll('input,textarea,[contenteditable="true"]')
+                                .forEach(enableInput);
+                                
+                            // Create observer for dynamically added elements
+                            new MutationObserver((mutations) => {
+                                mutations.forEach((mutation) => {
+                                    mutation.addedNodes.forEach((node) => {
+                                        if (node.nodeType === 1) {  // ELEMENT_NODE
+                                            if (node.matches('input,textarea,[contenteditable="true"]')) {
+                                                enableInput(node);
+                                            }
+                                            node.querySelectorAll('input,textarea,[contenteditable="true"]')
+                                                .forEach(enableInput);
+                                        }
+                                    });
+                                });
+                            }).observe(document.body, {
+                                childList: true,
+                                subtree: true
+                            });
+                        })();
+                    """.trimIndent(),
+                                        null
+                                )
+
+                                wasKeyboardDismissedByEnter = false
+
+                                // Enforce desktop viewport if enabled or desktop-required, otherwise mobile viewport (persists across reloads/SPA navigation)
+                                val isDesktop = dualWebViewGroup.isDesktopMode() || isDesktopBrowserRequiredSite(url)
+                                val isGlassApps = isGlassAppsSite(url)
+                                val viewportContent = when {
+                                    isDesktop -> "width=1280, initial-scale=0.8"
+                                    else -> "width=600, initial-scale=1.0, maximum-scale=1.0"
+                                }
+
+                                if (!isGlassApps) {
+                                    view?.evaluateJavascript(
+                                            """
+                            (function() {
+                                var viewport = document.querySelector('meta[name="viewport"]');
+                                if (!viewport) {
+                                    viewport = document.createElement('meta');
+                                    viewport.name = 'viewport';
+                                    document.head.appendChild(viewport);
+                                }
+                                viewport.content = '$viewportContent';
+                            })();
+                            """.trimIndent(),
+                                            null
+                                    )
+                                } else {
+                                    // Inject band-aid CSS to fix massive unstyled logos due to old WebView engine
+                                    view?.evaluateJavascript(
+                                            """
+                            (function() {
+                                var style = document.createElement('style');
+                                style.innerHTML = `
+                                    img[src*="father.png"] { max-width: 64px !important; max-height: 64px !important; }
+                                    img.h-20 { max-width: 80px !important; max-height: 80px !important; }
+                                    img.h-14 { max-width: 56px !important; max-height: 56px !important; }
+                                    img { max-width: 100% !important; height: auto !important; }
+                                `;
+                                document.head.appendChild(style);
+                            })();
+                            """.trimIndent(),
+                                            null
+                                    )
+                                }
+
+                                view?.settings?.textZoom = 80
+
                                 // Re-apply saved font settings to new page
-                                dualWebViewGroup.reapplyWebFontSettings()
+                                if (!isGlassApps) {
+                                    dualWebViewGroup.reapplyWebFontSettings()
+                                }
 
                                 // Inject last known location if available
                                 if (lastGpsLat != null && lastGpsLon != null) {
@@ -5715,10 +5719,28 @@ class MainActivity :
             ensureMouseTapModeDisabled()
         }
 
-        // Temple arm input is normally reserved for mode-toggle double taps; in Meta mode it
-        // becomes a keyboard-navigation surface for Glass Apps compatibility.
+        // Temple arm input is normally reserved for mode-toggle double taps; when the companion
+        // app has Meta mode active, any temple touch exits Meta mode and returns to Trackpad.
         if (ev.device?.name == "cyttsp6_mt") {
-            if (handleMetaTouchEvent(ev)) {
+            if (isMetaNavigationActive() && ev.actionMasked == MotionEvent.ACTION_DOWN) {
+                // Exit meta mode: switch companion and main app to trackpad
+                remoteControllerMode = ControllerMode.TRACKPAD
+                ensureMouseTapModeDisabled()
+                if (::cursorController.isInitialized) {
+                    cursorController.onControllerModeChanged(ControllerMode.TRACKPAD)
+                }
+                applyMetaModeCursorVisibility()
+                if (::controllerBluetoothClient.isInitialized) {
+                    controllerBluetoothClient.sendMode(ControllerMode.TRACKPAD)
+                }
+                if (::dualWebViewGroup.isInitialized) {
+                    dualWebViewGroup.setNavBarsHidden(false)
+                    dualWebViewGroup.showToast("Exited meta mode", 1200L)
+                }
+                return true
+            }
+            // Consume remaining move/up events of the exit gesture
+            if (isMetaNavigationActive()) {
                 return true
             }
             templeDoubleTapDetector.onTouchEvent(ev)
@@ -6181,17 +6203,47 @@ class MainActivity :
             isControllerConnected = false
             isPhoneKeyboardOpen = false
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            if (::dualWebViewGroup.isInitialized) {
+                dualWebViewGroup.setNavBarsHidden(false)
+            }
         }
     }
 
     override fun onControllerModeChanged(mode: ControllerMode) {
         runOnUiThread {
+            if (isFirstModeCheck) {
+                isFirstModeCheck = false
+                if (mode == ControllerMode.META) {
+                    if (::controllerBluetoothClient.isInitialized) {
+                        controllerBluetoothClient.sendMode(ControllerMode.TRACKPAD)
+                    }
+                    remoteControllerMode = ControllerMode.TRACKPAD
+                    ensureMouseTapModeDisabled()
+                    if (::cursorController.isInitialized) {
+                        cursorController.onControllerModeChanged(ControllerMode.TRACKPAD)
+                    }
+                    applyMetaModeCursorVisibility()
+                    if (::dualWebViewGroup.isInitialized) {
+                        dualWebViewGroup.setNavBarsHidden(false)
+                        dualWebViewGroup.showToast("Reverting to trackpad mode on launch", 1500L)
+                    }
+                    return@runOnUiThread
+                }
+            }
+
             remoteControllerMode = mode
             ensureMouseTapModeDisabled()
             if (::cursorController.isInitialized) {
                 cursorController.onControllerModeChanged(mode)
             }
             applyMetaModeCursorVisibility()
+            if (::dualWebViewGroup.isInitialized) {
+                if (mode == ControllerMode.META) {
+                    dualWebViewGroup.setNavBarsHidden(true)
+                } else {
+                    dualWebViewGroup.setNavBarsHidden(false)
+                }
+            }
             dualWebViewGroup.showToast(
                     when (mode) {
                         ControllerMode.AIR_MOUSE -> "Controller air mouse"
@@ -6215,6 +6267,8 @@ class MainActivity :
                     controllerBluetoothClient.sendKeyboardVisibility(false)
                 }
                 "toggleMask" -> handleMaskToggle()
+                "zoomIn" -> dualWebViewGroup.handleZoomButtonClick("in")
+                "zoomOut" -> dualWebViewGroup.handleZoomButtonClick("out")
                 else -> if (key.isNotEmpty()) onKeyPressed(key)
             }
         }
@@ -6263,11 +6317,15 @@ class MainActivity :
         }
     }
 
-    override fun onControllerScroll(dy: Float) {
+    override fun onControllerScroll(dx: Float, dy: Float) {
         runOnUiThread {
             if (!::dualWebViewGroup.isInitialized || !::webView.isInitialized) return@runOnUiThread
             if (metaModeEnabled || remoteControllerMode == ControllerMode.META) {
-                dispatchMetaKeyToWebView(if (dy > 0f) "ArrowDown" else "ArrowUp")
+                if (kotlin.math.abs(dy) > kotlin.math.abs(dx)) {
+                    dispatchMetaKeyToWebView(if (dy > 0f) "ArrowDown" else "ArrowUp")
+                } else if (dx != 0f) {
+                    dispatchMetaKeyToWebView(if (dx > 0f) "ArrowRight" else "ArrowLeft")
+                }
                 return@runOnUiThread
             }
 
@@ -6278,6 +6336,7 @@ class MainActivity :
             // Map positive dy (drag down) to scroll down (content moves up). AXIS_VSCROLL negative
             // means scroll down.
             pointerCoords.setAxisValue(MotionEvent.AXIS_VSCROLL, -dy / 30f)
+            pointerCoords.setAxisValue(MotionEvent.AXIS_HSCROLL, -dx / 30f)
 
             val pointerProperties = MotionEvent.PointerProperties()
             pointerProperties.id = 0
@@ -6550,30 +6609,6 @@ class MainActivity :
         webView.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
         webView.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0))
 
-        val code = if (keyName == "Enter") "Enter" else keyName
-        val which =
-                when (keyName) {
-                    "ArrowUp" -> 38
-                    "ArrowDown" -> 40
-                    "ArrowLeft" -> 37
-                    "ArrowRight" -> 39
-                    "Enter" -> 13
-                    else -> return
-                }
-        webView.evaluateJavascript(
-                """
-            (function() {
-                const key = ${JSONObject.quote(keyName)};
-                const code = ${JSONObject.quote(code)};
-                const which = $which;
-                const target = document.activeElement || document.body || document.documentElement;
-                const init = {key, code, which, keyCode: which, bubbles: true, cancelable: true};
-                target.dispatchEvent(new KeyboardEvent('keydown', init));
-                target.dispatchEvent(new KeyboardEvent('keyup', init));
-            })();
-        """.trimIndent(),
-                null
-        )
         if (::dualWebViewGroup.isInitialized) {
             dualWebViewGroup.noteUserInteraction()
         }

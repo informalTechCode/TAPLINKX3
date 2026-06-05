@@ -34,7 +34,7 @@ interface ControllerInputListener {
             dy: Float,
             pointerCount: Int
     )
-    fun onControllerScroll(dy: Float)
+    fun onControllerScroll(dx: Float, dy: Float)
     fun onControllerTap()
     fun onControllerTouch(action: ControllerTouchAction, x: Float, y: Float)
     fun onControllerAiPrompt(prompt: String)

@@ -175,8 +175,10 @@ class ControllerNetworkInputServer(
                 }
             }
             "scroll" -> {
-                val dy = extractFloat(line, PREFIX_DY) ?: return
-                handler.post { listener.onControllerScroll(dy) }
+                val dx = extractFloat(line, PREFIX_DX) ?: 0f
+                val dy = extractFloat(line, PREFIX_DY) ?: 0f
+                if (dx == 0f && dy == 0f) return
+                handler.post { listener.onControllerScroll(dx, dy) }
             }
             "key" -> {
                 val key =

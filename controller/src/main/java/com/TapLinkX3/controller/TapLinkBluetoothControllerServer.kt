@@ -24,6 +24,7 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
     var onStatusChanged: ((String) -> Unit)? = null
     var onKeyboardVisibilityRequested: ((Boolean) -> Unit)? = null
     var onGroqApiKeyReceived: ((String) -> Unit)? = null
+    var onModeRequested: ((ControllerMode) -> Unit)? = null
 
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var serverSocket: BluetoothServerSocket? = null
@@ -110,8 +111,8 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
         sendTrackpadDelta(0f, 0f, pointerCount, action)
     }
 
-    fun sendScroll(dy: Float) {
-        val data = """{"type":"scroll","dy":$dy}"""
+    fun sendScroll(dx: Float, dy: Float) {
+        val data = """{"type":"scroll","dx":$dx,"dy":$dy}"""
         if (!networkTransport.send(data)) {
             sendRaw(data)
         }
@@ -230,6 +231,14 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
                 onKeyboardVisibilityRequested?.invoke(json.optBoolean("visible", false))
             } else if (json.optString("type") == "groqApiKey") {
                 onGroqApiKeyReceived?.invoke(json.optString("key"))
+            } else if (json.optString("type") == "mode") {
+                val modeStr = json.optString("mode")
+                val parsedMode = when (modeStr) {
+                    "airMouse" -> ControllerMode.AIR_MOUSE
+                    "meta" -> ControllerMode.META
+                    else -> ControllerMode.TRACKPAD
+                }
+                onModeRequested?.invoke(parsedMode)
             } else if (json.optString("type") == TapLinkNetworkControllerTransport.TYPE_ENDPOINT) {
                 val port =
                         json.optInt(

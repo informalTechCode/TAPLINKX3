@@ -203,7 +203,7 @@ class GlassesCursorController(private val screenWidth: Int, private val screenHe
 
     // --- Unused Interface Methods (Handled by MainActivity) ---
     override fun onControllerTap() {}
-    override fun onControllerScroll(dy: Float) {}
+    override fun onControllerScroll(dx: Float, dy: Float) {}
     override fun onControllerTouch(action: ControllerTouchAction, x: Float, y: Float) {}
     override fun onControllerConnected(name: String, address: String) {}
     override fun onControllerDisconnected() {}

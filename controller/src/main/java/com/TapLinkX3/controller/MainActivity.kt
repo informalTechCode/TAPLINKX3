@@ -10,8 +10,6 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.Choreographer
 import android.view.Gravity
 import android.view.MotionEvent
@@ -46,13 +44,14 @@ class MainActivity : Activity(), SensorEventListener {
     private lateinit var trackpad: View
     private lateinit var metaControls: View
     private lateinit var scrollBar: View
+    private lateinit var horizontalScrollRow: LinearLayout
     private lateinit var keyboardPanel: LinearLayout
     private lateinit var phoneKeyboardInput: EditText
     private lateinit var apiKeyInput: EditText
     private lateinit var aiInput: EditText
     private lateinit var aiResponseText: TextView
     private lateinit var aiAskButton: Button
-    private var suppressKeyboardTextChange = false
+    private lateinit var modeRadioGroup: RadioGroup
 
     private var trackpadSensitivity = DEFAULT_TRACKPAD_SENSITIVITY
     private var airMouseSensitivity = DEFAULT_AIR_MOUSE_SENSITIVITY
@@ -135,6 +134,21 @@ class MainActivity : Activity(), SensorEventListener {
                                 )
                                 .show()
                     }
+                }
+            }
+        }
+        controllerServer.onModeRequested = { requestedMode ->
+            runOnUiThread {
+                if (mode != requestedMode) {
+                    mode = requestedMode
+                    val radioButton = when (requestedMode) {
+                        TapLinkBluetoothControllerServer.ControllerMode.TRACKPAD -> modeRadioGroup.getChildAt(0)
+                        TapLinkBluetoothControllerServer.ControllerMode.AIR_MOUSE -> modeRadioGroup.getChildAt(1)
+                        TapLinkBluetoothControllerServer.ControllerMode.META -> modeRadioGroup.getChildAt(2)
+                    } as? RadioButton
+                    radioButton?.isChecked = true
+                    updateModeChrome()
+                    updateSensorAndTimerState()
                 }
             }
         }
@@ -441,6 +455,59 @@ class MainActivity : Activity(), SensorEventListener {
                 }
         root.addView(statusText, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
 
+        val groqExpanderHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            isClickable = true
+            val shape = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#1e293b"))
+                setStroke(dp(1), Color.parseColor("#334155"))
+                cornerRadius = dp(12).toFloat()
+            }
+            background = shape
+        }
+
+        val expanderIcon = TextView(this).apply {
+            text = "▶"
+            setTextColor(Color.parseColor("#94a3b8"))
+            textSize = 16f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(0, 0, dp(12), 0)
+        }
+        val expanderTitle = TextView(this).apply {
+            text = "TapLink AI & Groq Settings"
+            setTextColor(Color.parseColor("#f8fafc"))
+            textSize = 16f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        }
+        groqExpanderHeader.addView(expanderIcon)
+        groqExpanderHeader.addView(expanderTitle)
+
+        val groqContentContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            setPadding(0, dp(12), 0, 0)
+        }
+
+        groqExpanderHeader.setOnClickListener {
+            val isExpanded = groqContentContainer.visibility == View.VISIBLE
+            if (isExpanded) {
+                groqContentContainer.visibility = View.GONE
+                expanderIcon.text = "▶"
+            } else {
+                groqContentContainer.visibility = View.VISIBLE
+                expanderIcon.text = "▼"
+            }
+        }
+
+        val expanderWrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        expanderWrapper.addView(groqExpanderHeader, LinearLayout.LayoutParams(-1, -2))
+        expanderWrapper.addView(groqContentContainer, LinearLayout.LayoutParams(-1, -2))
+        root.addView(expanderWrapper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
+
         val apiKeyRow =
                 LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -465,11 +532,11 @@ class MainActivity : Activity(), SensorEventListener {
                 },
                 LinearLayout.LayoutParams(dp(80), dp(52))
         )
-        root.addView(apiKeyRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
+        groqContentContainer.addView(apiKeyRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
 
-        root.addView(
+        groqContentContainer.addView(
                 buildAiPanel(),
-                LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) }
+                LinearLayout.LayoutParams(-1, -2)
         )
 
         val modeRow =
@@ -477,7 +544,7 @@ class MainActivity : Activity(), SensorEventListener {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                 }
-        val radioGroup =
+        modeRadioGroup =
                 RadioGroup(this).apply {
                     orientation = RadioGroup.HORIZONTAL
                     addView(
@@ -523,7 +590,7 @@ class MainActivity : Activity(), SensorEventListener {
                         updateSensorAndTimerState()
                     }
                 }
-        modeRow.addView(radioGroup, LinearLayout.LayoutParams(0, -2, 1f))
+        modeRow.addView(modeRadioGroup, LinearLayout.LayoutParams(0, -2, 1f))
         recenterButton =
                 createModernButton("Recenter", "#64748b").apply {
                     visibility = View.GONE
@@ -540,7 +607,12 @@ class MainActivity : Activity(), SensorEventListener {
         modeRow.addView(recenterButton, LinearLayout.LayoutParams(-2, dp(44)))
         root.addView(modeRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
 
-        val trackpadContainer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val trackpadContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val upperRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+
+        val leftColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
 
         trackpad =
                 FrameLayout(this).apply {
@@ -565,14 +637,64 @@ class MainActivity : Activity(), SensorEventListener {
                             FrameLayout.LayoutParams(-1, -1)
                     )
                 }
-        trackpadContainer.addView(
+        leftColumn.addView(
                 trackpad,
-                LinearLayout.LayoutParams(0, -1, 1f).apply { rightMargin = dp(8) }
+                LinearLayout.LayoutParams(-1, 0, 1f)
         )
 
         metaControls = buildMetaControls().apply { visibility = View.GONE }
-        trackpadContainer.addView(
+        leftColumn.addView(
                 metaControls,
+                LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(8) }
+        )
+
+        horizontalScrollRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        val horizontalScrollBar =
+                FrameLayout(this).apply {
+                    val shape =
+                            android.graphics.drawable.GradientDrawable().apply {
+                                setColor(Color.parseColor("#1e293b"))
+                                setStroke(dp(2), Color.parseColor("#334155"))
+                                cornerRadius = dp(16).toFloat()
+                            }
+                    background = shape
+                    isClickable = true
+                    addView(
+                            TextView(this@MainActivity).apply {
+                                text = "↔"
+                                setTextColor(Color.parseColor("#64748b"))
+                                textSize = 28f
+                                includeFontPadding = false
+                                gravity = Gravity.CENTER
+                                setTypeface(null, android.graphics.Typeface.BOLD)
+                            },
+                            FrameLayout.LayoutParams(-1, -1)
+                    )
+
+                    var scrollStartX = 0f
+                    setOnTouchListener { _, event ->
+                        when (event.actionMasked) {
+                            MotionEvent.ACTION_DOWN -> {
+                                scrollStartX = event.x
+                                true
+                            }
+                            MotionEvent.ACTION_MOVE -> {
+                                val dx = event.x - scrollStartX
+                                scrollStartX = event.x
+                                controllerServer.sendScroll(-dx * trackpadSensitivity, 0f)
+                                true
+                            }
+                            else -> true
+                        }
+                    }
+                }
+        horizontalScrollRow.addView(horizontalScrollBar, LinearLayout.LayoutParams(-1, dp(72)))
+
+        upperRow.addView(
+                leftColumn,
                 LinearLayout.LayoutParams(0, -1, 1f).apply { rightMargin = dp(8) }
         )
 
@@ -588,9 +710,10 @@ class MainActivity : Activity(), SensorEventListener {
                     isClickable = true
                     addView(
                             TextView(this@MainActivity).apply {
-                                text = "↕\nScroll"
+                                text = "↕"
                                 setTextColor(Color.parseColor("#64748b"))
-                                textSize = 14f
+                                textSize = 28f
+                                includeFontPadding = false
                                 gravity = Gravity.CENTER
                                 setTypeface(null, android.graphics.Typeface.BOLD)
                             },
@@ -607,18 +730,27 @@ class MainActivity : Activity(), SensorEventListener {
                             MotionEvent.ACTION_MOVE -> {
                                 val dy = event.y - scrollStartY
                                 scrollStartY = event.y
-                                controllerServer.sendScroll(-dy * trackpadSensitivity)
+                                controllerServer.sendScroll(0f, -dy * trackpadSensitivity)
                                 true
                             }
                             else -> true
                         }
                     }
                 }
-        trackpadContainer.addView(scrollBar, LinearLayout.LayoutParams(dp(72), -1))
+        upperRow.addView(scrollBar, LinearLayout.LayoutParams(dp(72), -1))
+
+        trackpadContainer.addView(
+                upperRow,
+                LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) }
+        )
+        trackpadContainer.addView(
+                horizontalScrollRow,
+                LinearLayout.LayoutParams(-1, dp(72))
+        )
 
         root.addView(
                 trackpadContainer,
-                LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(16) }
+                LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) }
         )
 
         keyboardPanel =
@@ -626,155 +758,140 @@ class MainActivity : Activity(), SensorEventListener {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     visibility = View.GONE
-                    setPadding(0, 0, 0, dp(12))
+                    setPadding(0, 0, 0, dp(8))
                 }
         phoneKeyboardInput =
-                object : EditText(this) {
-                            override fun onCreateInputConnection(
-                                    outAttrs: android.view.inputmethod.EditorInfo
-                            ): android.view.inputmethod.InputConnection? {
-                                val ic = super.onCreateInputConnection(outAttrs) ?: return null
-                                return object :
-                                        android.view.inputmethod.InputConnectionWrapper(ic, true) {
-                                    override fun deleteSurroundingText(
-                                            beforeLength: Int,
-                                            afterLength: Int
-                                    ): Boolean {
-                                        if (beforeLength == 1 &&
-                                                        afterLength == 0 &&
-                                                        shouldSendBackspaceImmediately()
-                                        ) {
-                                            sendKeyEvent(
-                                                    android.view.KeyEvent(
-                                                            android.view.KeyEvent.ACTION_DOWN,
-                                                            android.view.KeyEvent.KEYCODE_DEL
-                                                    )
-                                            )
-                                            sendKeyEvent(
-                                                    android.view.KeyEvent(
-                                                            android.view.KeyEvent.ACTION_UP,
-                                                            android.view.KeyEvent.KEYCODE_DEL
-                                                    )
-                                            )
-                                            return true
-                                        }
-                                        return super.deleteSurroundingText(
-                                                beforeLength,
-                                                afterLength
-                                        )
-                                    }
-                                }
+                EditText(this).apply {
+                    hint = "Type for glasses"
+                    setTextColor(Color.WHITE)
+                    setHintTextColor(Color.parseColor("#94a3b8"))
+                    val shape =
+                            android.graphics.drawable.GradientDrawable().apply {
+                                setColor(Color.parseColor("#1e293b"))
+                                setStroke(dp(1), Color.parseColor("#334155"))
+                                cornerRadius = dp(12).toFloat()
                             }
-                        }
-                        .apply {
-                            hint = "Type for glasses"
-                            setTextColor(Color.WHITE)
-                            setHintTextColor(Color.parseColor("#94a3b8"))
-                            val shape =
-                                    android.graphics.drawable.GradientDrawable().apply {
-                                        setColor(Color.parseColor("#1e293b"))
-                                        setStroke(dp(1), Color.parseColor("#334155"))
-                                        cornerRadius = dp(12).toFloat()
-                                    }
-                            background = shape
-                            setPadding(dp(16), dp(12), dp(16), dp(12))
+                    background = shape
+                    setPadding(dp(16), dp(12), dp(16), dp(12))
 
-                            setSingleLine(false)
-                            minLines = 1
-                            maxLines = 3
-
-                            setOnKeyListener { _, keyCode, event ->
-                                if (keyCode == android.view.KeyEvent.KEYCODE_DEL &&
-                                                event.action == android.view.KeyEvent.ACTION_DOWN &&
-                                                shouldSendBackspaceImmediately()
-                                ) {
-                                    controllerServer.sendKey("backspace")
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
-
-                            addTextChangedListener(
-                                    object : TextWatcher {
-                                        private var beforeText = ""
-
-                                        override fun beforeTextChanged(
-                                                s: CharSequence?,
-                                                start: Int,
-                                                count: Int,
-                                                after: Int
-                                        ) {
-                                            beforeText = s?.toString().orEmpty()
-                                        }
-
-                                        override fun onTextChanged(
-                                                s: CharSequence?,
-                                                start: Int,
-                                                before: Int,
-                                                count: Int
-                                        ) = Unit
-
-                                        override fun afterTextChanged(s: Editable?) {
-                                            if (suppressKeyboardTextChange) return
-                                            val currentText = s?.toString().orEmpty()
-                                            if (shouldSendTextImmediately(beforeText, currentText)) {
-                                                sendKeyboardText(currentText)
-                                                suppressKeyboardTextChange = true
-                                                s?.clear()
-                                                suppressKeyboardTextChange = false
-                                            }
-                                        }
-                                    }
-                            )
-                        }
+                    setSingleLine(false)
+                    minLines = 1
+                    maxLines = 3
+                }
         keyboardPanel.addView(
                 phoneKeyboardInput,
                 LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(8) }
         )
 
         keyboardPanel.addView(
-                createModernButton("Send", "#10b981").apply {
+                createModernButton("➤", "#10b981").apply {
+                    textSize = 22f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    includeFontPadding = false
+                    minHeight = 0
+                    minWidth = 0
+                    setPadding(0, 0, 0, 0)
+                    gravity = Gravity.CENTER
                     setOnClickListener { sendBufferedKeyboardText() }
-                },
-                LinearLayout.LayoutParams(dp(76), dp(52)).apply { rightMargin = dp(8) }
-        )
-
-        keyboardPanel.addView(
-                createModernButton("⌫", "#f97316").apply {
-                    setOnClickListener { controllerServer.sendKey("backspace") }
                 },
                 LinearLayout.LayoutParams(dp(56), dp(52)).apply { rightMargin = dp(8) }
         )
 
         keyboardPanel.addView(
-                createModernButton("Enter", "#8b5cf6").apply {
-                    setOnClickListener { controllerServer.sendKey("enter") }
+                createModernButton("⌫", "#f97316").apply {
+                    textSize = 20f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    includeFontPadding = false
+                    minHeight = 0
+                    minWidth = 0
+                    setPadding(0, 0, 0, 0)
+                    gravity = Gravity.CENTER
+                    val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                    val repeatRunnable = object : Runnable {
+                        override fun run() {
+                            controllerServer.sendKey("backspace")
+                            handler.postDelayed(this, 100)
+                        }
+                    }
+                    setOnTouchListener { v, event ->
+                        when (event.action) {
+                            android.view.MotionEvent.ACTION_DOWN -> {
+                                controllerServer.sendKey("backspace")
+                                handler.postDelayed(repeatRunnable, 400)
+                                v.isPressed = true
+                            }
+                            android.view.MotionEvent.ACTION_MOVE -> {
+                                val x = event.x
+                                val y = event.y
+                                val isOutside = x < 0 || x > v.width || y < 0 || y > v.height
+                                if (isOutside && v.isPressed) {
+                                    handler.removeCallbacks(repeatRunnable)
+                                    v.isPressed = false
+                                }
+                            }
+                            android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                                handler.removeCallbacks(repeatRunnable)
+                                v.isPressed = false
+                            }
+                        }
+                        true
+                    }
                 },
-                LinearLayout.LayoutParams(dp(76), dp(52)).apply { rightMargin = dp(8) }
+                LinearLayout.LayoutParams(dp(56), dp(52)).apply { rightMargin = dp(8) }
         )
 
         keyboardPanel.addView(
-                createModernButton("Close", "#ef4444").apply {
+                createModernButton("↩", "#8b5cf6").apply {
+                    textSize = 24f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    includeFontPadding = false
+                    minHeight = 0
+                    minWidth = 0
+                    setPadding(0, 0, 0, 0)
+                    gravity = Gravity.CENTER
+                    setOnClickListener { controllerServer.sendKey("enter") }
+                },
+                LinearLayout.LayoutParams(dp(56), dp(52)).apply { rightMargin = dp(8) }
+        )
+
+        keyboardPanel.addView(
+                createModernButton("✕", "#ef4444").apply {
+                    textSize = 22f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    includeFontPadding = false
+                    minHeight = 0
+                    minWidth = 0
+                    setPadding(0, 0, 0, 0)
+                    gravity = Gravity.CENTER
                     setOnClickListener {
                         controllerServer.sendKey("hideKeyboard")
                         setPhoneKeyboardVisible(false)
                     }
                 },
-                LinearLayout.LayoutParams(dp(76), dp(52))
+                LinearLayout.LayoutParams(dp(56), dp(52))
         )
         root.addView(keyboardPanel, LinearLayout.LayoutParams(-1, -2))
+
+
 
         val actionRow =
                 LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER
                 }
+        val zoomOutButton = createModernButton("−", "#64748b").apply {
+            setOnClickListener { controllerServer.sendKey("zoomOut") }
+        }
+        actionRow.addView(zoomOutButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply { rightMargin = dp(4) })
+        val zoomInButton = createModernButton("+", "#64748b").apply {
+            setOnClickListener { controllerServer.sendKey("zoomIn") }
+        }
+        actionRow.addView(zoomInButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply { rightMargin = dp(8) })
         val toggleMaskButton =
                 createModernButton("Toggle Screen", "#eab308").apply {
                     setOnClickListener { controllerServer.sendKey("toggleMask") }
                 }
-        actionRow.addView(toggleMaskButton, LinearLayout.LayoutParams(0, dp(56), 1f))
+        actionRow.addView(toggleMaskButton, LinearLayout.LayoutParams(0, dp(44), 1f))
         root.addView(actionRow, LinearLayout.LayoutParams(-1, -2))
 
         updateModeChrome()
@@ -880,7 +997,40 @@ class MainActivity : Activity(), SensorEventListener {
         fun arrowButton(label: String, key: String, color: String = "#334155") =
                 createModernButton(label, color).apply {
                     textSize = 28f
-                    setOnClickListener { controllerServer.sendKey(key) }
+                    if (key == "Enter") {
+                        setOnClickListener { controllerServer.sendKey(key) }
+                    } else {
+                        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                        val repeatRunnable = object : Runnable {
+                            override fun run() {
+                                controllerServer.sendKey(key)
+                                handler.postDelayed(this, 150)
+                            }
+                        }
+                        setOnTouchListener { v, event ->
+                            when (event.action) {
+                                android.view.MotionEvent.ACTION_DOWN -> {
+                                    controllerServer.sendKey(key)
+                                    handler.postDelayed(repeatRunnable, 500)
+                                    v.isPressed = true
+                                }
+                                android.view.MotionEvent.ACTION_MOVE -> {
+                                    val x = event.x
+                                    val y = event.y
+                                    val isOutside = x < 0 || x > v.width || y < 0 || y > v.height
+                                    if (isOutside && v.isPressed) {
+                                        handler.removeCallbacks(repeatRunnable)
+                                        v.isPressed = false
+                                    }
+                                }
+                                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                                    handler.removeCallbacks(repeatRunnable)
+                                    v.isPressed = false
+                                }
+                            }
+                            true
+                        }
+                    }
                 }
 
         fun rowParams() = LinearLayout.LayoutParams(-1, 0, 1f)
@@ -1164,8 +1314,8 @@ class MainActivity : Activity(), SensorEventListener {
 
         if (pointerCount >= 2) {
             flushPendingTrackpadDelta(pointerCount)
-            if (abs(dy) >= TRACKPAD_MIN_DELTA) {
-                controllerServer.sendScroll(-dy * trackpadSensitivity)
+            if (abs(dy) >= TRACKPAD_MIN_DELTA || abs(dx) >= TRACKPAD_MIN_DELTA) {
+                controllerServer.sendScroll(-dx * trackpadSensitivity, -dy * trackpadSensitivity)
             }
             return
         }
@@ -1231,25 +1381,18 @@ class MainActivity : Activity(), SensorEventListener {
         trackpad.visibility = if (isMeta) View.GONE else View.VISIBLE
         metaControls.visibility = if (isMeta) View.VISIBLE else View.GONE
         scrollBar.visibility = if (isMeta) View.GONE else View.VISIBLE
+        horizontalScrollRow.visibility = if (isMeta) View.GONE else View.VISIBLE
         trackpad.alpha = if (isAirMouse) 0.45f else 1f
         recenterButton.visibility = if (isAirMouse) View.VISIBLE else View.GONE
         (trackpad as? ViewGroup)?.findViewById<TextView>(android.R.id.text1)?.text = "Trackpad Area"
     }
-
-    private fun shouldSendTextImmediately(beforeText: String, currentText: String): Boolean =
-            controllerServer.isKeyboardUdpAvailable() && beforeText.isEmpty() && currentText.isNotEmpty()
-
-    private fun shouldSendBackspaceImmediately(): Boolean =
-            controllerServer.isKeyboardUdpAvailable() && phoneKeyboardInput.text.isNullOrEmpty()
 
     private fun sendBufferedKeyboardText() {
         val text = phoneKeyboardInput.text?.toString().orEmpty()
         if (text.isEmpty()) return
 
         sendKeyboardText(text)
-        suppressKeyboardTextChange = true
         phoneKeyboardInput.text?.clear()
-        suppressKeyboardTextChange = false
     }
 
     private fun sendKeyboardText(text: String) {
