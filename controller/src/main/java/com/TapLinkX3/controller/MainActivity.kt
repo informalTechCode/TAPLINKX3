@@ -618,7 +618,10 @@ class MainActivity : Activity(), SensorEventListener {
                                             beforeLength: Int,
                                             afterLength: Int
                                     ): Boolean {
-                                        if (beforeLength == 1 && afterLength == 0) {
+                                        if (beforeLength == 1 &&
+                                                        afterLength == 0 &&
+                                                        shouldSendBackspaceImmediately()
+                                        ) {
                                             sendKeyEvent(
                                                     android.view.KeyEvent(
                                                             android.view.KeyEvent.ACTION_DOWN,
@@ -660,7 +663,8 @@ class MainActivity : Activity(), SensorEventListener {
 
                             setOnKeyListener { _, keyCode, event ->
                                 if (keyCode == android.view.KeyEvent.KEYCODE_DEL &&
-                                                event.action == android.view.KeyEvent.ACTION_DOWN
+                                                event.action == android.view.KeyEvent.ACTION_DOWN &&
+                                                shouldSendBackspaceImmediately()
                                 ) {
                                     controllerServer.sendKey("backspace")
                                     true
@@ -692,18 +696,12 @@ class MainActivity : Activity(), SensorEventListener {
                                         override fun afterTextChanged(s: Editable?) {
                                             if (suppressKeyboardTextChange) return
                                             val currentText = s?.toString().orEmpty()
-                                            if (currentText.length > beforeText.length) {
-                                                val added = currentText.substring(beforeText.length)
-                                                added.forEach { char ->
-                                                    controllerServer.sendKey(
-                                                            if (char == '\n') "enter"
-                                                            else char.toString()
-                                                    )
-                                                }
+                                            if (shouldSendTextImmediately(beforeText, currentText)) {
+                                                sendKeyboardText(currentText)
+                                                suppressKeyboardTextChange = true
+                                                s?.clear()
+                                                suppressKeyboardTextChange = false
                                             }
-                                            suppressKeyboardTextChange = true
-                                            s?.clear()
-                                            suppressKeyboardTextChange = false
                                         }
                                     }
                             )
@@ -714,10 +712,24 @@ class MainActivity : Activity(), SensorEventListener {
         )
 
         keyboardPanel.addView(
+                createModernButton("Send", "#10b981").apply {
+                    setOnClickListener { sendBufferedKeyboardText() }
+                },
+                LinearLayout.LayoutParams(dp(76), dp(52)).apply { rightMargin = dp(8) }
+        )
+
+        keyboardPanel.addView(
+                createModernButton("⌫", "#f97316").apply {
+                    setOnClickListener { controllerServer.sendKey("backspace") }
+                },
+                LinearLayout.LayoutParams(dp(56), dp(52)).apply { rightMargin = dp(8) }
+        )
+
+        keyboardPanel.addView(
                 createModernButton("Enter", "#8b5cf6").apply {
                     setOnClickListener { controllerServer.sendKey("enter") }
                 },
-                LinearLayout.LayoutParams(dp(80), dp(52)).apply { rightMargin = dp(8) }
+                LinearLayout.LayoutParams(dp(76), dp(52)).apply { rightMargin = dp(8) }
         )
 
         keyboardPanel.addView(
@@ -727,7 +739,7 @@ class MainActivity : Activity(), SensorEventListener {
                         setPhoneKeyboardVisible(false)
                     }
                 },
-                LinearLayout.LayoutParams(dp(80), dp(52))
+                LinearLayout.LayoutParams(dp(76), dp(52))
         )
         root.addView(keyboardPanel, LinearLayout.LayoutParams(-1, -2))
 
@@ -1087,6 +1099,26 @@ class MainActivity : Activity(), SensorEventListener {
         val isAirMouse = mode == TapLinkBluetoothControllerServer.ControllerMode.AIR_MOUSE
         trackpad.alpha = if (isAirMouse) 0.45f else 1f
         recenterButton.visibility = if (isAirMouse) View.VISIBLE else View.GONE
+    }
+
+    private fun shouldSendTextImmediately(beforeText: String, currentText: String): Boolean =
+            controllerServer.isKeyboardUdpAvailable() && beforeText.isEmpty() && currentText.isNotEmpty()
+
+    private fun shouldSendBackspaceImmediately(): Boolean =
+            controllerServer.isKeyboardUdpAvailable() && phoneKeyboardInput.text.isNullOrEmpty()
+
+    private fun sendBufferedKeyboardText() {
+        val text = phoneKeyboardInput.text?.toString().orEmpty()
+        if (text.isEmpty()) return
+
+        sendKeyboardText(text)
+        suppressKeyboardTextChange = true
+        phoneKeyboardInput.text?.clear()
+        suppressKeyboardTextChange = false
+    }
+
+    private fun sendKeyboardText(text: String) {
+        text.forEach { char -> controllerServer.sendKey(if (char == '\n') "enter" else char.toString()) }
     }
 
     private fun setPhoneKeyboardVisible(visible: Boolean) {

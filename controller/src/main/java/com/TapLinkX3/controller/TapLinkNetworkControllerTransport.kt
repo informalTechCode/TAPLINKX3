@@ -61,6 +61,8 @@ class TapLinkNetworkControllerTransport {
         receiveThread = null
     }
 
+    fun isReachable(): Boolean = activeEndpoint.get() != null && socket != null && isUdpReachable()
+
     fun updateEndpoint(addresses: List<String>, port: Int) {
         val address =
                 addresses.asSequence()

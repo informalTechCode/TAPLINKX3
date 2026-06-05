@@ -177,6 +177,15 @@ class ControllerNetworkInputServer(
                 val dy = extractFloat(line, PREFIX_DY) ?: return
                 handler.post { listener.onControllerScroll(dy) }
             }
+            "key" -> {
+                val key =
+                        try {
+                            JSONObject(line).optString("key")
+                        } catch (_: Exception) {
+                            return
+                        }
+                handler.post { listener.onControllerKey(key) }
+            }
         }
     }
 
