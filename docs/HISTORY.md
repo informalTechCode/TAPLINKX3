@@ -2,6 +2,22 @@
 
 The original TapLink builds and documentation were published through the release log hosted at https://pastebin.com/80GGhiEK. To preserve that history inside the repository, the paste contents are reproduced below with light formatting for readability.
 
+### TapLink 1.7.0 (June 5, 2026)
+
+- **Source code**: Repository current
+- **New Features**:
+  - **GlassApps Store Dashboard Shortcut**: Implemented custom local GlassApps store dashboard shortcut with native fetch proxy.
+  - **Companion App Enhancements**:
+    - Enhanced controller keyboard controls with repeat backspace on long press, replaced enter key text with an enter symbol, changed close key to 'x', and replaced the send button with a right arrow envelope symbol.
+    - Added 2D scrolling and UI cleanups.
+    - Added compose fallback for the phone keyboard.
+- **Performance & Stability**:
+  - **Bolt Optimizations**: Eliminated object allocations and high-frequency iterator allocations in hover coordinate computation and CustomKeyboardView loops.
+  - **UDP Keyboard Reliability**: Made UDP keyboard delivery more reliable. Modified keyboard handling over UDP connections to always use the buffer and send mode for consistent behavior.
+  - **Typing Responsiveness**: Improved typing responsiveness in the companion app.
+- **Maintenance**:
+  - Bumped Android app version to **1.7.0** with incremented `versionCode` for release distribution.
+
 ### TapLink 1.6.0 (May 19, 2026)
 
 - **Source code**: Repository current

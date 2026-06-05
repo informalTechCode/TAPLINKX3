@@ -42,6 +42,7 @@ TapLink X3 is an Android-based browser shell designed for XR headsets that mirro
   - **Double Tap (Right Temple)**: Go back.
   - **Triple Tap (Right Temple)**: Re-center the display.
 - **QR Scanner**: Open the Dashboard (glasses icon), then use **QR Scanner** to launch native camera scanning and open scanned web links.
+- **GlassApps Store**: Access the custom local GlassApps store directly from the Dashboard.
 - **Media Mode (Blank Screen)**: Toggle the "Eye" icon to black out the screen for audio-only consumption while keeping media controls accessible.
 - **Scroll Mode**: Automatically hides UI elements for immersive reading; restore by tapping the transparent button in the bottom-right.
 - **Enhanced Settings**: Centralized control for volume, brightness, **Force Dark** toggle, smoothness, screen size, and typography.

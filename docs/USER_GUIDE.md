@@ -204,7 +204,7 @@ TapLink uses two controller transports at the same time:
 | **Bluetooth RFCOMM** | Pairing, mode changes, keyboard visibility, API-key sync, AI prompt handoff, and fallback input. | Required for automatic setup and compatibility. |
 | **UDP network lane** | Air mouse rays, trackpad movement, scroll, and phone keyboard keystrokes. | Preferred when available. Uses latest-position semantics for air mouse so stale packets are not replayed; keystrokes use ordered sends. |
 
-When UDP is available, keyboard characters are sent live as you type with per-message acknowledgement and retry; if UDP delivery still fails, the controller falls back to Bluetooth. If UDP is unavailable, the phone keyboard field acts as a compose box: type the text locally, tap **Send** to transmit it, or tap **⌫** next to Send to send a remote backspace.
+When UDP is available, the UDP network lane is used for input delivery, falling back to Bluetooth if UDP delivery fails. The phone keyboard field acts as a compose box for all connections: type the text locally, tap the **Send** button (right arrow envelope) to transmit it, or tap the **⌫** button to send a remote backspace (long press for repeat backspace).
 
 If cursor or phone keyboard input still feels delayed, confirm the phone and glasses can reach each other over the active network path and that UDP ports `37692` and `37693` are not blocked. If the UDP path is unavailable, TapLink continues over Bluetooth.
 
@@ -218,7 +218,7 @@ If cursor or phone keyboard input still feels delayed, confirm the phone and gla
 | **Recenter** | Resets the air mouse baseline (only visible in Air Mouse mode). |
 | **Scroll Bar (drag)** | Dragging up or down on the vertical scroll bar (right side of the trackpad) scrolls the active web page on the glasses. |
 | **Toggle Screen** | Blanks/unblanks the glasses display (same as the eye icon). |
-| **Keyboard** | When the glasses request keyboard input, a text field and Enter/Close buttons appear. |
+| **Keyboard** | When the glasses request keyboard input, a text field and Enter/Close (X) buttons appear. |
 | **Groq API Key** | Enter your API key on either device; it syncs on connect. |
 | **TapLink AI** | Type a prompt on the phone and tap Ask to automatically open the AI chat window on the glasses, send the prompt, and display the answer there. |
 

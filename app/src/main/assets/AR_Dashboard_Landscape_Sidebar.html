@@ -798,7 +798,7 @@
 
     function ensureBuiltInAppUrls(dashboardState) {
       let changed = false;
-      const lockedBuiltIns = ['gmessages'];
+      const lockedBuiltIns = ['gmessages', 'glassapps'];
       for (const key of lockedBuiltIns) {
         const expected = defaultApps[key];
         if (!expected) continue;

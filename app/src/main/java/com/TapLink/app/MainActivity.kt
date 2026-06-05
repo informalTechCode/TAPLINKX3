@@ -6836,6 +6836,27 @@ class MainActivity :
 
         @JavascriptInterface
         fun fetchHtml(url: String, callbackName: String) {
+            val currentUrl = webView.url
+            var isAllowed = false
+            if (currentUrl != null) {
+                if (currentUrl == "file:///android_asset/glassapps_store.html" || 
+                    currentUrl.startsWith("https://glassapps.io/") || 
+                    currentUrl == "https://glassapps.io") {
+                    if (url.startsWith("https://glassapps.io/") || url == "https://glassapps.io") {
+                        isAllowed = true
+                    }
+                }
+            }
+            
+            if (!isAllowed) {
+                activity.runOnUiThread {
+                    val errorMsg = "fetchHtml access denied for this origin or target URL."
+                    val js = "window['$callbackName'](null, '$errorMsg');"
+                    webView.evaluateJavascript(js, null)
+                }
+                return
+            }
+
             Thread {
                 try {
                     val urlConnection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
