@@ -179,19 +179,21 @@ class MainActivity :
     private var glassAppsMetaToastShownForUrl: String? = null
 
     private fun refreshCursor() {
+        if (isMetaNavigationActive()) {
+            isCursorVisible = false
+        }
         dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, isCursorVisible)
     }
 
     private fun refreshCursor(visible: Boolean) {
-        isCursorVisible = if (isMetaNavigationActive()) false else visible
+        isCursorVisible = visible
         refreshCursor()
     }
 
     private fun centerCursor(visible: Boolean = isCursorVisible) {
         lastCursorX = 320f
         lastCursorY = 240f
-        isCursorVisible = visible
-        refreshCursor()
+        refreshCursor(visible)
     }
 
     private fun isMousePointerEvent(event: MotionEvent): Boolean {
