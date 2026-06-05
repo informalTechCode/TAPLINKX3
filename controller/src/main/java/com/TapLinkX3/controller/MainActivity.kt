@@ -44,6 +44,8 @@ class MainActivity : Activity(), SensorEventListener {
 
     private lateinit var recenterButton: Button
     private lateinit var trackpad: View
+    private lateinit var metaControls: View
+    private lateinit var scrollBar: View
     private lateinit var keyboardPanel: LinearLayout
     private lateinit var phoneKeyboardInput: EditText
     private lateinit var apiKeyInput: EditText
@@ -568,7 +570,13 @@ class MainActivity : Activity(), SensorEventListener {
                 LinearLayout.LayoutParams(0, -1, 1f).apply { rightMargin = dp(8) }
         )
 
-        val scrollBar =
+        metaControls = buildMetaControls().apply { visibility = View.GONE }
+        trackpadContainer.addView(
+                metaControls,
+                LinearLayout.LayoutParams(0, -1, 1f).apply { rightMargin = dp(8) }
+        )
+
+        scrollBar =
                 FrameLayout(this).apply {
                     val shape =
                             android.graphics.drawable.GradientDrawable().apply {
@@ -839,6 +847,64 @@ class MainActivity : Activity(), SensorEventListener {
         inputRow.addView(clearBtn, LinearLayout.LayoutParams(dp(80), dp(52)))
         panel.addView(inputRow, LinearLayout.LayoutParams(-1, -2))
 
+        return panel
+    }
+
+    private fun buildMetaControls(): View {
+        val panel =
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    val shape =
+                            android.graphics.drawable.GradientDrawable().apply {
+                                setColor(Color.parseColor("#1e293b"))
+                                setStroke(dp(2), Color.parseColor("#334155"))
+                                cornerRadius = dp(24).toFloat()
+                            }
+                    background = shape
+                    setPadding(dp(20), dp(20), dp(20), dp(20))
+                }
+
+        fun arrowButton(label: String, key: String, color: String = "#334155") =
+                createModernButton(label, color).apply {
+                    textSize = 28f
+                    setOnClickListener { controllerServer.sendKey(key) }
+                }
+
+        fun rowParams() = LinearLayout.LayoutParams(-1, 0, 1f)
+        fun buttonParams() =
+                LinearLayout.LayoutParams(0, -1, 1f).apply {
+                    setMargins(dp(6), dp(6), dp(6), dp(6))
+                }
+        fun spacerParams() = LinearLayout.LayoutParams(0, 1, 1f)
+
+        panel.addView(
+                LinearLayout(this).apply {
+                    gravity = Gravity.CENTER
+                    addView(View(this@MainActivity), spacerParams())
+                    addView(arrowButton("▲", "ArrowUp"), buttonParams())
+                    addView(View(this@MainActivity), spacerParams())
+                },
+                rowParams()
+        )
+        panel.addView(
+                LinearLayout(this).apply {
+                    gravity = Gravity.CENTER
+                    addView(arrowButton("◀", "ArrowLeft"), buttonParams())
+                    addView(arrowButton("Enter", "Enter", "#3b82f6"), buttonParams())
+                    addView(arrowButton("▶", "ArrowRight"), buttonParams())
+                },
+                rowParams()
+        )
+        panel.addView(
+                LinearLayout(this).apply {
+                    gravity = Gravity.CENTER
+                    addView(View(this@MainActivity), spacerParams())
+                    addView(arrowButton("▼", "ArrowDown"), buttonParams())
+                    addView(View(this@MainActivity), spacerParams())
+                },
+                rowParams()
+        )
         return panel
     }
 
@@ -1150,10 +1216,12 @@ class MainActivity : Activity(), SensorEventListener {
     private fun updateModeChrome() {
         val isAirMouse = mode == TapLinkBluetoothControllerServer.ControllerMode.AIR_MOUSE
         val isMeta = mode == TapLinkBluetoothControllerServer.ControllerMode.META
+        trackpad.visibility = if (isMeta) View.GONE else View.VISIBLE
+        metaControls.visibility = if (isMeta) View.VISIBLE else View.GONE
+        scrollBar.visibility = if (isMeta) View.GONE else View.VISIBLE
         trackpad.alpha = if (isAirMouse) 0.45f else 1f
         recenterButton.visibility = if (isAirMouse) View.VISIBLE else View.GONE
-        (trackpad as? ViewGroup)?.findViewById<TextView>(android.R.id.text1)?.text =
-                if (isMeta) "Meta Mode\nSwipe arrows • tap Enter" else "Trackpad Area"
+        (trackpad as? ViewGroup)?.findViewById<TextView>(android.R.id.text1)?.text = "Trackpad Area"
     }
 
     private fun setPhoneKeyboardVisible(visible: Boolean) {
