@@ -288,7 +288,8 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
 
     enum class ControllerMode(val wireName: String) {
         AIR_MOUSE("airMouse"),
-        TRACKPAD("trackpad")
+        TRACKPAD("trackpad"),
+        META("meta")
     }
 
     enum class TouchAction(val wireName: String) {

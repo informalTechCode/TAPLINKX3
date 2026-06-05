@@ -14,4 +14,5 @@ object Constants {
     const val KEY_WEB_TEXT_COLOR = "webTextColor"
     const val KEY_GROQ_API_KEY = "groq_api_key"
     const val KEY_WEBVIEW_STATE = "webview_state"
+    const val KEY_META_MODE_ENABLED = "meta_mode_enabled"
 }

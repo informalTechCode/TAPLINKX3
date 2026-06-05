@@ -169,13 +169,21 @@ class MainActivity :
     private var controllerTouchDownTime = 0L
     private var isControllerConnected = false
     private var isPhoneKeyboardOpen = false
+    private var metaModeEnabled = false
+    private var metaGestureStartX = 0f
+    private var metaGestureStartY = 0f
+    private var metaGestureLastX = 0f
+    private var metaGestureLastY = 0f
+    private var metaGestureTotalDistance = 0f
+    private var savedCursorVisibleBeforeMetaMode: Boolean? = null
+    private var glassAppsMetaToastShownForUrl: String? = null
 
     private fun refreshCursor() {
         dualWebViewGroup.updateCursorPosition(lastCursorX, lastCursorY, isCursorVisible)
     }
 
     private fun refreshCursor(visible: Boolean) {
-        isCursorVisible = visible
+        isCursorVisible = if (isMetaNavigationActive()) false else visible
         refreshCursor()
     }
 
@@ -587,6 +595,10 @@ class MainActivity :
         cursorSensitivity =
                 getSharedPreferences(prefsName, MODE_PRIVATE).getInt("cursorSensitivity", 50)
         updateCursorSensitivity(cursorSensitivity)
+        metaModeEnabled =
+                getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
+                        .getBoolean(Constants.KEY_META_MODE_ENABLED, false)
+        applyMetaModeCursorVisibility()
 
         // Initialize GestureDetector
         gestureDetector =
@@ -673,6 +685,10 @@ class MainActivity :
                                     distanceX: Float,
                                     distanceY: Float
                             ): Boolean {
+                                if (metaModeEnabled) {
+                                    tapCount = 0
+                                    return true
+                                }
                                 tapCount = 0 // Reset tap count on scroll to prevent accidental
                                 // triple-tap detection
                                 totalScrollDistance +=
@@ -939,6 +955,10 @@ class MainActivity :
                                 return false
                             }
                             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                                if (metaModeEnabled) {
+                                    dispatchMetaKeyToWebView("Enter")
+                                    return true
+                                }
                                 if (totalScrollDistance > 10f) {
                                     return false
                                 }
@@ -1197,8 +1217,8 @@ class MainActivity :
             lastCursorY = y
             lastKnownCursorX = x
             lastKnownCursorY = y
-            refreshCursor(true)
-            if (select) {
+            refreshCursor(!isMetaNavigationActive())
+            if (select && !isMetaNavigationActive()) {
                 dispatchTouchEventAtCursor()
             }
             dualWebViewGroup.noteUserInteraction()
@@ -1289,6 +1309,8 @@ class MainActivity :
                         if (::dualWebViewGroup.isInitialized) {
                             dualWebViewGroup.scheduleSaveAllWindowsState()
                         }
+
+                        maybeShowGlassAppsMetaModeToast(url)
 
                         // Force enable input on all potential input fields
                         webView.evaluateJavascript(
@@ -4116,6 +4138,8 @@ class MainActivity :
                                     dualWebViewGroup.injectLocation(lastGpsLat!!, lastGpsLon!!)
                                 }
 
+                                maybeShowGlassAppsMetaModeToast(url)
+
                                 // Restore media listeners and scrollbar logic from DualWebViewGroup
                                 view?.let { dualWebViewGroup.injectPageObservers(it) }
                                 dualWebViewGroup.updateScrollBarsVisibility()
@@ -5671,6 +5695,15 @@ class MainActivity :
                 }
             }
         }
+        if (metaModeEnabled && isMetaNavigationKey(event.keyCode)) {
+            val keyName = metaKeyNameForKeyCode(event.keyCode)
+            if (keyName != null) {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    dispatchMetaKeyToWebView(keyName)
+                }
+                return true
+            }
+        }
         return super.dispatchKeyEvent(event)
     }
 
@@ -5680,8 +5713,12 @@ class MainActivity :
             ensureMouseTapModeDisabled()
         }
 
-        // Temple arm input should only be used for mode-toggle double taps.
+        // Temple arm input is normally reserved for mode-toggle double taps; in Meta mode it
+        // becomes a keyboard-navigation surface for Glass Apps compatibility.
         if (ev.device?.name == "cyttsp6_mt") {
+            if (handleMetaTouchEvent(ev)) {
+                return true
+            }
             templeDoubleTapDetector.onTouchEvent(ev)
             return true
         }
@@ -5689,6 +5726,13 @@ class MainActivity :
         autoEnterMouseModeForMudraInput(ev)
 
         val isMouseEvent = isMousePointerEvent(ev)
+
+        if (!isMouseEvent && handleMetaTouchEvent(ev)) {
+            if (::dualWebViewGroup.isInitialized) {
+                dualWebViewGroup.noteUserInteraction()
+            }
+            return true
+        }
 
         // Track state at start of touch to prevent double-dispatch issues
         if (ev.action == MotionEvent.ACTION_DOWN) {
@@ -6145,9 +6189,13 @@ class MainActivity :
             if (::cursorController.isInitialized) {
                 cursorController.onControllerModeChanged(mode)
             }
+            applyMetaModeCursorVisibility()
             dualWebViewGroup.showToast(
-                    if (mode == ControllerMode.AIR_MOUSE) "Controller air mouse"
-                    else "Controller trackpad",
+                    when (mode) {
+                        ControllerMode.AIR_MOUSE -> "Controller air mouse"
+                        ControllerMode.TRACKPAD -> "Controller trackpad"
+                        ControllerMode.META -> "Controller meta mode"
+                    },
                     1200L
             )
         }
@@ -6156,6 +6204,8 @@ class MainActivity :
     override fun onControllerKey(key: String) {
         runOnUiThread {
             when (key) {
+                "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter" ->
+                        dispatchMetaKeyToWebView(key)
                 "backspace" -> onBackspacePressed()
                 "enter" -> onEnterPressed()
                 "hideKeyboard" -> {
@@ -6214,6 +6264,10 @@ class MainActivity :
     override fun onControllerScroll(dy: Float) {
         runOnUiThread {
             if (!::dualWebViewGroup.isInitialized || !::webView.isInitialized) return@runOnUiThread
+            if (metaModeEnabled || remoteControllerMode == ControllerMode.META) {
+                dispatchMetaKeyToWebView(if (dy > 0f) "ArrowDown" else "ArrowUp")
+                return@runOnUiThread
+            }
 
             // Dispatch mouse wheel scroll event
             val pointerCoords = MotionEvent.PointerCoords()
@@ -6262,6 +6316,10 @@ class MainActivity :
             dy: Float,
             pointerCount: Int
     ) {
+        if (metaModeEnabled || remoteControllerMode == ControllerMode.META) {
+            handleMetaTrackpadGesture(action, dx, dy, pointerCount)
+            return
+        }
         if (::cursorController.isInitialized) {
             cursorController.onControllerTrackpadGesture(action, dx, dy, pointerCount)
         }
@@ -6270,6 +6328,11 @@ class MainActivity :
     override fun onControllerTap() {
         runOnUiThread {
             if (!::dualWebViewGroup.isInitialized) return@runOnUiThread
+            if (metaModeEnabled || remoteControllerMode == ControllerMode.META) {
+                dispatchMetaKeyToWebView("Enter")
+                dualWebViewGroup.noteUserInteraction()
+                return@runOnUiThread
+            }
 
             // Route through the same triple-tap detection as the temple touchpad
             val currentTime = SystemClock.uptimeMillis()
@@ -6355,6 +6418,192 @@ class MainActivity :
             }
             dualWebViewGroup.noteUserInteraction()
         }
+    }
+
+    fun setMetaModeEnabled(enabled: Boolean) {
+        if (metaModeEnabled == enabled) return
+        metaModeEnabled = enabled
+        getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putBoolean(Constants.KEY_META_MODE_ENABLED, enabled)
+                .apply()
+        applyMetaModeCursorVisibility()
+        if (::dualWebViewGroup.isInitialized) {
+            dualWebViewGroup.showToast(
+                    if (enabled) "Meta mode enabled: swipes send arrows, taps send Enter"
+                    else "Meta mode disabled",
+                    1800L
+            )
+        }
+    }
+
+    fun isMetaModeEnabled(): Boolean = metaModeEnabled
+
+    private fun isMetaNavigationActive(): Boolean =
+            metaModeEnabled || remoteControllerMode == ControllerMode.META
+
+    private fun applyMetaModeCursorVisibility() {
+        if (!::dualWebViewGroup.isInitialized) return
+        if (isMetaNavigationActive()) {
+            if (savedCursorVisibleBeforeMetaMode == null) {
+                savedCursorVisibleBeforeMetaMode = isCursorVisible
+            }
+            refreshCursor(false)
+        } else {
+            val shouldRestoreCursor = savedCursorVisibleBeforeMetaMode ?: return
+            savedCursorVisibleBeforeMetaMode = null
+            refreshCursor(shouldRestoreCursor)
+        }
+    }
+
+    private fun handleMetaTrackpadGesture(
+            action: ControllerTrackpadAction,
+            dx: Float,
+            dy: Float,
+            pointerCount: Int
+    ) {
+        runOnUiThread {
+            if (pointerCount > 1) return@runOnUiThread
+            when (action) {
+                ControllerTrackpadAction.DOWN -> {
+                    metaGestureStartX = 0f
+                    metaGestureStartY = 0f
+                    metaGestureLastX = 0f
+                    metaGestureLastY = 0f
+                    metaGestureTotalDistance = 0f
+                }
+                ControllerTrackpadAction.MOVE -> {
+                    metaGestureLastX += dx
+                    metaGestureLastY += dy
+                    metaGestureTotalDistance += kotlin.math.sqrt(dx * dx + dy * dy)
+                }
+                ControllerTrackpadAction.UP -> {
+                    val key = metaKeyForGesture(metaGestureLastX, metaGestureLastY, metaGestureTotalDistance)
+                    dispatchMetaKeyToWebView(key)
+                    metaGestureTotalDistance = 0f
+                }
+                ControllerTrackpadAction.CANCEL -> metaGestureTotalDistance = 0f
+                ControllerTrackpadAction.POINTER -> Unit
+            }
+        }
+    }
+
+    private fun handleMetaTouchEvent(ev: MotionEvent): Boolean {
+        if (!metaModeEnabled || isPointOnCustomUi(ev.rawX, ev.rawY)) return false
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                metaGestureStartX = ev.rawX
+                metaGestureStartY = ev.rawY
+                metaGestureLastX = ev.rawX
+                metaGestureLastY = ev.rawY
+                metaGestureTotalDistance = 0f
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = ev.rawX - metaGestureLastX
+                val dy = ev.rawY - metaGestureLastY
+                metaGestureTotalDistance += kotlin.math.sqrt(dx * dx + dy * dy)
+                metaGestureLastX = ev.rawX
+                metaGestureLastY = ev.rawY
+                return true
+            }
+            MotionEvent.ACTION_UP -> {
+                val key = metaKeyForGesture(
+                        ev.rawX - metaGestureStartX,
+                        ev.rawY - metaGestureStartY,
+                        metaGestureTotalDistance
+                )
+                dispatchMetaKeyToWebView(key)
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> return true
+        }
+        return false
+    }
+
+    private fun metaKeyForGesture(dx: Float, dy: Float, totalDistance: Float): String {
+        val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+        val swipeThreshold = 36f
+        return if (distance < swipeThreshold && totalDistance < swipeThreshold * 1.5f) {
+            "Enter"
+        } else if (kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+            if (dx < 0f) "ArrowLeft" else "ArrowRight"
+        } else {
+            if (dy < 0f) "ArrowUp" else "ArrowDown"
+        }
+    }
+
+    private fun dispatchMetaKeyToWebView(keyName: String) {
+        if (!::webView.isInitialized) return
+        val keyCode =
+                when (keyName) {
+                    "ArrowUp" -> KeyEvent.KEYCODE_DPAD_UP
+                    "ArrowDown" -> KeyEvent.KEYCODE_DPAD_DOWN
+                    "ArrowLeft" -> KeyEvent.KEYCODE_DPAD_LEFT
+                    "ArrowRight" -> KeyEvent.KEYCODE_DPAD_RIGHT
+                    "Enter" -> KeyEvent.KEYCODE_ENTER
+                    else -> return
+                }
+        val now = SystemClock.uptimeMillis()
+        webView.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
+        webView.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0))
+
+        val code = if (keyName == "Enter") "Enter" else keyName
+        val which =
+                when (keyName) {
+                    "ArrowUp" -> 38
+                    "ArrowDown" -> 40
+                    "ArrowLeft" -> 37
+                    "ArrowRight" -> 39
+                    "Enter" -> 13
+                    else -> return
+                }
+        webView.evaluateJavascript(
+                """
+            (function() {
+                const key = ${JSONObject.quote(keyName)};
+                const code = ${JSONObject.quote(code)};
+                const which = $which;
+                const target = document.activeElement || document.body || document.documentElement;
+                const init = {key, code, which, keyCode: which, bubbles: true, cancelable: true};
+                target.dispatchEvent(new KeyboardEvent('keydown', init));
+                target.dispatchEvent(new KeyboardEvent('keyup', init));
+            })();
+        """.trimIndent(),
+                null
+        )
+        if (::dualWebViewGroup.isInitialized) {
+            dualWebViewGroup.noteUserInteraction()
+        }
+    }
+
+    private fun isMetaNavigationKey(keyCode: Int): Boolean =
+            metaKeyNameForKeyCode(keyCode) != null
+
+    private fun metaKeyNameForKeyCode(keyCode: Int): String? =
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> "ArrowUp"
+                KeyEvent.KEYCODE_DPAD_DOWN -> "ArrowDown"
+                KeyEvent.KEYCODE_DPAD_LEFT -> "ArrowLeft"
+                KeyEvent.KEYCODE_DPAD_RIGHT -> "ArrowRight"
+                KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_DPAD_CENTER -> "Enter"
+                else -> null
+            }
+
+    private fun maybeShowGlassAppsMetaModeToast(url: String?) {
+        val host = runCatching { url?.let { Uri.parse(it).host } }.getOrNull() ?: return
+        if (!host.equals("glassapps.io", ignoreCase = true) &&
+                        !host.endsWith(".glassapps.io", ignoreCase = true)
+        ) {
+            return
+        }
+        if (glassAppsMetaToastShownForUrl == url) return
+        glassAppsMetaToastShownForUrl = url
+        dualWebViewGroup.showToast(
+                if (metaModeEnabled) "Meta mode is enabled for Glass Apps"
+                else "For maximum compatibility on Glass Apps, enable Meta mode in Settings.",
+                3500L
+        )
     }
 
     private fun controllerNormalizedToScreen(x: Float, y: Float): Pair<Float, Float> {

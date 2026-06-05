@@ -22,7 +22,8 @@ interface ControllerInputListener {
 
 enum class ControllerMode {
     AIR_MOUSE,
-    TRACKPAD
+    TRACKPAD,
+    META
 }
 
 enum class ControllerTrackpadAction {

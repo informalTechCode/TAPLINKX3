@@ -64,6 +64,8 @@ class MainActivity : Activity(), SensorEventListener {
     private var touchStartX = 0f
     private var touchStartY = 0f
     private var totalTouchDistance = 0f
+    private var metaGestureStartX = 0f
+    private var metaGestureStartY = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -493,15 +495,26 @@ class MainActivity : Activity(), SensorEventListener {
                                 setPadding(dp(8), dp(8), dp(16), dp(8))
                             }
                     )
+                    addView(
+                            RadioButton(this@MainActivity).apply {
+                                text = "Meta"
+                                setTextColor(Color.parseColor("#e2e8f0"))
+                                id = View.generateViewId()
+                                setPadding(dp(8), dp(8), dp(16), dp(8))
+                            }
+                    )
                     setOnCheckedChangeListener { group, checkedId ->
                         flushPendingTrackpadDelta()
                         val checked = group.findViewById<RadioButton>(checkedId)
                         mode =
-                                if (checked.text.toString().contains("Air")) {
-                                    hasBaseline = false
-                                    TapLinkBluetoothControllerServer.ControllerMode.AIR_MOUSE
-                                } else {
-                                    TapLinkBluetoothControllerServer.ControllerMode.TRACKPAD
+                                when {
+                                    checked.text.toString().contains("Air") -> {
+                                        hasBaseline = false
+                                        TapLinkBluetoothControllerServer.ControllerMode.AIR_MOUSE
+                                    }
+                                    checked.text.toString().contains("Meta") ->
+                                            TapLinkBluetoothControllerServer.ControllerMode.META
+                                    else -> TapLinkBluetoothControllerServer.ControllerMode.TRACKPAD
                                 }
                         controllerServer.setMode(mode)
                         updateModeChrome()
@@ -540,7 +553,8 @@ class MainActivity : Activity(), SensorEventListener {
                     setOnTouchListener(::handleTrackpadTouch)
                     addView(
                             TextView(this@MainActivity).apply {
-                                text = "Trackpad Area"
+                                id = android.R.id.text1
+                                text = if (mode == TapLinkBluetoothControllerServer.ControllerMode.META) "Meta Mode\nSwipe arrows • tap Enter" else "Trackpad Area"
                                 setTextColor(Color.parseColor("#64748b"))
                                 textSize = 20f
                                 gravity = Gravity.CENTER
@@ -902,10 +916,22 @@ class MainActivity : Activity(), SensorEventListener {
 
     private fun handleTrackpadTouch(view: View, event: MotionEvent): Boolean {
         val isAirMouse = mode == TapLinkBluetoothControllerServer.ControllerMode.AIR_MOUSE
+        val isMeta = mode == TapLinkBluetoothControllerServer.ControllerMode.META
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 val (x, y) = trackpadCentroid(event)
+                if (isMeta) {
+                    metaGestureStartX = x
+                    metaGestureStartY = y
+                    lastPadX = x
+                    lastPadY = y
+                    touchStartX = x
+                    touchStartY = y
+                    totalTouchDistance = 0f
+                    maxPointerCountInGesture = event.pointerCount
+                    return true
+                }
                 lastPadX = x
                 lastPadY = y
                 touchStartX = x
@@ -924,6 +950,10 @@ class MainActivity : Activity(), SensorEventListener {
                 return true
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
+                if (isMeta) {
+                    maxPointerCountInGesture = maxOf(maxPointerCountInGesture, event.pointerCount)
+                    return true
+                }
                 flushPendingTrackpadDelta((event.pointerCount - 1).coerceAtLeast(1))
                 val (x, y) = trackpadCentroid(event)
                 resetTrackpadAccumulator(x, y, event.pointerCount)
@@ -937,11 +967,24 @@ class MainActivity : Activity(), SensorEventListener {
             }
             MotionEvent.ACTION_MOVE -> {
                 val (x, y) = trackpadCentroid(event)
+                if (isMeta) {
+                    val dx = x - lastPadX
+                    val dy = y - lastPadY
+                    totalTouchDistance += sqrt(dx * dx + dy * dy)
+                    lastPadX = x
+                    lastPadY = y
+                    maxPointerCountInGesture = maxOf(maxPointerCountInGesture, event.pointerCount)
+                    return true
+                }
                 processTrackpadSample(x, y, event.pointerCount, isAirMouse)
 
                 return true
             }
             MotionEvent.ACTION_POINTER_UP -> {
+                if (isMeta) {
+                    maxPointerCountInGesture = maxOf(maxPointerCountInGesture, event.pointerCount)
+                    return true
+                }
                 flushPendingTrackpadDelta(event.pointerCount)
                 val remainingPointerCount = (event.pointerCount - 1).coerceAtLeast(1)
                 val (x, y) = trackpadCentroid(event, excludeActionPointer = true)
@@ -956,6 +999,10 @@ class MainActivity : Activity(), SensorEventListener {
             }
             MotionEvent.ACTION_UP -> {
                 val (x, y) = trackpadCentroid(event)
+                if (isMeta) {
+                    sendMetaGestureKey(x, y)
+                    return true
+                }
                 processTrackpadSample(x, y, event.pointerCount, isAirMouse)
 
                 if (!isAirMouse) {
@@ -981,6 +1028,7 @@ class MainActivity : Activity(), SensorEventListener {
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
+                if (isMeta) return true
                 flushPendingTrackpadDelta(event.pointerCount)
                 if (!isAirMouse) {
                     controllerServer.sendTrackpadGesture(
@@ -993,6 +1041,22 @@ class MainActivity : Activity(), SensorEventListener {
         }
 
         return false
+    }
+
+    private fun sendMetaGestureKey(x: Float, y: Float) {
+        if (maxPointerCountInGesture > 1) return
+        val dx = x - metaGestureStartX
+        val dy = y - metaGestureStartY
+        val distance = sqrt(dx * dx + dy * dy)
+        val key =
+                if (distance < TAP_DISTANCE_PX && totalTouchDistance < TAP_DISTANCE_PX) {
+                    "Enter"
+                } else if (abs(dx) > abs(dy)) {
+                    if (dx < 0f) "ArrowLeft" else "ArrowRight"
+                } else {
+                    if (dy < 0f) "ArrowUp" else "ArrowDown"
+                }
+        controllerServer.sendKey(key)
     }
 
     private fun resetTrackpadAccumulator(x: Float, y: Float, pointerCount: Int) {
@@ -1085,8 +1149,11 @@ class MainActivity : Activity(), SensorEventListener {
 
     private fun updateModeChrome() {
         val isAirMouse = mode == TapLinkBluetoothControllerServer.ControllerMode.AIR_MOUSE
+        val isMeta = mode == TapLinkBluetoothControllerServer.ControllerMode.META
         trackpad.alpha = if (isAirMouse) 0.45f else 1f
         recenterButton.visibility = if (isAirMouse) View.VISIBLE else View.GONE
+        (trackpad as? ViewGroup)?.findViewById<TextView>(android.R.id.text1)?.text =
+                if (isMeta) "Meta Mode\nSwipe arrows • tap Enter" else "Trackpad Area"
     }
 
     private fun setPhoneKeyboardVisible(visible: Boolean) {

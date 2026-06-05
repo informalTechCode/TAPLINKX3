@@ -118,6 +118,19 @@
             android:textAllCaps="false"
             android:clickable="true"
             android:focusable="true"
+            android:layout_marginBottom="6dp"/>
+
+        <Button
+            android:id="@+id/btnToggleMetaMode"
+            android:layout_width="match_parent"
+            android:layout_height="28dp"
+            android:text="Meta Mode: Off"
+            android:textColor="#82B1FF"
+            android:textSize="11sp"
+            android:background="@drawable/settings_outlined_button_background"
+            android:textAllCaps="false"
+            android:clickable="true"
+            android:focusable="true"
             android:layout_marginBottom="10dp"/>
 
         <!-- Anchor Smoothness -->
