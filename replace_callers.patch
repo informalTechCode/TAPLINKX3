@@ -1,0 +1,121 @@
+--- app/src/main/java/com/TapLink/app/DualWebViewGroup.kt
++++ app/src/main/java/com/TapLink/app/DualWebViewGroup.kt
+@@ -4388,14 +4388,15 @@
+         // WebView
+         if (isAnchored && !isInScrollMode) {
+             var isOverTarget = false
+-            val (cursorX, cursorY) = getCursorInContainerCoords()
++            getCursorInContainerCoords(reusablePoint)
++            val cursorX = reusablePoint[0]
++            val cursorY = reusablePoint[1]
+
+             // Check Keyboard
+             if (keyboardContainer.visibility == View.VISIBLE) {
+-                val localCoords = computeAnchoredKeyboardCoordinates()
+-                if (localCoords != null) {
+-                    val (localX, localY) = localCoords
+-                    if (localX >= 0 &&
++                if (computeAnchoredKeyboardCoordinates(reusablePoint)) {
++                    val kbLocalX = reusablePoint[0]
++                    val kbLocalY = reusablePoint[1]
++                    if (kbLocalX >= 0 &&
+-                                    localX <= keyboardContainer.width &&
++                                    kbLocalX <= keyboardContainer.width &&
+-                                    localY >= 0 &&
++                                    kbLocalY >= 0 &&
+-                                    localY <= keyboardContainer.height
++                                    kbLocalY <= keyboardContainer.height
+                     ) {
+                         isOverTarget = true
+                         anchoredTarget = 1
+@@ -4610,13 +4611,14 @@
+                     }
+
+                     if (isAnchored) {
+-                        val (cursorX, cursorY) = getCursorInContainerCoords()
++                        getCursorInContainerCoords(reusablePoint)
++                        val cursorX = reusablePoint[0]
++                        val cursorY = reusablePoint[1]
+                         when (anchoredTarget) {
+                             1 -> {
+                                 // Keyboard
+-                                val localCoords = computeAnchoredKeyboardCoordinates()
+-                                if (localCoords != null) {
+-                                    val (localX, localY) = localCoords
+-                                    customKeyboard?.updateHoverScreen(localX, localY, 1f)
++                                if (computeAnchoredKeyboardCoordinates(reusablePoint)) {
++                                    customKeyboard?.updateHoverScreen(reusablePoint[0], reusablePoint[1], 1f)
+                                 }
+                             }
+                             2 -> {
+@@ -4640,11 +4642,11 @@
+                         customKeyboard?.dispatchTap()
+                     } else if (isAnchored) {
+                         // Perform action based on anchored target
+-                        val (cursorX, cursorY) = getCursorInContainerCoords()
++                        getCursorInContainerCoords(reusablePoint)
++                        val cursorX = reusablePoint[0]
++                        val cursorY = reusablePoint[1]
+                         when (anchoredTarget) {
+                             1 -> { // Keyboard
+-                                val localCoords = computeAnchoredKeyboardCoordinates()
+-                                if (localCoords != null) {
+-                                    customKeyboard?.dispatchTap()
+-                                }
++                                if (computeAnchoredKeyboardCoordinates(reusablePoint)) {
++                                    customKeyboard?.dispatchTap()
++                                }
+                             }
+                             2 -> { // Bookmarks
+@@ -5317,7 +5319,9 @@
+
+             // **Update Settings Hovers**
+             if (isSettingsVisible) {
+-                val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
++                computeAnchoredCoordinates(screenX, screenY, reusablePoint)
++                val localX = reusablePoint[0]
++                val localY = reusablePoint[1]
+                 val settingsTargets = getSettingsHoverTargets()
+                 for (i in 0 until settingsTargets.size) {
+                     val view = settingsTargets[i]
+@@ -5455,7 +5459,9 @@
+
+         // Update left toggle bar if visible
+         if (leftToggleBar.visibility == View.VISIBLE) {
+-            val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
++            computeAnchoredCoordinates(screenX, screenY, reusablePoint)
++            val localX = reusablePoint[0]
++            val localY = reusablePoint[1]
+             for (i in 0 until toggleHoverTargets.size) {
+                 val target = toggleHoverTargets[i]
+                 val isCurrentlyHovered = isPointInView(localX, localY, target.view)
+@@ -5701,12 +5707,16 @@
+     }
+
+     fun isPointInToggleBar(screenX: Float, screenY: Float): Boolean {
+-        val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
++        computeAnchoredCoordinates(screenX, screenY, reusablePoint)
++        val localX = reusablePoint[0]
++        val localY = reusablePoint[1]
+         return isPointInView(localX, localY, leftToggleBar)
+     }
+
+     fun isPointInNavBar(screenX: Float, screenY: Float): Boolean {
+-        val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
++        computeAnchoredCoordinates(screenX, screenY, reusablePoint)
++        val localX = reusablePoint[0]
++        val localY = reusablePoint[1]
+         return isPointInView(localX, localY, leftNavigationBar)
+     }
+
+@@ -5792,7 +5802,9 @@
+         if (isInScrollMode) return
+
+         if (isSettingsVisible && settingsMenu != null) {
+-            val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
++            computeAnchoredCoordinates(screenX, screenY, reusablePoint)
++            val localX = reusablePoint[0]
++            val localY = reusablePoint[1]
+             if (isPointInView(localX, localY, settingsMenu)) {
+                 dispatchSettingsTouchEvent(screenX, screenY)
+                 return

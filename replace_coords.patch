@@ -1,0 +1,80 @@
+--- app/src/main/java/com/TapLink/app/DualWebViewGroup.kt
++++ app/src/main/java/com/TapLink/app/DualWebViewGroup.kt
+@@ -4292,25 +4292,25 @@
+         return true
+     }
+
+-    private fun getCursorInContainerCoords(): Pair<Float, Float> {
++    private fun getCursorInContainerCoords(outPoint: FloatArray) {
+         // Calculate the actual screen position of the cursor first
+         val containerLocation = reusableLocation
+         getLocationOnScreen(containerLocation)
+
+         val transX = if (isAnchored) 0f else leftEyeUIContainer.translationX
+         val transY = if (isAnchored) 0f else leftEyeUIContainer.translationY
+
+         val visualX = 320f + (lastCursorX - 320f) * uiScale + transX
+         val visualY = 240f + (lastCursorY - 240f) * uiScale + transY
+
+         val screenX = visualX + containerLocation[0]
+         val screenY = visualY + containerLocation[1]
+
+-        return computeAnchoredCoordinates(screenX, screenY)
++        computeAnchoredCoordinates(screenX, screenY, outPoint)
+     }
+
+-    private fun computeAnchoredKeyboardCoordinates(): Pair<Float, Float>? {
++    private fun computeAnchoredKeyboardCoordinates(outPoint: FloatArray): Boolean {
+         val keyboard = keyboardContainer
+         if (keyboard.width == 0 || keyboard.height == 0) {
+             // DebugLog.d("TouchDebug", "computeAnchoredKeyboardCoordinates: keyboard not laid out")
+-            return null
++            return false
+         }
+
+-        val (adjustedX, adjustedY) = getCursorInContainerCoords()
++        getCursorInContainerCoords(outPoint)
++        val adjustedX = outPoint[0]
++        val adjustedY = outPoint[1]
+
+         val keyboardLocation = reusableLocation2
+         keyboard.getLocationOnScreen(keyboardLocation)
+         leftEyeUIContainer.getLocationOnScreen(reusableLocation)
+         val localXContainer = adjustedX - keyboard.x
+         val localYContainer = adjustedY - keyboard.y
+
+-        val kbView = customKeyboard ?: return null
++        val kbView = customKeyboard ?: return false
+
+         val localX = localXContainer - kbView.x
+         val localY = localYContainer - kbView.y
+
+-        return Pair(localX, localY)
++        outPoint[0] = localX
++        outPoint[1] = localY
++        return true
+     }
+
+     // ⚡ Bolt: Removed object allocations (FloatArray and Matrix) in computeAnchoredCoordinates
+     // 💡 What: Replaced local `floatArrayOf` and `Matrix()` instantiations with pre-allocated class properties.
+     // 🎯 Why: This method is called extremely frequently during hover and touch events. Allocating objects in high-frequency paths causes memory churn, triggering garbage collection stutters.
+     // 📊 Impact: Significantly reduces GC pressure during active cursor tracking or touch gestures in anchored mode.
+-    private fun computeAnchoredCoordinates(screenX: Float, screenY: Float): Pair<Float, Float> {
++    private fun computeAnchoredCoordinates(screenX: Float, screenY: Float, outPoint: FloatArray) {
+         val parent = leftEyeUIContainer.parent as View
+         val parentLocation = reusableLocation2
+         parent.getLocationOnScreen(parentLocation)
+
+         val relativeX = screenX - parentLocation[0]
+         val relativeY = screenY - parentLocation[1]
+
+         reusablePoint[0] = relativeX
+         reusablePoint[1] = relativeY
+
+         leftEyeUIContainer.matrix.invert(reusableMatrix)
+         reusableMatrix.mapPoints(reusablePoint)
+
+-        return Pair(reusablePoint[0], reusablePoint[1])
++        outPoint[0] = reusablePoint[0]
++        outPoint[1] = reusablePoint[1]
+     }
