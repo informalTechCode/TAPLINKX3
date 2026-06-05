@@ -185,7 +185,7 @@ When Scroll Mode is active, a small transparent **Show** button appears in the b
 
 ## TapLink Controller (Phone Companion App)
 
-The `controller` module builds a standalone Android phone app. Bluetooth is still required for pairing, discovery, keyboard visibility, API-key sync, and fallback input. High-frequency cursor input can also use a UDP network lane over Wi-Fi or Bluetooth-tethered networking, which avoids the latency and packet queueing limits of Bluetooth RFCOMM.
+The `controller` module builds a standalone Android phone app. Bluetooth is still required for pairing, discovery, keyboard visibility, API-key sync, and fallback input. Cursor and keyboard input can also use a UDP network lane over Wi-Fi or Bluetooth-tethered networking, which avoids the latency and packet queueing limits of Bluetooth RFCOMM.
 
 ### Setup
 1. **Pair** your phone and the RayNeo X3 glasses via Bluetooth settings.
@@ -193,7 +193,7 @@ The `controller` module builds a standalone Android phone app. Bluetooth is stil
 3. **Launch** the controller app. It starts the Bluetooth server automatically.
 4. **Launch** TapLink X3 on the glasses. The glasses client connects to the phone within a few seconds.
 5. The status bar shows **"Connected to TapLink glasses"** when linked.
-6. For the lowest-latency cursor path, keep the phone and glasses on the same IP network path. TapLink auto-discovers the glasses UDP input server on port `37693` by broadcast to phone port `37692`; if discovery is blocked, the glasses also send their network endpoint over Bluetooth after connecting.
+6. For the lowest-latency cursor and keyboard path, keep the phone and glasses on the same IP network path. TapLink auto-discovers the glasses UDP input server on port `37693` by broadcast to phone port `37692`; if discovery is blocked, the glasses also send their network endpoint over Bluetooth after connecting.
 
 ### Controller Transport
 
@@ -202,9 +202,11 @@ TapLink uses two controller transports at the same time:
 | Transport | Used for | Notes |
 | --- | --- | --- |
 | **Bluetooth RFCOMM** | Pairing, mode changes, keyboard visibility, API-key sync, AI prompt handoff, and fallback input. | Required for automatic setup and compatibility. |
-| **UDP network lane** | Air mouse rays, trackpad movement, and scroll. | Preferred when available. Uses latest-position semantics for air mouse so stale packets are not replayed. |
+| **UDP network lane** | Air mouse rays, trackpad movement, scroll, and phone keyboard keystrokes. | Preferred when available. Uses latest-position semantics for air mouse so stale packets are not replayed; keystrokes use ordered sends. |
 
-If cursor input still feels delayed, confirm the phone and glasses can reach each other over the active network path and that UDP ports `37692` and `37693` are not blocked. If the UDP path is unavailable, TapLink continues over Bluetooth.
+When UDP is available, keyboard characters are sent live as you type with per-message acknowledgement and retry; if UDP delivery still fails, the controller falls back to Bluetooth. If UDP is unavailable, the phone keyboard field acts as a compose box: type the text locally, tap **Send** to transmit it, or tap **⌫** next to Send to send a remote backspace.
+
+If cursor or phone keyboard input still feels delayed, confirm the phone and glasses can reach each other over the active network path and that UDP ports `37692` and `37693` are not blocked. If the UDP path is unavailable, TapLink continues over Bluetooth.
 
 ### Controls
 

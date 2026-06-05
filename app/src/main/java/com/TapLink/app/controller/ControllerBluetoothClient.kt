@@ -315,8 +315,10 @@ class ControllerBluetoothClient(
                             }
                             "key" -> {
                                 val key = json.optString("key")
-
-                                handler.post { listener.onControllerKey(key) }
+                                val messageId = json.optString("messageId")
+                                if (ControllerReliableMessageDeduper.shouldDispatch(messageId)) {
+                                    handler.post { listener.onControllerKey(key) }
+                                }
                             }
                             "groqApiKey" -> {
                                 val key = json.optString("key")

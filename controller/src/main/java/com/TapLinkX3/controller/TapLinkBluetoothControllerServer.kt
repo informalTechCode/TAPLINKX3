@@ -76,6 +76,8 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
 
     fun isConnected(): Boolean = isConnected.get()
 
+    fun isKeyboardUdpAvailable(): Boolean = networkTransport.isReachable()
+
     fun setMode(mode: ControllerMode) {
         send(JSONObject().put("type", "mode").put("mode", mode.wireName))
     }
@@ -120,7 +122,14 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
     }
 
     fun sendKey(key: String) {
-        send(JSONObject().put("type", "key").put("key", key))
+        val data = JSONObject().put("type", "key").put("key", key).toString()
+        val queuedReliable =
+                networkTransport.sendReliable(data) { reliableData ->
+                    writeRawToOutput(reliableData)
+                }
+        if (!queuedReliable) {
+            sendRaw(data)
+        }
     }
 
     fun sendGroqApiKey(key: String) {

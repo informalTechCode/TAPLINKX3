@@ -44,10 +44,11 @@ Gradle wrapper commands are available for CI:
 
 ## Controller networking
 
-The TapLink Controller still requires Bluetooth pairing, but high-frequency cursor input can use a UDP network lane when the phone and glasses can reach each other over Wi-Fi or Bluetooth-tethered networking.
+The TapLink Controller still requires Bluetooth pairing, but high-frequency cursor input and phone keyboard typing can use a UDP network lane when the phone and glasses can reach each other over Wi-Fi or Bluetooth-tethered networking.
 
 - Glasses UDP input port: `37693`
 - Phone UDP discovery port: `37692`
 - Bluetooth remains the fallback if UDP discovery or delivery is blocked.
+- When UDP is blocked, the controller keyboard switches to a local fill-and-send workflow to avoid sending every typed character through a laggy Bluetooth queue.
 
-For best input latency, keep both devices on the same reachable network path and avoid firewall/VPN rules that block local UDP broadcast or direct UDP packets between the devices.
+For best cursor and typing latency, keep both devices on the same reachable network path and avoid firewall/VPN rules that block local UDP broadcast or direct UDP packets between the devices.

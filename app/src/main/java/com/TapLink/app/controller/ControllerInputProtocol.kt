@@ -1,5 +1,25 @@
 package com.TapLinkX3.app.controller
 
+import java.util.LinkedHashMap
+
+object ControllerReliableMessageDeduper {
+    private const val CACHE_SIZE = 256
+    private val recentMessageIds =
+            object : LinkedHashMap<String, Unit>(CACHE_SIZE, 0.75f, true) {
+                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Unit>?): Boolean =
+                        size > CACHE_SIZE
+            }
+
+    fun shouldDispatch(messageId: String?): Boolean {
+        if (messageId.isNullOrEmpty()) return true
+        synchronized(recentMessageIds) {
+            if (recentMessageIds.containsKey(messageId)) return false
+            recentMessageIds[messageId] = Unit
+        }
+        return true
+    }
+}
+
 interface ControllerInputListener {
     fun onControllerConnected(name: String, address: String)
     fun onControllerDisconnected()
