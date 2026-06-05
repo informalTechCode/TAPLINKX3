@@ -4292,7 +4292,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     // 🎯 Why: Calling invalidate() inside a drawing pass (onDraw or dispatchDraw) forces another redraw, creating an endless cycle that consumes CPU and drains battery.
     // 📊 Impact: Eliminates infinite re-renders, dramatically lowering baseline CPU usage and preventing unnecessary battery drain.
     // 🔬 Measurement: Observe CPU usage profiling before and after; the UI thread will no longer be constantly saturated with draw passes when idle.
-    private fun getCursorInContainerCoords(): Pair<Float, Float> {
+    private fun getCursorInContainerCoords(outPoint: FloatArray) {
         // Calculate the actual screen position of the cursor first
         val containerLocation = reusableLocation
         getLocationOnScreen(containerLocation)
@@ -4306,17 +4306,19 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val screenX = visualX + containerLocation[0]
         val screenY = visualY + containerLocation[1]
 
-        return computeAnchoredCoordinates(screenX, screenY)
+        computeAnchoredCoordinates(screenX, screenY, outPoint)
     }
 
-    private fun computeAnchoredKeyboardCoordinates(): Pair<Float, Float>? {
+    private fun computeAnchoredKeyboardCoordinates(outPoint: FloatArray): Boolean {
         val keyboard = keyboardContainer
         if (keyboard.width == 0 || keyboard.height == 0) {
             // DebugLog.d("TouchDebug", "computeAnchoredKeyboardCoordinates: keyboard not laid out")
-            return null
+            return false
         }
 
-        val (adjustedX, adjustedY) = getCursorInContainerCoords()
+        getCursorInContainerCoords(outPoint)
+        val adjustedX = outPoint[0]
+        val adjustedY = outPoint[1]
 
         val keyboardLocation = reusableLocation2
         keyboard.getLocationOnScreen(keyboardLocation)
@@ -4324,19 +4326,21 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val localXContainer = adjustedX - keyboard.x
         val localYContainer = adjustedY - keyboard.y
 
-        val kbView = customKeyboard ?: return null
+        val kbView = customKeyboard ?: return false
 
         val localX = localXContainer - kbView.x
         val localY = localYContainer - kbView.y
 
-        return Pair(localX, localY)
+        outPoint[0] = localX
+        outPoint[1] = localY
+        return true
     }
 
     // ⚡ Bolt: Removed object allocations (FloatArray and Matrix) in computeAnchoredCoordinates
-    // 💡 What: Replaced local `floatArrayOf` and `Matrix()` instantiations with pre-allocated class properties.
-    // 🎯 Why: This method is called extremely frequently during hover and touch events. Allocating objects in high-frequency paths causes memory churn, triggering garbage collection stutters.
+    // 💡 What: Replaced local `floatArrayOf` and `Matrix()` instantiations with pre-allocated class properties, and removed `Pair` return type by utilizing an out parameter.
+    // 🎯 Why: These allocations occurred continuously during hover state loops, causing huge memory churn, frequent garbage collection, and dropped frames. Reusing instances eliminates this overhead.
     // 📊 Impact: Significantly reduces GC pressure during active cursor tracking or touch gestures in anchored mode.
-    private fun computeAnchoredCoordinates(screenX: Float, screenY: Float): Pair<Float, Float> {
+    private fun computeAnchoredCoordinates(screenX: Float, screenY: Float, outPoint: FloatArray) {
         val parent = leftEyeUIContainer.parent as View
         val parentLocation = reusableLocation2
         parent.getLocationOnScreen(parentLocation)
@@ -4350,7 +4354,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         leftEyeUIContainer.matrix.invert(reusableMatrix)
         reusableMatrix.mapPoints(reusablePoint)
 
-        return Pair(reusablePoint[0], reusablePoint[1])
+        outPoint[0] = reusablePoint[0]
+        outPoint[1] = reusablePoint[1]
     }
 
     private fun isTouchOnView(view: View, x: Float, y: Float): Boolean {
@@ -4383,13 +4388,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // WebView
         if (isAnchored && !isInScrollMode) {
             var isOverTarget = false
-            val (cursorX, cursorY) = getCursorInContainerCoords()
+            getCursorInContainerCoords(reusablePoint)
+            val cursorX = reusablePoint[0]
+            val cursorY = reusablePoint[1]
 
             // Check Keyboard
             if (keyboardContainer.visibility == View.VISIBLE) {
-                val localCoords = computeAnchoredKeyboardCoordinates()
-                if (localCoords != null) {
-                    val (localX, localY) = localCoords
+                if (computeAnchoredKeyboardCoordinates(reusablePoint)) {
+                    val localX = reusablePoint[0]
+                    val localY = reusablePoint[1]
                     if (localX >= 0 &&
                                     localX <= keyboardContainer.width &&
                                     localY >= 0 &&
@@ -4605,7 +4612,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (anchoredGestureActive) {
-                        val (cursorX, cursorY) = getCursorInContainerCoords()
+                        getCursorInContainerCoords(reusablePoint)
+                        val cursorX = reusablePoint[0]
+                        val cursorY = reusablePoint[1]
 
                         // Check for drag threshold
                         if (!isAnchoredDrag) {
@@ -4635,7 +4644,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                     if (wasTracking) {
                         if (!isAnchoredDrag) {
-                            val (cursorX, cursorY) = getCursorInContainerCoords()
+                            getCursorInContainerCoords(reusablePoint)
+                            val cursorX = reusablePoint[0]
+                            val cursorY = reusablePoint[1]
 
                             // Dispatch tap based on target determined at ACTION_DOWN
                             when (anchoredTarget) {
@@ -5312,7 +5323,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
             // Use anchored coordinates if needed
             if (isAnchored) {
-                val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
+                computeAnchoredCoordinates(screenX, screenY, reusablePoint)
+                val localX = reusablePoint[0]
+                val localY = reusablePoint[1]
 
                 // Perform hit testing relative to leftEyeUIContainer
                 // woc is a child of leftEyeUIContainer
@@ -5450,7 +5463,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Check bookmarks view if visible
         if (isBookmarksExpanded()) {
-            val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
+            computeAnchoredCoordinates(screenX, screenY, reusablePoint)
+            val localX = reusablePoint[0]
+            val localY = reusablePoint[1]
 
             val finalX = localX - leftBookmarksView.left
             val finalY = localY - leftBookmarksView.top
@@ -5696,12 +5711,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun isPointInToggleBar(screenX: Float, screenY: Float): Boolean {
-        val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
+        computeAnchoredCoordinates(screenX, screenY, reusablePoint)
+        val localX = reusablePoint[0]
+        val localY = reusablePoint[1]
         return isPointInView(localX, localY, leftToggleBar)
     }
 
     fun isPointInNavBar(screenX: Float, screenY: Float): Boolean {
-        val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
+        computeAnchoredCoordinates(screenX, screenY, reusablePoint)
+        val localX = reusablePoint[0]
+        val localY = reusablePoint[1]
         return isPointInView(localX, localY, leftNavigationBar)
     }
 
@@ -5787,7 +5806,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (isInScrollMode) return
 
         if (isSettingsVisible && settingsMenu != null) {
-            val (localX, localY) = computeAnchoredCoordinates(screenX, screenY)
+            computeAnchoredCoordinates(screenX, screenY, reusablePoint)
+            val localX = reusablePoint[0]
+            val localY = reusablePoint[1]
             if (isPointInView(localX, localY, settingsMenu)) {
                 dispatchSettingsTouchEvent(screenX, screenY)
                 return
