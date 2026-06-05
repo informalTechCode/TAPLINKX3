@@ -6836,49 +6836,49 @@ class MainActivity :
 
         @JavascriptInterface
         fun fetchHtml(url: String, callbackName: String) {
-            val currentUrl = webView.url
-            var isAllowed = false
-            if (currentUrl != null) {
-                if (currentUrl == "file:///android_asset/glassapps_store.html" || 
-                    currentUrl.startsWith("https://glassapps.io/") || 
-                    currentUrl == "https://glassapps.io") {
-                    if (url.startsWith("https://glassapps.io/") || url == "https://glassapps.io") {
-                        isAllowed = true
+            activity.runOnUiThread {
+                val currentUrl = webView.url
+                var isAllowed = false
+                if (currentUrl != null) {
+                    if (currentUrl == "file:///android_asset/glassapps_store.html" || 
+                        currentUrl.startsWith("https://glassapps.io/") || 
+                        currentUrl == "https://glassapps.io") {
+                        if (url.startsWith("https://glassapps.io/") || url == "https://glassapps.io") {
+                            isAllowed = true
+                        }
                     }
                 }
-            }
-            
-            if (!isAllowed) {
-                activity.runOnUiThread {
+                
+                if (!isAllowed) {
                     val errorMsg = "fetchHtml access denied for this origin or target URL."
                     val js = "window['$callbackName'](null, '$errorMsg');"
                     webView.evaluateJavascript(js, null)
+                    return@runOnUiThread
                 }
-                return
-            }
 
-            Thread {
-                try {
-                    val urlConnection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-                    urlConnection.requestMethod = "GET"
-                    urlConnection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-                    val inputStream = urlConnection.inputStream
-                    val html = inputStream.bufferedReader().use { it.readText() }
-                    
-                    val encodedHtml = android.util.Base64.encodeToString(html.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
-                    
-                    activity.runOnUiThread {
-                        val js = "window['$callbackName'](atob('$encodedHtml'));"
-                        webView.evaluateJavascript(js, null)
+                Thread {
+                    try {
+                        val urlConnection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                        urlConnection.requestMethod = "GET"
+                        urlConnection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                        val inputStream = urlConnection.inputStream
+                        val html = inputStream.bufferedReader().use { it.readText() }
+                        
+                        val encodedHtml = android.util.Base64.encodeToString(html.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+                        
+                        activity.runOnUiThread {
+                            val js = "window['$callbackName'](atob('$encodedHtml'));"
+                            webView.evaluateJavascript(js, null)
+                        }
+                    } catch (e: Exception) {
+                        activity.runOnUiThread {
+                            val errorMsg = e.message?.replace("'", "\\'") ?: "Unknown error"
+                            val js = "window['$callbackName'](null, '$errorMsg');"
+                            webView.evaluateJavascript(js, null)
+                        }
                     }
-                } catch (e: Exception) {
-                    activity.runOnUiThread {
-                        val errorMsg = e.message?.replace("'", "\\'") ?: "Unknown error"
-                        val js = "window['$callbackName'](null, '$errorMsg');"
-                        webView.evaluateJavascript(js, null)
-                    }
-                }
-            }.start()
+                }.start()
+            }
         }
 
         @JavascriptInterface

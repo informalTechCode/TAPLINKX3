@@ -2912,26 +2912,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     private fun updateRefreshRate() {
-        val isFullscreen = fullScreenOverlayContainer.visibility == View.VISIBLE
-        val now = System.currentTimeMillis()
-        val isIdle = (now - lastUserInteractionTime) > idleThresholdMs
-
-        // Logic (prioritized):
-        // 1. Screen masked: 10fps (100ms) - minimal updates
-        // 2. Idle (no user interaction for 5s) and not playing media: 10fps (100ms)
-        // 3. Anchored + normal browsing: max display vsync - needs lowest-latency head tracking
-        // 4. Media playing: 60fps (16ms) - smooth video playback
-        // 5. Non-anchored without media: 60fps (16ms) so controller input stays responsive
-        refreshInterval =
-                when {
-                    isScreenMasked -> maskedRefreshIntervalMs
-                    isFullscreen -> 16L
-                    isInScrollMode -> 16L
-                    isIdle && !isMediaPlaying -> idleRefreshIntervalMs
-                    isMediaPlaying -> 16L
-                    isAnchored && !isFullscreen -> maxRefreshIntervalMs
-                    else -> 16L
-                }
+        // Always keep the right eye at max refresh rate as requested by the user
+        refreshInterval = maxRefreshIntervalMs
     }
 
     /** Call this from touch handlers to reset idle timer */
