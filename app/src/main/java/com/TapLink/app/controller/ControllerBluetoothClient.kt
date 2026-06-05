@@ -410,6 +410,7 @@ class ControllerBluetoothClient(
             when (value) {
                 "airMouse" -> ControllerMode.AIR_MOUSE
                 "trackpad" -> ControllerMode.TRACKPAD
+                "meta" -> ControllerMode.META
                 else -> null
             }
 

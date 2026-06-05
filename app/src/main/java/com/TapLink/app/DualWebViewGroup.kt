@@ -61,6 +61,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         R.id.volumeSeekBar,
         R.id.brightnessSeekBar,
         R.id.btnToggleForceDark,
+        R.id.btnToggleMetaMode,
         R.id.smoothnessSeekBar,
         R.id.screenSizeSeekBar,
         R.id.btnResetScreenSize,
@@ -6282,6 +6283,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                 .getBoolean("forceDarkWebEnabled", true)
                 forceDarkButton?.text =
                         if (forceDarkEnabled) "Force Dark: On" else "Force Dark: Off"
+                val metaModeButton = menu.findViewById<Button>(R.id.btnToggleMetaMode)
+                val metaModeEnabled = (context as? MainActivity)?.isMetaModeEnabled() ?: false
+                metaModeButton?.text =
+                        if (metaModeEnabled) "Meta Mode: On" else "Meta Mode: Off"
 
                 // Initialize smoothness seekbar from saved preference
                 val smoothnessSeekBar = menu.findViewById<SeekBar>(R.id.smoothnessSeekBar)
@@ -6397,6 +6402,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val volumeSeekBar = menu.findViewById<SeekBar>(R.id.volumeSeekBar)
             val brightnessSeekBar = menu.findViewById<SeekBar>(R.id.brightnessSeekBar)
             val forceDarkButton = menu.findViewById<Button>(R.id.btnToggleForceDark)
+            val metaModeButton = menu.findViewById<Button>(R.id.btnToggleMetaMode)
             val smoothnessSeekBar = menu.findViewById<SeekBar>(R.id.smoothnessSeekBar)
             val screenSizeSeekBar = menu.findViewById<SeekBar>(R.id.screenSizeSeekBar)
             val horizontalPosSeekBar = menu.findViewById<SeekBar>(R.id.horizontalPosSeekBar)
@@ -6495,6 +6501,19 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     forceDarkButton.isPressed = true
                     Handler(Looper.getMainLooper())
                             .postDelayed({ forceDarkButton.isPressed = false }, 100)
+                    return
+                }
+
+                val metaModeRect = getHitRect(metaModeButton, buttonSlop)
+                if (metaModeRect != null) {
+                    val mainActivity = context as? MainActivity
+                    val newEnabled = !(mainActivity?.isMetaModeEnabled() ?: false)
+                    mainActivity?.setMetaModeEnabled(newEnabled)
+                    metaModeButton.text = if (newEnabled) "Meta Mode: On" else "Meta Mode: Off"
+
+                    metaModeButton.isPressed = true
+                    Handler(Looper.getMainLooper())
+                            .postDelayed({ metaModeButton.isPressed = false }, 100)
                     return
                 }
 
