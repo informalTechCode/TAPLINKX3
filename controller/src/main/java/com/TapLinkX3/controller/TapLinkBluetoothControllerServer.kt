@@ -123,7 +123,11 @@ class TapLinkBluetoothControllerServer(private val context: Context) {
 
     fun sendKey(key: String) {
         val data = JSONObject().put("type", "key").put("key", key).toString()
-        if (!networkTransport.send(data)) {
+        val queuedReliable =
+                networkTransport.sendReliable(data) { reliableData ->
+                    writeRawToOutput(reliableData)
+                }
+        if (!queuedReliable) {
             sendRaw(data)
         }
     }

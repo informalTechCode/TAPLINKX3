@@ -86,7 +86,8 @@ class ControllerNetworkInputServer(
                     Log.d(TAG, "Network controller UDP receive active from ${packet.address.hostAddress}")
                 }
                 val line = String(packet.data, packet.offset, packet.length, Charsets.UTF_8)
-                sendAck(udpSocket, packet)
+                sendAck(udpSocket, packet, line)
+                if (isDuplicateReliableMessage(line)) continue
                 handleMessage(line)
             } catch (_: SocketException) {
                 if (isRunning.get()) Log.d(TAG, "Network input socket closed")
@@ -236,6 +237,9 @@ class ControllerNetworkInputServer(
         return if (end > start) json.substring(start, end) else null
     }
 
+    private fun isDuplicateReliableMessage(line: String): Boolean =
+            !ControllerReliableMessageDeduper.shouldDispatch(extractString(line, PREFIX_MESSAGE_ID))
+
     private fun parseTrackpadAction(value: String): ControllerTrackpadAction? =
             when (value) {
                 "down" -> ControllerTrackpadAction.DOWN
@@ -246,12 +250,10 @@ class ControllerNetworkInputServer(
                 else -> null
             }
 
-    private fun sendAck(udpSocket: DatagramSocket, packet: DatagramPacket) {
-        val data =
-                JSONObject()
-                        .put("type", TYPE_ACK)
-                        .toString()
-                        .toByteArray(Charsets.UTF_8)
+    private fun sendAck(udpSocket: DatagramSocket, packet: DatagramPacket, line: String) {
+        val ack = JSONObject().put("type", TYPE_ACK)
+        extractString(line, PREFIX_MESSAGE_ID)?.let { ack.put(FIELD_MESSAGE_ID, it) }
+        val data = ack.toString().toByteArray(Charsets.UTF_8)
         try {
             udpSocket.send(DatagramPacket(data, data.size, packet.address, PHONE_DISCOVERY_PORT))
         } catch (e: Exception) {
@@ -266,6 +268,7 @@ class ControllerNetworkInputServer(
         const val TYPE_ENDPOINT = "controllerNetworkEndpoint"
         private const val TYPE_ACK = "controllerNetworkAck"
         private const val TYPE_PING = "controllerNetworkPing"
+        private const val FIELD_MESSAGE_ID = "messageId"
         private const val DISCOVERY_INTERVAL_MS = 1000L
         private const val DISCOVERY_IDLE_INTERVAL_MS = 5000L
         private const val ACTIVE_THRESHOLD_MS = 10000L
@@ -276,5 +279,6 @@ class ControllerNetworkInputServer(
         private const val PREFIX_POINTER_COUNT = "\"pointerCount\":"
         private const val PREFIX_X = "\"x\":"
         private const val PREFIX_Y = "\"y\":"
+        private const val PREFIX_MESSAGE_ID = "\"messageId\":\""
     }
 }
