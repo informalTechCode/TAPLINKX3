@@ -1815,7 +1815,7 @@ class MainActivity :
 
     private fun formatUrl(url: String): String {
         return when {
-            url.startsWith("http://") || url.startsWith("https://") -> url
+            url.startsWith("http://") || url.startsWith("https://") || url.startsWith("file://") -> url
             url.contains(".") -> "https://$url"
             else -> "https://www.google.com/search?q=${Uri.encode(url)}"
         }
@@ -6832,6 +6832,32 @@ class MainActivity :
                     activity.dualWebViewGroup.injectLocation(location.first, location.second)
                 }
             }
+        }
+
+        @JavascriptInterface
+        fun fetchHtml(url: String, callbackName: String) {
+            Thread {
+                try {
+                    val urlConnection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                    urlConnection.requestMethod = "GET"
+                    urlConnection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                    val inputStream = urlConnection.inputStream
+                    val html = inputStream.bufferedReader().use { it.readText() }
+                    
+                    val encodedHtml = android.util.Base64.encodeToString(html.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+                    
+                    activity.runOnUiThread {
+                        val js = "window['$callbackName'](atob('$encodedHtml'));"
+                        webView.evaluateJavascript(js, null)
+                    }
+                } catch (e: Exception) {
+                    activity.runOnUiThread {
+                        val errorMsg = e.message?.replace("'", "\\'") ?: "Unknown error"
+                        val js = "window['$callbackName'](null, '$errorMsg');"
+                        webView.evaluateJavascript(js, null)
+                    }
+                }
+            }.start()
         }
 
         @JavascriptInterface

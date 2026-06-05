@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GlassApps Store</title>
+    <style>
+        body { 
+            background: #000; 
+            color: #fff; 
+            font-family: sans-serif; 
+            margin: 0; 
+            padding: 24px; 
+            box-sizing: border-box; 
+        }
+        .header { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 12px; 
+            margin-bottom: 32px; 
+            cursor: pointer;
+        }
+        .header img { 
+            width: 48px; 
+            height: 48px; 
+            border-radius: 8px; 
+        }
+        .header h1 { 
+            margin: 0; 
+            font-size: 32px; 
+            font-weight: bold; 
+        }
+        .grid { 
+            display: grid; 
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px; 
+            padding-bottom: 40px; 
+        }
+        .card { 
+            background: #111; 
+            border: 1px solid #333; 
+            border-radius: 16px; 
+            padding: 12px; 
+            text-align: center; 
+            cursor: pointer;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        .card:active { 
+            background: #222; 
+        }
+        .card img { 
+            width: 56px; 
+            height: 56px; 
+            border-radius: 12px; 
+            margin-bottom: 12px; 
+            object-fit: cover; 
+            background: #222; 
+        }
+        .card h3 { 
+            font-size: 18px; 
+            margin: 0 0 8px 0; 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            color: #fff; 
+        }
+        .card p { 
+            font-size: 14px; 
+            color: #888; 
+            margin: 0; 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+        }
+        #loading-overlay { 
+            display: none; 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0,0,0,0.9); 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            z-index: 9999; 
+        }
+        .spinner { 
+            width: 48px; 
+            height: 48px; 
+            border: 4px solid #333; 
+            border-top: 4px solid #fff; 
+            border-radius: 50%; 
+            animation: spin 1s linear infinite; 
+            margin-bottom: 16px; 
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+        #error-message {
+            display: none;
+            color: #ff5555;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div id="loading-text" style="font-size: 20px; color: #fff;">Loading Store...</div>
+    </div>
+
+    <!-- Clicking header takes you to the real site -->
+    <div class="header" onclick="window.location.href='https://glassapps.io'">
+        <img src="https://glassapps.io/father.png" onerror="this.style.display='none'">
+        <h1>GlassApps</h1>
+    </div>
+    
+    <div id="error-message">Failed to load apps. Click the header to visit the full site.</div>
+    
+    <div class="grid" id="app-grid"></div>
+
+    <script>
+        // Start loading automatically
+        document.getElementById('loading-overlay').style.display = 'flex';
+        
+        function nativeFetch(url) {
+            return new Promise(function(resolve, reject) {
+                if (window.AndroidInterface && typeof window.AndroidInterface.fetchHtml === 'function') {
+                    var callbackName = 'fetchCallback_' + Math.random().toString(36).substr(2, 9);
+                    window[callbackName] = function(html, errorMsg) {
+                        delete window[callbackName];
+                        if (errorMsg) {
+                            reject(new Error(errorMsg));
+                        } else {
+                            resolve(html);
+                        }
+                    };
+                    window.AndroidInterface.fetchHtml(url, callbackName);
+                } else {
+                    fetch(url).then(function(res) {
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        return res.text();
+                    }).then(resolve).catch(reject);
+                }
+            });
+        }
+        
+        nativeFetch('https://glassapps.io')
+            .then(function(html) {
+                var regex1 = /"href":"\/app\/([^"]+)"[\s\S]*?"src":"([^"]+)"[\s\S]*?"children":"([^"]+)"[\s\S]*?"children":"([^"]+)"/g;
+                var regex2 = /href="\/app\/([^"]+)"[\s\S]*?src="([^"]+)"[\s\S]*?<h[23][^>]*>([^<]+)<\/h[23]>[\s\S]*?<p[^>]*>([^<]+)<\/p>/g;
+                
+                var apps = [];
+                var match;
+                while ((match = regex1.exec(html)) !== null) {
+                    if (match[3].length < 100 && match[3].indexOf('<') === -1) {
+                        apps.push({ slug: match[1], img: match[2], title: match[3], author: match[4] });
+                    }
+                }
+                
+                if (apps.length === 0) {
+                    while ((match = regex2.exec(html)) !== null) {
+                        if (match[3].length < 100) {
+                            apps.push({ slug: match[1], img: match[2], title: match[3], author: match[4] });
+                        }
+                    }
+                }
+                
+                var uniqueApps = [];
+                var seen = new Set();
+                for (var i = 0; i < apps.length; i++) {
+                    if (!seen.has(apps[i].slug)) {
+                        seen.add(apps[i].slug);
+                        uniqueApps.push(apps[i]);
+                    }
+                }
+                
+                if (uniqueApps.length === 0) {
+                    throw new Error('No apps found');
+                }
+
+                var grid = document.getElementById('app-grid');
+                var loading = document.getElementById('loading-overlay');
+                var loadingText = document.getElementById('loading-text');
+
+                uniqueApps.forEach(function(app) {
+                    var card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerHTML = `
+                        <img src="${app.img}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMzMzMiLz48L3N2Zz4='">
+                        <h3>${app.title}</h3>
+                        <p>${app.author}</p>
+                    `;
+                    card.onclick = function() {
+                        loadingText.innerText = "Loading App...";
+                        loading.style.display = 'flex';
+                        nativeFetch('https://glassapps.io/app/' + app.slug)
+                            .then(function(pageHtml) {
+                                var m = pageHtml.match(/"appUrl":"([^"]+)"/);
+                                if (m) {
+                                    if (window.AndroidInterface && typeof window.AndroidInterface.openUrl === 'function') {
+                                        window.AndroidInterface.openUrl(m[1]);
+                                    } else {
+                                        window.location.href = m[1];
+                                    }
+                                } else {
+                                    if (window.AndroidInterface && typeof window.AndroidInterface.openUrl === 'function') {
+                                        window.AndroidInterface.openUrl('https://glassapps.io/app/' + app.slug);
+                                    } else {
+                                        window.location.href = 'https://glassapps.io/app/' + app.slug;
+                                    }
+                                }
+                            })
+                            .catch(function(e) {
+                                alert('Network error loading app');
+                                loading.style.display = 'none';
+                            });
+                    };
+                    grid.appendChild(card);
+                });
+                
+                loading.style.display = 'none';
+            })
+            .catch(function(err) {
+                console.error(err);
+                document.getElementById('loading-overlay').style.display = 'none';
+                var errDiv = document.getElementById('error-message');
+                errDiv.style.display = 'block';
+                errDiv.innerHTML = 'Failed to load apps: ' + err.message + '<br><br>Click the header to visit the full site.';
+            });
+    </script>
+</body>
+</html>
