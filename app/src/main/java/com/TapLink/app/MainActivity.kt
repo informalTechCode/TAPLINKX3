@@ -141,6 +141,7 @@ class MainActivity :
     private val Y_INVERT = -1.0f // 1 = drag up -> up. Use -1 to flip if needed.
     lateinit var dualWebViewGroup: DualWebViewGroup
     private val reusableLocation1 = IntArray(2)
+    private val reusableLocation2 = IntArray(2)
     private lateinit var webView: WebView
     private lateinit var mainContainer: FrameLayout
     private lateinit var gestureDetector: GestureDetector
@@ -2843,12 +2844,13 @@ class MainActivity :
         if (dualWebViewGroup.isSettingsVisible()) {
             val settingsMenuLocation = reusableLocation1
             dualWebViewGroup.getSettingsMenuLocation(settingsMenuLocation)
-            val settingsMenuSize = dualWebViewGroup.getSettingsMenuSize()
+            val settingsMenuSize = reusableLocation2
+            dualWebViewGroup.getSettingsMenuSize(settingsMenuSize)
 
             if (interactionX >= settingsMenuLocation[0] &&
-                            interactionX <= settingsMenuLocation[0] + settingsMenuSize.first &&
+                            interactionX <= settingsMenuLocation[0] + settingsMenuSize[0] &&
                             interactionY >= settingsMenuLocation[1] &&
-                            interactionY <= settingsMenuLocation[1] + settingsMenuSize.second
+                            interactionY <= settingsMenuLocation[1] + settingsMenuSize[1]
             ) {
 
                 // Dispatch touch event to settings menu using screen coordinates
@@ -3378,11 +3380,12 @@ class MainActivity :
         if (dualWebViewGroup.isSettingsVisible()) {
             val settingsMenuLocation = reusableLocation1
             dualWebViewGroup.getSettingsMenuLocation(settingsMenuLocation)
-            val settingsMenuSize = dualWebViewGroup.getSettingsMenuSize()
+            val settingsMenuSize = reusableLocation2
+            dualWebViewGroup.getSettingsMenuSize(settingsMenuSize)
             if (screenX >= settingsMenuLocation[0] &&
-                            screenX <= settingsMenuLocation[0] + settingsMenuSize.first &&
+                            screenX <= settingsMenuLocation[0] + settingsMenuSize[0] &&
                             screenY >= settingsMenuLocation[1] &&
-                            screenY <= settingsMenuLocation[1] + settingsMenuSize.second
+                            screenY <= settingsMenuLocation[1] + settingsMenuSize[1]
             ) {
                 return true
             }
@@ -3551,11 +3554,12 @@ class MainActivity :
         if (dualWebViewGroup.isSettingsVisible()) {
             val settingsMenuLocation = reusableLocation1
             dualWebViewGroup.getSettingsMenuLocation(settingsMenuLocation)
-            val settingsMenuSize = dualWebViewGroup.getSettingsMenuSize()
+            val settingsMenuSize = reusableLocation2
+            dualWebViewGroup.getSettingsMenuSize(settingsMenuSize)
             if (rawScreenX >= settingsMenuLocation[0] &&
-                            rawScreenX <= settingsMenuLocation[0] + settingsMenuSize.first &&
+                            rawScreenX <= settingsMenuLocation[0] + settingsMenuSize[0] &&
                             rawScreenY >= settingsMenuLocation[1] &&
-                            rawScreenY <= settingsMenuLocation[1] + settingsMenuSize.second
+                            rawScreenY <= settingsMenuLocation[1] + settingsMenuSize[1]
             ) {
                 dualWebViewGroup.dispatchSettingsTouchEvent(rawScreenX, rawScreenY)
                 return true
