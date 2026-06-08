@@ -34,3 +34,6 @@
 ## 2024-05-18 - [Object Allocation in High-Frequency Paths]
 **Learning:** Allocating objects (like `FloatArray` and `Matrix`) inside high-frequency touch and hover loops (e.g., `computeAnchoredCoordinates` in `DualWebViewGroup`) creates massive memory churn, causing GC stutter and degraded UI responsiveness.
 **Action:** Pre-allocate all such math and measurement objects as class-level properties when optimizing Android View code.
+## 2024-05-19 - [Object Allocation in Getters called on Hot Paths]
+**Learning:** Returning `Pair<Float, Float>` or `Pair<Int, Int>` from helper getter functions (like `getSettingsMenuSize`, `getKeyboardSize`, or `getLocalPoint`) creates severe object allocation churn when these methods are called frequently inside high-frequency touch event loops.
+**Action:** Use an `out` parameter strategy. Have the calling method pass in a pre-allocated primitive array (e.g. `IntArray(2)` or `FloatArray(2)`). The getter populates the array rather than returning a newly instantiated object, keeping the touch event loop GC-friendly.

@@ -4854,8 +4854,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 localY <= keyboardContainer.bottom
     }
 
-    fun getKeyboardSize(): Pair<Int, Int> {
-        return Pair(keyboardContainer.width, keyboardContainer.height)
+    fun getKeyboardSize(outSize: IntArray) {
+        outSize[0] = keyboardContainer.width
+        outSize[1] = keyboardContainer.height
     }
 
     // Called from MainActivity when the cursor is over the keyboard
@@ -5604,28 +5605,28 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     // Dispatch touch/click to the appropriate scrollbar element
     fun dispatchScrollbarTouch(screenX: Float, screenY: Float) {
-        fun getLocalPoint(container: ViewGroup): Pair<Float, Float>? {
-            if (container.visibility != View.VISIBLE) return null
+        fun getLocalPoint(container: ViewGroup, outPoint: FloatArray): Boolean {
+            if (container.visibility != View.VISIBLE) return false
 
-            if (!container.getGlobalVisibleRect(reusableRect)) return null
+            if (!container.getGlobalVisibleRect(reusableRect)) return false
             if (screenX < reusableRect.left ||
                             screenX > reusableRect.right ||
                             screenY < reusableRect.top ||
                             screenY > reusableRect.bottom
             ) {
-                return null
+                return false
             }
             val scaleX = if (container.scaleX == 0f) 1f else container.scaleX
             val scaleY = if (container.scaleY == 0f) 1f else container.scaleY
-            val localX = (screenX - reusableRect.left) / scaleX
-            val localY = (screenY - reusableRect.top) / scaleY
-            return localX to localY
+            outPoint[0] = (screenX - reusableRect.left) / scaleX
+            outPoint[1] = (screenY - reusableRect.top) / scaleY
+            return true
         }
 
         fun dispatchToContainer(container: ViewGroup) {
-            val localPoint = getLocalPoint(container) ?: return
-            val localX = localPoint.first
-            val localY = localPoint.second
+            if (!getLocalPoint(container, reusablePoint)) return
+            val localX = reusablePoint[0]
+            val localY = reusablePoint[1]
             // Check which child is hit
             for (i in 0 until container.childCount) {
                 val child = container.getChildAt(i)
@@ -6370,8 +6371,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         settingsMenu?.getLocationOnScreen(location)
     }
 
-    fun getSettingsMenuSize(): Pair<Int, Int> {
-        return Pair(settingsMenu?.width ?: 0, settingsMenu?.height ?: 0)
+    fun getSettingsMenuSize(outSize: IntArray) {
+        outSize[0] = settingsMenu?.width ?: 0
+        outSize[1] = settingsMenu?.height ?: 0
     }
 
     fun dispatchSettingsTouchEvent(x: Float, y: Float) {
