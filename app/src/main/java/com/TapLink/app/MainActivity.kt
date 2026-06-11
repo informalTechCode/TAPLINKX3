@@ -142,6 +142,7 @@ class MainActivity :
     lateinit var dualWebViewGroup: DualWebViewGroup
     private val reusableLocation1 = IntArray(2)
     private val reusableLocation2 = IntArray(2)
+    private val reusablePoint = FloatArray(2)
     private lateinit var webView: WebView
     private lateinit var mainContainer: FrameLayout
     private lateinit var gestureDetector: GestureDetector
@@ -3282,13 +3283,24 @@ class MainActivity :
 
     private fun mapMousePointForVirtualTap(
             rawScreenX: Float,
-            rawScreenY: Float
-    ): Pair<Float, Float> {
-        if (!isMouseTapMode) return rawScreenX to rawScreenY
+            rawScreenY: Float,
+            outPoint: FloatArray
+    ) {
+        if (!isMouseTapMode) {
+            outPoint[0] = rawScreenX
+            outPoint[1] = rawScreenY
+            return
+        }
         val fallbackEyeWidth = 640f
         if (!::dualWebViewGroup.isInitialized) {
-            if (rawScreenX < fallbackEyeWidth) return rawScreenX to rawScreenY
-            return (rawScreenX - fallbackEyeWidth) to rawScreenY
+            if (rawScreenX < fallbackEyeWidth) {
+                outPoint[0] = rawScreenX
+                outPoint[1] = rawScreenY
+                return
+            }
+            outPoint[0] = rawScreenX - fallbackEyeWidth
+            outPoint[1] = rawScreenY
+            return
         }
 
         val groupLocation = reusableLocation1
@@ -3301,18 +3313,27 @@ class MainActivity :
         val xWithinGroup = rawScreenX - groupLeft
         if (xWithinGroup < 0f || xWithinGroup >= groupWidth) {
             // Outside dual-eye surface: do not remap.
-            return rawScreenX to rawScreenY
+            outPoint[0] = rawScreenX
+            outPoint[1] = rawScreenY
+            return
         }
 
         if (xWithinGroup < eyeWidth) {
-            return rawScreenX to rawScreenY
+            outPoint[0] = rawScreenX
+            outPoint[1] = rawScreenY
+            return
         }
 
-        return (rawScreenX - eyeWidth) to rawScreenY
+        outPoint[0] = rawScreenX - eyeWidth
+        outPoint[1] = rawScreenY
     }
 
-    private fun mapScreenPointToWebViewTouch(screenX: Float, screenY: Float): Pair<Float, Float>? {
-        if (!::webView.isInitialized || !::dualWebViewGroup.isInitialized) return null
+    private fun mapScreenPointToWebViewTouch(
+            screenX: Float,
+            screenY: Float,
+            outPoint: FloatArray
+    ): Boolean {
+        if (!::webView.isInitialized || !::dualWebViewGroup.isInitialized) return false
         val scale = dualWebViewGroup.uiScale
         val webViewLocation = reusableLocation1
         webView.getLocationOnScreen(webViewLocation)
@@ -3324,7 +3345,7 @@ class MainActivity :
                         translatedX > webView.width ||
                         translatedY > webView.height
         ) {
-            return null
+            return false
         }
 
         val adjustedX: Float
@@ -3343,7 +3364,9 @@ class MainActivity :
             adjustedY = translatedY / scale
         }
 
-        return adjustedX to adjustedY
+        outPoint[0] = adjustedX
+        outPoint[1] = adjustedY
+        return true
     }
 
     private fun dispatchWebTouchFromScreen(
@@ -3353,9 +3376,9 @@ class MainActivity :
             eventTime: Long = SystemClock.uptimeMillis(),
             downTime: Long = mouseSwipeDownTime
     ): Boolean {
-        val mapped = mapScreenPointToWebViewTouch(screenX, screenY) ?: return false
-        val adjustedX = mapped.first
-        val adjustedY = mapped.second
+        if (!mapScreenPointToWebViewTouch(screenX, screenY, reusablePoint)) return false
+        val adjustedX = reusablePoint[0]
+        val adjustedY = reusablePoint[1]
 
         val event =
                 MotionEvent.obtain(downTime, eventTime, action, adjustedX, adjustedY, 0).apply {
@@ -3413,7 +3436,7 @@ class MainActivity :
         return false
     }
 
-    private fun resolveMouseScreenPoint(ev: MotionEvent): Pair<Float, Float> {
+    private fun resolveMouseScreenPoint(ev: MotionEvent, outPoint: FloatArray) {
         var screenX = ev.rawX
         var screenY = ev.rawY
 
@@ -3424,7 +3447,8 @@ class MainActivity :
             screenY = ev.y + rootLoc[1]
         }
 
-        return screenX to screenY
+        outPoint[0] = screenX
+        outPoint[1] = screenY
     }
 
     private fun dispatchWebTapAtScreenCoordinates(screenX: Float, screenY: Float) {
@@ -5816,12 +5840,12 @@ class MainActivity :
                 isDispatchingTouchEvent = false
             }
         } else {
-            val mousePoint = resolveMouseScreenPoint(ev)
-            val rawX = mousePoint.first
-            val rawY = mousePoint.second
-            val mappedPoint = mapMousePointForVirtualTap(rawX, rawY)
-            val mappedX = mappedPoint.first
-            val mappedY = mappedPoint.second
+            resolveMouseScreenPoint(ev, reusablePoint)
+            val rawX = reusablePoint[0]
+            val rawY = reusablePoint[1]
+            mapMousePointForVirtualTap(rawX, rawY, reusablePoint)
+            val mappedX = reusablePoint[0]
+            val mappedY = reusablePoint[1]
             val usedRightEyeMapping = isMouseTapMode && mappedX != rawX
 
             lastMouseRawX = rawX
@@ -6056,12 +6080,12 @@ class MainActivity :
         autoEnterMouseModeForMudraInput(ev)
 
         if (isMousePointerEvent(ev) && ::dualWebViewGroup.isInitialized) {
-            val mousePoint = resolveMouseScreenPoint(ev)
-            val rawX = mousePoint.first
-            val rawY = mousePoint.second
-            val mappedPoint = mapMousePointForVirtualTap(rawX, rawY)
-            val mappedX = mappedPoint.first
-            val mappedY = mappedPoint.second
+            resolveMouseScreenPoint(ev, reusablePoint)
+            val rawX = reusablePoint[0]
+            val rawY = reusablePoint[1]
+            mapMousePointForVirtualTap(rawX, rawY, reusablePoint)
+            val mappedX = reusablePoint[0]
+            val mappedY = reusablePoint[1]
 
             lastMouseRawX = rawX
             lastMouseRawY = rawY
@@ -6446,7 +6470,9 @@ class MainActivity :
     override fun onControllerTouch(action: ControllerTouchAction, x: Float, y: Float) {
         runOnUiThread {
             if (!::dualWebViewGroup.isInitialized || !::webView.isInitialized) return@runOnUiThread
-            val screenPoint = controllerNormalizedToScreen(x, y)
+            controllerNormalizedToScreen(x, y, reusablePoint)
+            val screenX = reusablePoint[0]
+            val screenY = reusablePoint[1]
             val motionAction =
                     when (action) {
                         ControllerTouchAction.DOWN -> MotionEvent.ACTION_DOWN
@@ -6461,7 +6487,7 @@ class MainActivity :
             val downTime = if (controllerTouchDownTime > 0L) controllerTouchDownTime else eventTime
 
             if (motionAction == MotionEvent.ACTION_UP &&
-                            handleMouseClickForCustomUi(screenPoint.first, screenPoint.second)
+                            handleMouseClickForCustomUi(screenX, screenY)
             ) {
                 controllerTouchDownTime = 0L
                 return@runOnUiThread
@@ -6469,13 +6495,13 @@ class MainActivity :
 
             dispatchWebTouchFromScreen(
                     motionAction,
-                    screenPoint.first,
-                    screenPoint.second,
+                    screenX,
+                    screenY,
                     eventTime,
                     downTime
             )
             if (motionAction == MotionEvent.ACTION_UP) {
-                maybeShowKeyboardForMouseClick(screenPoint.first, screenPoint.second)
+                maybeShowKeyboardForMouseClick(screenX, screenY)
             }
             if (motionAction == MotionEvent.ACTION_UP || motionAction == MotionEvent.ACTION_CANCEL
             ) {
@@ -6647,11 +6673,11 @@ class MainActivity :
         )
     }
 
-    private fun controllerNormalizedToScreen(x: Float, y: Float): Pair<Float, Float> {
+    private fun controllerNormalizedToScreen(x: Float, y: Float, outPoint: FloatArray) {
         val groupLocation = reusableLocation1
         dualWebViewGroup.getLocationOnScreen(groupLocation)
-        return groupLocation[0] + x * CONTROLLER_CURSOR_WIDTH to
-                groupLocation[1] + y * CONTROLLER_CURSOR_HEIGHT
+        outPoint[0] = groupLocation[0] + x * CONTROLLER_CURSOR_WIDTH
+        outPoint[1] = groupLocation[1] + y * CONTROLLER_CURSOR_HEIGHT
     }
 
     override fun onDestroy() {
