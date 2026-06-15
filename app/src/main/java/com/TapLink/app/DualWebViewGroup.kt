@@ -378,6 +378,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     private data class NavButton(
+            val key: String,
             val left: FontIconView,
             val right: FontIconView,
             var isHovered: Boolean = false
@@ -2244,54 +2245,65 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 mapOf(
                         "back" to
                                 NavButton(
+                                        key = "back",
                                         left = leftNavigationBar.findViewById(R.id.btnBack),
                                         right = leftNavigationBar.findViewById(R.id.btnBack)
                                 ),
                         "forward" to
                                 NavButton(
+                                        key = "forward",
                                         left = leftNavigationBar.findViewById(R.id.btnForward),
                                         right = leftNavigationBar.findViewById(R.id.btnForward)
                                 ),
                         "home" to
                                 NavButton(
+                                        key = "home",
                                         left = leftNavigationBar.findViewById(R.id.btnHome),
                                         right = leftNavigationBar.findViewById(R.id.btnHome)
                                 ),
                         "link" to
                                 NavButton(
+                                        key = "link",
                                         left = leftNavigationBar.findViewById(R.id.btnLink),
                                         right = leftNavigationBar.findViewById(R.id.btnLink)
                                 ),
                         "settings" to
                                 NavButton(
+                                        key = "settings",
                                         left = leftNavigationBar.findViewById(R.id.btnSettings),
                                         right = leftNavigationBar.findViewById(R.id.btnSettings)
                                 ),
                         "refresh" to
                                 NavButton(
+                                        key = "refresh",
                                         left = leftNavigationBar.findViewById(R.id.btnRefresh),
                                         right = leftNavigationBar.findViewById(R.id.btnRefresh)
                                 ),
                         "hide" to
                                 NavButton(
+                                        key = "hide",
                                         left = leftNavigationBar.findViewById(R.id.btnHide),
                                         right = leftNavigationBar.findViewById(R.id.btnHide)
                                 ),
                         "quit" to
                                 NavButton(
+                                        key = "quit",
                                         left = leftNavigationBar.findViewById(R.id.btnQuit),
                                         right = leftNavigationBar.findViewById(R.id.btnQuit)
                                 ),
                         "chat" to
                                 NavButton(
+                                        key = "chat",
                                         left = leftNavigationBar.findViewById(R.id.btnChat),
                                         right = leftNavigationBar.findViewById(R.id.btnChat)
                                 )
                 )
-        navButtonsList = navButtons.values.toList()
+        val list = navButtons.values.toList()
+        navButtonsList = list
 
         // Initialize all buttons with same base properties
-        navButtons.values.forEach { navButton ->
+        for (i in 0 until list.size) {
+            val navButton = list[i]
             navButton.left.apply {
                 visibility = View.VISIBLE
                 isClickable = true
@@ -2306,10 +2318,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Ensure physical pointer clicks (mouse/touch) work on all nav buttons, not only via
         // cursor hit-testing.
-        navButtons.forEach { (key, navButton) ->
-            navButton.left.setOnClickListener { triggerNavigationAction(key, navButton) }
+        for (i in 0 until list.size) {
+            val navButton = list[i]
+            navButton.left.setOnClickListener { triggerNavigationAction(navButton.key, navButton) }
             if (navButton.right !== navButton.left) {
-                navButton.right.setOnClickListener { triggerNavigationAction(key, navButton) }
+                navButton.right.setOnClickListener { triggerNavigationAction(navButton.key, navButton) }
             }
         }
 
@@ -5817,10 +5830,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         if (leftNavigationBar.visibility == View.VISIBLE) {
-            for ((key, button) in navButtons) {
-                if (isOver(button.left, screenX, screenY)) {
-                    triggerNavigationAction(key, button)
-                    break
+            val list = navButtonsList
+            if (list != null) {
+                for (i in 0 until list.size) {
+                    val button = list[i]
+                    if (isOver(button.left, screenX, screenY)) {
+                        triggerNavigationAction(button.key, button)
+                        break
+                    }
                 }
             }
         }
