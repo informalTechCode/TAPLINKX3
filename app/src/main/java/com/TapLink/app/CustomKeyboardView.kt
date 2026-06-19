@@ -149,6 +149,10 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
 
     private var firstMove = true
 
+    companion object {
+        private val PUNCTUATION_CHARS = listOf(".", "?", "!")
+    }
+
     private var isUpperCase = true
     private var isCapsLocked = false
     private var lastShiftPressTime = 0L
@@ -328,7 +332,7 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
                         }
                         R.id.btn_space -> {
                             listener?.onKeyPressed(" ")
-                            if (lastEmittedChar in listOf(".", "?", "!")) {
+                            if (lastEmittedChar in PUNCTUATION_CHARS) {
                                 if (!isUpperCase && !isCapsLocked) {
                                     isUpperCase = true
                                     updateKeyboardKeys()

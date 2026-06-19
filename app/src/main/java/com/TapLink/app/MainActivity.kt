@@ -1823,25 +1823,27 @@ class MainActivity :
         }
     }
 
+    companion object {
+        private val STREAMING_DOMAINS = listOf(
+            "netflix.com",
+            "disneyplus.com",
+            "hulu.com",
+            "primevideo.com",
+            "amazon.com/gp/video",
+            "max.com",
+            "peacocktv.com",
+            "apple.com/tv",
+            "tv.apple.com",
+            "tubitv.com",
+            "pluto.tv",
+            "paramountplus.com",
+            "discoveryplus.com"
+        )
+    }
+
     private fun isStreamingSite(url: String?): Boolean {
         if (url == null) return false
-        val streamingDomains =
-                listOf(
-                        "netflix.com",
-                        "disneyplus.com",
-                        "hulu.com",
-                        "primevideo.com",
-                        "amazon.com/gp/video",
-                        "max.com",
-                        "peacocktv.com",
-                        "apple.com/tv",
-                        "tv.apple.com",
-                        "tubitv.com",
-                        "pluto.tv",
-                        "paramountplus.com",
-                        "discoveryplus.com"
-                )
-        return streamingDomains.any { url.contains(it, ignoreCase = true) }
+        return STREAMING_DOMAINS.any { url.contains(it, ignoreCase = true) }
     }
 
     private fun isDesktopBrowserRequiredSite(url: String?): Boolean {
