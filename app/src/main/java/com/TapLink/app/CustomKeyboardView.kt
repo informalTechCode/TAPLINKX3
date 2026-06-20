@@ -469,17 +469,46 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
         }
     }
 
+    // Bolt: Performance optimization. Avoids creating intermediate lists and sequences
+    // by manually traversing the children and counting only those that are visible.
+    // This reduces garbage collection overhead in frequently called focus methods.
+    private fun getVisibleChildCount(row: LinearLayout?): Int {
+        row ?: return 0
+        var count = 0
+        for (i in 0 until row.childCount) {
+            if (row.getChildAt(i).visibility == View.VISIBLE) count++
+        }
+        return count
+    }
+
+    // Bolt: Performance optimization. Returns the visible child at the specified index
+    // directly without instantiating a new collection of visible views.
+    private fun getVisibleChildAt(row: LinearLayout?, index: Int): View? {
+        row ?: return null
+        var count = 0
+        for (i in 0 until row.childCount) {
+            val child = row.getChildAt(i)
+            if (child.visibility == View.VISIBLE) {
+                if (count == index) return child
+                count++
+            }
+        }
+        return null
+    }
+
     private fun adjustCurrentColumn() {
         val keyboardLayout = getKeyboardLayout()
         keyboardLayout?.let { layout ->
             val row = layout.getChildAt(currentRow) as? LinearLayout
-            val visibleButtons =
-                    row?.children?.filter { it.visibility == View.VISIBLE }?.toList() ?: emptyList()
-            val maxColumns = visibleButtons.size
-            if (currentColumn >= maxColumns) {
-                currentColumn = maxColumns - 1
-            }
-            if (currentColumn < 0) {
+            val maxColumns = getVisibleChildCount(row)
+            if (maxColumns > 0) {
+                if (currentColumn >= maxColumns) {
+                    currentColumn = maxColumns - 1
+                }
+                if (currentColumn < 0) {
+                    currentColumn = 0
+                }
+            } else {
                 currentColumn = 0
             }
         }
@@ -674,17 +703,14 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
     private fun getFocusedKey(): Button? {
         val keyboard = getKeyboardLayout()
         val row = keyboard?.getChildAt(currentRow) as? LinearLayout
-        val visibleButtons =
-                row?.children?.filter { it.visibility == View.VISIBLE }?.toList() ?: emptyList()
-        return visibleButtons.getOrNull(currentColumn) as? Button
+        return getVisibleChildAt(row, currentColumn) as? Button
     }
 
     private fun moveFocusRight() {
         val keyboard = getKeyboardLayout()
         val row = keyboard?.getChildAt(currentRow) as? LinearLayout
         if (row != null) {
-            val visibleButtons = row.children.filter { it.visibility == View.VISIBLE }.toList()
-            val maxColumns = visibleButtons.size
+            val maxColumns = getVisibleChildCount(row)
             if (maxColumns > 0) {
                 currentColumn = (currentColumn + 1) % maxColumns
                 updateKeyFocus()
@@ -697,10 +723,10 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
         val keyboard = getKeyboardLayout()
         val row = keyboard?.getChildAt(currentRow) as? LinearLayout
         if (row != null) {
-            val visibleButtons = row.children.filter { it.visibility == View.VISIBLE }.toList()
-            val maxColumns = visibleButtons.size
+            val maxColumns = getVisibleChildCount(row)
             if (maxColumns > 0) {
                 currentColumn = (currentColumn - 1) % maxColumns
+                if (currentColumn < 0) currentColumn += maxColumns
                 updateKeyFocus()
                 syncWithParent()
             }
