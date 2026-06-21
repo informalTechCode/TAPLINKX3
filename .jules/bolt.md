@@ -40,3 +40,6 @@
 ## 2024-05-19 - Removed Iterator Allocations in High Frequency Touch Event
 **Learning:** `NavButton` map iteration created Iterator and Entry allocations on every UI touch event dispatch in `DualWebViewGroup.kt` `handleNavigationClick`. This caused GC churn and frame drops.
 **Action:** Always prefer indexed loops (`for (i in 0 until list.size)`) over Collections iterators or Map `.entries`/`.values` for high-frequency code paths like UI events or drawing passes.
+## 2024-05-19 - Remove requestLayout from CustomKeyboardView
+**Learning:** Calling `requestLayout()` unnecessarily inside high-frequency view update methods (like `updateKeyFocus` or hover callbacks) forces the entire view hierarchy to recalculate its bounds. This is extremely expensive when just changing background or text colors, which only require an `invalidate()` (draw phase update).
+**Action:** Never call `requestLayout()` unless the view's dimensions or position have changed. When updating simple visual properties like background color, `invalidate()` is sufficient.

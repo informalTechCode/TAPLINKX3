@@ -5813,7 +5813,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         if (leftToggleBar.visibility == View.VISIBLE) {
-            for (target in toggleHoverTargets) {
+            // Bolt optimization: Use indexed loop to prevent Iterator allocation in touch handler
+            val targets = toggleHoverTargets
+            for (i in 0 until targets.size) {
+                val target = targets[i]
                 if (isOver(target.view, screenX, screenY)) {
                     handleLeftMenuAction(target.id)
                     return
