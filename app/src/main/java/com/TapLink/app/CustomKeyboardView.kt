@@ -660,8 +660,9 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
             button.invalidate()
         }
 
+        // Bolt optimization: Removed requestLayout() here as updating text/background
+        // colors does not change bounds, saving expensive layout passes.
         invalidate()
-        requestLayout()
 
         if (!isSyncing) {
             syncWithParent()
