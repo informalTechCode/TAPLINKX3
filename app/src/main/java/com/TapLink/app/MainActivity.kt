@@ -143,6 +143,13 @@ class MainActivity :
     private val reusableLocation1 = IntArray(2)
     private val reusableLocation2 = IntArray(2)
     private val reusablePoint = FloatArray(2)
+
+    // Performance optimization: Pre-allocate MotionEvent properties to prevent GC churn during high-frequency scroll events
+    private val reusablePointerCoords = MotionEvent.PointerCoords()
+    private val reusablePointerProperties = MotionEvent.PointerProperties()
+    private val reusablePointerCoordsArray = arrayOf(reusablePointerCoords)
+    private val reusablePointerPropertiesArray = arrayOf(reusablePointerProperties)
+
     private lateinit var webView: WebView
     private lateinit var mainContainer: FrameLayout
     private lateinit var gestureDetector: GestureDetector
@@ -726,17 +733,17 @@ class MainActivity :
                                     if (kotlin.math.abs(verticalDelta) >= 1f) {
                                         if (dualWebViewGroup.isDesktopMode()) {
                                             // Desktop mode: Use mouse scroll wheel simulation
-                                            val pointerCoords = MotionEvent.PointerCoords()
-                                            pointerCoords.x = 320f
-                                            pointerCoords.y = 240f
-                                            pointerCoords.setAxisValue(
+                                            reusablePointerCoords.clear()
+                                            reusablePointerCoords.x = 320f
+                                            reusablePointerCoords.y = 240f
+                                            reusablePointerCoords.setAxisValue(
                                                     MotionEvent.AXIS_VSCROLL,
                                                     verticalDelta / 30f
                                             )
 
-                                            val pointerProperties = MotionEvent.PointerProperties()
-                                            pointerProperties.id = 0
-                                            pointerProperties.toolType = MotionEvent.TOOL_TYPE_MOUSE
+                                            reusablePointerProperties.clear()
+                                            reusablePointerProperties.id = 0
+                                            reusablePointerProperties.toolType = MotionEvent.TOOL_TYPE_MOUSE
 
                                             val event =
                                                     MotionEvent.obtain(
@@ -744,8 +751,8 @@ class MainActivity :
                                                             SystemClock.uptimeMillis(),
                                                             MotionEvent.ACTION_SCROLL,
                                                             1,
-                                                            arrayOf(pointerProperties),
-                                                            arrayOf(pointerCoords),
+                                                            reusablePointerPropertiesArray,
+                                                            reusablePointerCoordsArray,
                                                             0,
                                                             0,
                                                             1.0f,
@@ -6360,17 +6367,17 @@ class MainActivity :
             }
 
             // Dispatch mouse wheel scroll event
-            val pointerCoords = MotionEvent.PointerCoords()
-            pointerCoords.x = lastCursorX
-            pointerCoords.y = lastCursorY
+            reusablePointerCoords.clear()
+            reusablePointerCoords.x = lastCursorX
+            reusablePointerCoords.y = lastCursorY
             // Map positive dy (drag down) to scroll down (content moves up). AXIS_VSCROLL negative
             // means scroll down.
-            pointerCoords.setAxisValue(MotionEvent.AXIS_VSCROLL, -dy / 30f)
-            pointerCoords.setAxisValue(MotionEvent.AXIS_HSCROLL, -dx / 30f)
+            reusablePointerCoords.setAxisValue(MotionEvent.AXIS_VSCROLL, -dy / 30f)
+            reusablePointerCoords.setAxisValue(MotionEvent.AXIS_HSCROLL, -dx / 30f)
 
-            val pointerProperties = MotionEvent.PointerProperties()
-            pointerProperties.id = 0
-            pointerProperties.toolType = MotionEvent.TOOL_TYPE_MOUSE
+            reusablePointerProperties.clear()
+            reusablePointerProperties.id = 0
+            reusablePointerProperties.toolType = MotionEvent.TOOL_TYPE_MOUSE
 
             val event =
                     MotionEvent.obtain(
@@ -6378,8 +6385,8 @@ class MainActivity :
                             SystemClock.uptimeMillis(),
                             MotionEvent.ACTION_SCROLL,
                             1,
-                            arrayOf(pointerProperties),
-                            arrayOf(pointerCoords),
+                            reusablePointerPropertiesArray,
+                            reusablePointerCoordsArray,
                             0,
                             0,
                             1.0f,
