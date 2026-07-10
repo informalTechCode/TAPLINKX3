@@ -1850,7 +1850,13 @@ class MainActivity :
 
     private fun isStreamingSite(url: String?): Boolean {
         if (url == null) return false
-        return STREAMING_DOMAINS.any { url.contains(it, ignoreCase = true) }
+        // ⚡ Bolt: Removed .any { } closure and iterator allocation for performance on hot path
+        for (i in 0 until STREAMING_DOMAINS.size) {
+            if (url.contains(STREAMING_DOMAINS[i], ignoreCase = true)) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun isDesktopBrowserRequiredSite(url: String?): Boolean {
