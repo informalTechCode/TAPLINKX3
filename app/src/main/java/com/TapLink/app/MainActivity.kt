@@ -1831,6 +1831,11 @@ class MainActivity :
     }
 
     companion object {
+        // ⚡ Bolt: Extracted immutable list to static constant
+        // 💡 What: Moved listOf(BarcodeFormat.QR_CODE) instantiation to companion object
+        // 🎯 Why: Prevents redundant allocations when configuring the barcode scanner
+        private val QR_CODE_FORMATS = listOf(com.google.zxing.BarcodeFormat.QR_CODE)
+
         private val STREAMING_DOMAINS = listOf(
             "netflix.com",
             "disneyplus.com",
@@ -4771,7 +4776,7 @@ class MainActivity :
                                     FrameLayout.LayoutParams.MATCH_PARENT
                             )
                     barcodeView.decoderFactory =
-                            DefaultDecoderFactory(listOf(BarcodeFormat.QR_CODE))
+                            DefaultDecoderFactory(QR_CODE_FORMATS)
                     setStatusText("Point at a QR code")
                 }
 
