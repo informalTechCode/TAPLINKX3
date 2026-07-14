@@ -1853,9 +1853,17 @@ class MainActivity :
         )
     }
 
+    // ⚡ Bolt: Removed .any {} closure allocation
+    // 💡 What: Replaced higher-order .any {} with indexed for loop
+    // 🎯 Why: Avoids Iterator and closure allocations in high-frequency URL interception path
     private fun isStreamingSite(url: String?): Boolean {
         if (url == null) return false
-        return STREAMING_DOMAINS.any { url.contains(it, ignoreCase = true) }
+        for (i in 0 until STREAMING_DOMAINS.size) {
+            if (url.contains(STREAMING_DOMAINS[i], ignoreCase = true)) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun isDesktopBrowserRequiredSite(url: String?): Boolean {
