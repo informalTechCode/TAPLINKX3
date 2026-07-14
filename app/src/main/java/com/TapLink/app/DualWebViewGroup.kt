@@ -1796,7 +1796,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
         saveAllWindowsState()
         if (mediaStateByWindowId.isNotEmpty()) {
-            updateMediaState(mediaStateByWindowId.values.any { it })
+            updateMediaState(isAnyMediaPlaying())
         } else {
             isMediaPlaying = false
             hideMediaControls()
@@ -8112,8 +8112,30 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
+    // ⚡ Bolt: Removed .any {} closure allocation
+    // 💡 What: Replaced higher-order .any {} with indexed for loop
+    // 🎯 Why: Avoids Iterator and closure allocations in high-frequency paths
+    private fun isAnyMediaPlaying(): Boolean {
+        for (i in 0 until windows.size) {
+            if (mediaStateByWindowId[windows[i].id] == true) {
+                return true
+            }
+        }
+        return false
+    }
+
+    // ⚡ Bolt: Rewrote handleMediaStateChanged to eliminate allocations
+    // 💡 What: Replaced firstOrNull and any with indexed loops
+    // 🎯 Why: Avoids Iterator allocations
     private fun handleMediaStateChanged(sourceWebView: WebView, isPlaying: Boolean) {
-        val windowId = windows.firstOrNull { it.webView == sourceWebView }?.id
+        var windowId: String? = null
+        for (i in 0 until windows.size) {
+            if (windows[i].webView == sourceWebView) {
+                windowId = windows[i].id
+                break
+            }
+        }
+
         if (windowId == null) {
             updateMediaState(isPlaying)
             return
@@ -8124,22 +8146,39 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             mediaLastPlayedAtByWindowId[windowId] = SystemClock.uptimeMillis()
         }
 
-        val anyPlaying = mediaStateByWindowId.values.any { it }
-        updateMediaState(anyPlaying)
+        updateMediaState(isAnyMediaPlaying())
     }
 
+    // ⚡ Bolt: Rewrote getMediaControlWebView to eliminate allocations
+    // 💡 What: Replaced Map.filterValues, maxByOrNull, and firstOrNull with zero-allocation indexed loops
+    // 🎯 Why: Avoids Map, Iterator, and closure allocations in high-frequency media control touch handlers
     private fun getMediaControlWebView(): WebView {
-        val playingIds = mediaStateByWindowId.filterValues { it }.keys
-        val targetId =
-                if (playingIds.isNotEmpty()) {
-                    playingIds.maxByOrNull { mediaLastPlayedAtByWindowId[it] ?: 0L }
-                } else {
-                    mediaLastPlayedAtByWindowId.keys.maxByOrNull {
-                        mediaLastPlayedAtByWindowId[it] ?: 0L
-                    }
-                }
+        var targetWebView: WebView? = null
+        var maxPlayingTime = -1L
+        var targetNonPlayingWebView: WebView? = null
+        var maxNonPlayingTime = -1L
+        var anyPlaying = false
 
-        return windows.firstOrNull { it.id == targetId }?.webView ?: webView
+        for (i in 0 until windows.size) {
+            val window = windows[i]
+            val isPlaying = mediaStateByWindowId[window.id] == true
+            val time = mediaLastPlayedAtByWindowId[window.id] ?: 0L
+
+            if (isPlaying) {
+                anyPlaying = true
+                if (time > maxPlayingTime) {
+                    maxPlayingTime = time
+                    targetWebView = window.webView
+                }
+            } else if (!anyPlaying && mediaLastPlayedAtByWindowId.containsKey(window.id)) {
+                if (time > maxNonPlayingTime) {
+                    maxNonPlayingTime = time
+                    targetNonPlayingWebView = window.webView
+                }
+            }
+        }
+
+        return targetWebView ?: targetNonPlayingWebView ?: webView
     }
 
     fun injectLocation(latitude: Double, longitude: Double) {
