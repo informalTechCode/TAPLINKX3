@@ -150,7 +150,10 @@ class CustomKeyboardView @JvmOverloads constructor(context: Context, attrs: Attr
     private var firstMove = true
 
     companion object {
-        private val PUNCTUATION_CHARS = listOf(".", "?", "!")
+        // ⚡ Bolt: Prevent listOf allocation
+        // 💡 What: Replaced listOf with an array creation to avoid GC churn in PUNCTUATION_CHARS
+        // 🎯 Why: Avoids creating a List and instead uses a cheaper Array.
+        private val PUNCTUATION_CHARS = arrayOf(".", "?", "!")
     }
 
     private var isUpperCase = true

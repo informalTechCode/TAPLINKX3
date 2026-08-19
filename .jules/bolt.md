@@ -4,3 +4,6 @@
 ## $(date +%Y-%m-%d) - [Optimize High-Frequency Collection Allocations]
 **Learning:** Found that methods like `getMediaControlWebView` and `handleMediaStateChanged` in `DualWebViewGroup.kt` were unnecessarily utilizing higher-order collection functions like `.any {}`, `.filterValues {}`, `.keys`, and `.maxByOrNull {}` on a map structure `mediaStateByWindowId` inside frequently accessed loops (like URL interception and touch handling), causing GC churn.
 **Action:** Always prefer zero-allocation indexed `for` loops (`for (i in 0 until list.size)`) when iterating collections in Android views, avoiding standard higher-order functional mappings or iterative map structures within high-frequency paths.
+## 2026-08-19 - [Optimize High-Frequency Collection Allocations]
+**Learning:** Discovered that allocating immutable lists with `listOf()` inside class or companion object property initializers like `settingsElements` and `PUNCTUATION_CHARS` was creating `List` objects. Converting them to arrays via `arrayOf()` or `intArrayOf()` avoids the overhead of `List` creation while allowing iteration with zero-allocation indexed for loops or the `in` operator.
+**Action:** Use `arrayOf()` or `intArrayOf()` instead of `listOf()` for static/pre-allocated immutable collections that don't require list semantics to save memory allocation overhead.

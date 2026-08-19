@@ -57,7 +57,10 @@ class DualWebViewGroup
 constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0) :
         ViewGroup(context, attrs, defStyleAttr) {
 
-    private val settingsElements = listOf(
+    // ⚡ Bolt: Prevent listOf allocation
+    // 💡 What: Replaced listOf with an array creation to avoid GC churn in settingsElements
+    // 🎯 Why: Avoids creating a List and instead uses a cheaper IntArray.
+    private val settingsElements = intArrayOf(
         R.id.volumeSeekBar,
         R.id.brightnessSeekBar,
         R.id.btnToggleForceDark,
@@ -77,7 +80,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         R.id.btnGroqApiKey
     )
 
-    private val toggleBarButtons = listOf(
+    // ⚡ Bolt: Prevent listOf allocation
+    // 💡 What: Replaced listOf with an array creation to avoid GC churn in toggleBarButtons
+    // 🎯 Why: Avoids creating a List and instead uses a cheaper Array.
+    private val toggleBarButtons = arrayOf(
         Triple(R.id.btnModeToggle, "ModeToggle") { isHoveringModeToggle = true },
         Triple(R.id.btnYouTube, "Dashboard") { isHoveringDashboardToggle = true },
         Triple(R.id.btnBookmarks, "Bookmarks") { isHoveringBookmarksMenu = true },
@@ -491,8 +497,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     // UI scale factor (0.5 to 1.0) - controlled by screen size slider
     var uiScale = 1.0f
 
-    private val fullScreenHiddenViews: List<View> by lazy {
-        listOf(
+    // ⚡ Bolt: Prevent listOf allocation
+    // 💡 What: Replaced listOf with an array creation to avoid GC churn in fullScreenHiddenViews
+    // 🎯 Why: Avoids creating a List and instead uses a cheaper Array.
+    private val fullScreenHiddenViews: Array<View> by lazy {
+        arrayOf(
                 webViewsContainer,
                 leftToggleBar,
                 leftNavigationBar,
@@ -5605,7 +5614,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val menu = settingsMenu ?: return emptyList()
         if (menu !== cachedSettingsMenu) {
             cachedSettingsMenu = menu
-            cachedSettingsHoverTargets = settingsElements.mapNotNull { menu.findViewById<View>(it) }
+            // ⚡ Bolt: Removed .mapNotNull {} to avoid iterator/closure allocation
+            val targets = ArrayList<View>(settingsElements.size)
+            for (i in 0 until settingsElements.size) {
+                val view = menu.findViewById<View>(settingsElements[i])
+                if (view != null) targets.add(view)
+            }
+            cachedSettingsHoverTargets = targets
         }
         return cachedSettingsHoverTargets
     }
@@ -6140,8 +6155,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         // Calculate positioning constants
         val iconPadding = 4.dp()
+
+        // ⚡ Bolt: Prevent listOf allocation
+        // 💡 What: Replaced listOf with an array creation to avoid GC churn in initializeToggleButtons
+        // 🎯 Why: Avoids creating a List every time initializeToggleButtons is called.
         val orderedButtons =
-                listOf(
+                arrayOf(
                         leftModeToggleButton,
                         leftDashboardButton,
                         leftBookmarksButton,
